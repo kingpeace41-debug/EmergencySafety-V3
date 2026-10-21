@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_red_gradient"
+    android:fillViewport="true"
+    android:padding="20dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SESLİ KOMUT AYARLARI"
+            android:textColor="#FFFFFF"
+            android:textSize="23sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Aşağıdaki komutları kendine göre düzenleyebilirsin."
+            android:textColor="#DDDDDD"
+            android:textSize="15sp"
+            android:layout_marginBottom="22dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ACİL DURUMU BAŞLAT"
+            android:textColor="#FF7777"
+            android:textStyle="bold"
+            android:textSize="16sp" />
+
+        <EditText
+            android:id="@+id/etRedStart"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Örn. kırmızı 41"
+            android:inputType="textCapSentences"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#CCCCCC"
+            android:backgroundTint="#FF7777"
+            android:layout_marginBottom="20dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ACİL DURUMU İPTAL ET"
+            android:textColor="#FF7777"
+            android:textStyle="bold"
+            android:textSize="16sp" />
+
+        <EditText
+            android:id="@+id/etRedStop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Örn. kırmızı 42"
+            android:inputType="textCapSentences"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#CCCCCC"
+            android:backgroundTint="#FF7777"
+            android:layout_marginBottom="20dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SİREN VE FLAŞI BAŞLAT"
+            android:textColor="#FF7777"
+            android:textStyle="bold"
+            android:textSize="16sp" />
+
+        <EditText
+            android:id="@+id/etSirenStart"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Örn. siren aç"
+            android:inputType="textCapSentences"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#CCCCCC"
+            android:backgroundTint="#FF7777"
+            android:layout_marginBottom="20dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="SİREN VE FLAŞI DURDUR"
+            android:textColor="#FF7777"
+            android:textStyle="bold"
+            android:textSize="16sp" />
+
+        <EditText
+            android:id="@+id/etSirenStop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Örn. siren kapat"
+            android:inputType="textCapSentences"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#CCCCCC"
+            android:backgroundTint="#FF7777"
+            android:layout_marginBottom="28dp" />
+
+        <Button
+            android:id="@+id/btnSaveVoiceCommands"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="KOMUTLARI KAYDET"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#D32F2F" />
+
+        <Button
+            android:id="@+id/btnBackVoiceCommands"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="GERİ DÖN"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#424242" />
+
+    </LinearLayout>
+</ScrollView>

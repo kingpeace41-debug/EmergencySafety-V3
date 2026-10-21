@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_red_gradient"
+    android:fillViewport="true"
+    android:padding="20dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="REHBER VE MESAJ AYARLARI"
+            android:textColor="#FFFFFF"
+            android:textSize="23sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ACİL DURUM KİŞİLERİ"
+            android:textColor="#FF7777"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="12dp" />
+
+        <EditText
+            android:id="@+id/etContact1Name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="1. kişi adı veya açıklaması"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#CCCCCC"
+            android:backgroundTint="#FF7777"
+            android:inputType="textCapSentences" />
+
+        <EditText
+            android:id="@+id/etContact1Phone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="1. kişi telefon numarası"
+            android:inputType="phone"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#CCCCCC"
+            android:backgroundTint="#FF7777"
+            android:layout_marginBottom="16dp" />
+
+        <EditText
+            android:id="@+id/etContact2Name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="2. kişi adı veya açıklaması"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#CCCCCC"
+            android:backgroundTint="#FF7777"
+            android:inputType="textCapSentences" />
+
+        <EditText
+            android:id="@+id/etContact2Phone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="2. kişi telefon numarası"
+            android:inputType="phone"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#CCCCCC"
+            android:backgroundTint="#FF7777"
+            android:layout_marginBottom="16dp" />
+
+        <EditText
+            android:id="@+id/etContact3Name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="3. kişi adı veya açıklaması"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#CCCCCC"
+            android:backgroundTint="#FF7777"
+            android:inputType="textCapSentences" />
+
+        <EditText
+            android:id="@+id/etContact3Phone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="3. kişi telefon numarası"
+            android:inputType="phone"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#CCCCCC"
+            android:backgroundTint="#FF7777"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ACİL DURUM MESAJI"
+            android:textColor="#FF7777"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/etEmergencyMessage"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:gravity="top|start"
+            android:hint="Gönderilecek acil durum mesajını yazın"
+            android:inputType="textMultiLine|textCapSentences"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#CCCCCC"
+            android:backgroundTint="#FF7777"
+            android:padding="12dp" />
+
+        <Button
+            android:id="@+id/btnSaveContacts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="KAYDET"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#D32F2F" />
+
+        <Button
+            android:id="@+id/btnBackContacts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="GERİ DÖN"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#424242" />
+
+    </LinearLayout>
+</ScrollView>

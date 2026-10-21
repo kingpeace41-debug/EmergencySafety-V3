@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+
+    <!-- Dış halka -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:pathData="M60,7
+            C30.7,7 7,30.7 7,60
+            C7,89.3 30.7,113 60,113
+            C89.3,113 113,89.3 113,60
+            C113,30.7 89.3,7 60,7 Z" />
+
+    <!-- Kırmızı ışık halkası -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FF1A1A"
+        android:strokeWidth="2"
+        android:pathData="M60,12
+            C33.5,12 12,33.5 12,60
+            C12,86.5 33.5,108 60,108
+            C86.5,108 108,86.5 108,60
+            C108,33.5 86.5,12 60,12 Z" />
+
+    <!-- Şimşek -->
+    <path
+        android:fillColor="#FF2020"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:pathData="M68,13
+            L34,63
+            L53,63
+            L46,107
+            L86,51
+            L65,51
+            Z" />
+
+</vector>
