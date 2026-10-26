@@ -1,3 +1,4 @@
+
 package com.example.emergencysafety
 
 import android.content.Intent
@@ -49,10 +50,30 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
             )
 
             contactPhoneFields[i].setText(
-                prefs.getString("contact${i + 1}_phone", "")
+                normalizeTurkishPhoneNumber(
+                    prefs.getString("contact${i + 1}_phone", "") ?: ""
+                )
             )
 
-            // İsim veya telefon alanına dokununca rehberi aç.
+            // Kişi alanlarında imleci ve klavyeyi kapat.
+            // Bu alanlar yalnızca rehberden seçim içindir.
+            contactNameFields[i].apply {
+                isCursorVisible = false
+                showSoftInputOnFocus = false
+                isFocusable = false
+                isFocusableInTouchMode = false
+                isClickable = true
+            }
+
+            contactPhoneFields[i].apply {
+                isCursorVisible = false
+                showSoftInputOnFocus = false
+                isFocusable = false
+                isFocusableInTouchMode = false
+                isClickable = true
+            }
+
+            // Dokununca doğrudan telefon rehberini aç.
             contactNameFields[i].setOnClickListener {
                 selectedContactIndex = i
                 openContactPicker()
@@ -63,7 +84,7 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                 openContactPicker()
             }
 
-            // Her iki alana uzun basınca da rehberi aç.
+            // Basılı tutunca da rehberi aç.
             contactNameFields[i].setOnLongClickListener {
                 selectedContactIndex = i
                 openContactPicker()
@@ -86,14 +107,24 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                 val editor = prefs.edit()
 
                 for (i in 0..2) {
+                    val name =
+                        contactNameFields[i].text.toString().trim()
+
+                    val phone = normalizeTurkishPhoneNumber(
+                        contactPhoneFields[i].text.toString()
+                    )
+
+                    contactNameFields[i].setText(name)
+                    contactPhoneFields[i].setText(phone)
+
                     editor.putString(
                         "contact${i + 1}_name",
-                        contactNameFields[i].text.toString().trim()
+                        name
                     )
 
                     editor.putString(
                         "contact${i + 1}_phone",
-                        contactPhoneFields[i].text.toString().trim()
+                        phone
                     )
                 }
 
@@ -123,6 +154,50 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
         ).show()
     }
 
+    private fun normalizeTurkishPhoneNumber(rawNumber: String): String {
+        val raw = rawNumber.trim()
+
+        if (raw.isEmpty()) {
+            return ""
+        }
+
+        // Rakamları al; baştaki uluslararası + işaretini ayrıca koru.
+        val digits = raw.filter { it.isDigit() }
+        val hasLeadingPlus = raw.startsWith("+")
+
+        if (digits.isEmpty()) {
+            return ""
+        }
+
+        // Uluslararası + ile başlayan numaralarda +90'ı çoğaltma.
+        if (hasLeadingPlus) {
+            return "+$digits"
+        }
+
+        // 0090XXXXXXXXXX -> +90XXXXXXXXXX
+        if (digits.startsWith("0090") && digits.length == 14) {
+            return "+${digits.drop(2)}"
+        }
+
+        // 90XXXXXXXXXX -> +90XXXXXXXXXX
+        if (digits.startsWith("90") && digits.length == 12) {
+            return "+$digits"
+        }
+
+        // 05XXXXXXXXX -> +905XXXXXXXXX
+        if (digits.startsWith("0") && digits.length == 11) {
+            return "+90${digits.drop(1)}"
+        }
+
+        // 5XXXXXXXXX veya Türkiye'nin 10 haneli alan kodlu numarası.
+        if (digits.length == 10) {
+            return "+90$digits"
+        }
+
+        // Tanınmayan uzunluktaki numarayı yanlış ülke koduyla bozma.
+        return raw
+    }
+
     private fun openContactPicker() {
         try {
             val intent = Intent(Intent.ACTION_PICK).apply {
@@ -147,7 +222,8 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
     ) {
         super.onActivityResult(requestCode, resultCode, data)
 
-        if (requestCode != REQUEST_SELECT_CONTACT ||
+        if (
+            requestCode != REQUEST_SELECT_CONTACT ||
             resultCode != RESULT_OK ||
             data?.data == null
         ) {
@@ -192,7 +268,10 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
                     if (selectedContactIndex in 0..2) {
                         contactNameFields[selectedContactIndex].setText(name)
-                        contactPhoneFields[selectedContactIndex].setText(number)
+
+                        contactPhoneFields[selectedContactIndex].setText(
+                            normalizeTurkishPhoneNumber(number)
+                        )
                     }
                 }
             }
