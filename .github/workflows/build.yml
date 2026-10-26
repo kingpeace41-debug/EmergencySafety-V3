@@ -1,3 +1,4 @@
+
 name: Build Android APK
 
 on:
@@ -27,40 +28,49 @@ jobs:
           set -e
 
           MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-tr-0.3.zip"
+          TEMP_DIR="/tmp/vosk-model-unpack"
+          ASSET_DIR="app/src/main/assets"
+          MODEL_DIR="$ASSET_DIR/model"
 
-          mkdir -p /tmp/vosk-model-unpack
-          mkdir -p app/src/main/assets
+          rm -rf "$TEMP_DIR" "$MODEL_DIR"
+          mkdir -p "$TEMP_DIR" "$ASSET_DIR"
 
           curl -fL --retry 3 "$MODEL_URL" \
             -o /tmp/vosk-model.zip
 
-          unzip -q /tmp/vosk-model.zip \
-            -d /tmp/vosk-model-unpack
+          unzip -q /tmp/vosk-model.zip -d "$TEMP_DIR"
 
-          MODEL_DIR="/tmp/vosk-model-unpack/vosk-model-small-tr-0.3"
+          echo "İndirilen klasörler:"
+          find "$TEMP_DIR" -maxdepth 3 -type d
 
-          if [ ! -d "$MODEL_DIR" ]; then
-            echo "HATA: Türkçe model klasörü bulunamadı."
-            find /tmp/vosk-model-unpack -maxdepth 3 -print
+          SOURCE_MODEL="$TEMP_DIR/vosk-model-small-tr-0.3"
+
+          if [ ! -d "$SOURCE_MODEL" ]; then
+            echo "HATA: Model klasörü bulunamadı."
+            find "$TEMP_DIR" -maxdepth 4 -print
             exit 1
           fi
 
-          rm -rf app/src/main/assets/model
-          mv "$MODEL_DIR" app/src/main/assets/model
+          mv "$SOURCE_MODEL" "$MODEL_DIR"
 
-          # Vosk StorageService bu dosyayı arıyor.
-          printf '%s\n' 'vosk-model-small-tr-0.3' \
-            > app/src/main/assets/model/uuid
+          echo "Modelin üst düzey dosya ve klasörleri:"
+          find "$MODEL_DIR" -maxdepth 2 -print | head -100
 
-          echo "Model dosyaları kontrol ediliyor:"
-          test -s app/src/main/assets/model/uuid
-          test -d app/src/main/assets/model/conf
-          test -d app/src/main/assets/model/am
+          echo "UUID dosyası kontrol ediliyor..."
+          if [ ! -s "$MODEL_DIR/uuid" ]; then
+            printf '%s\n' 'vosk-model-small-tr-0.3' > "$MODEL_DIR/uuid"
+          fi
 
-          echo "UUID dosyası:"
-          cat app/src/main/assets/model/uuid
+          echo "Model klasör yapısı kontrol ediliyor..."
 
-          echo "Model klasörü hazır."
+          if [ ! -d "$MODEL_DIR/conf" ] || [ ! -d "$MODEL_DIR/am" ]; then
+            echo "HATA: Beklenen conf veya am klasörü bulunamadı."
+            echo "Mevcut klasörler:"
+            find "$MODEL_DIR" -maxdepth 3 -type d
+            exit 1
+          fi
+
+          echo "Model kontrolü tamamlandı."
 
       - name: Build Android APK
         run: |
@@ -72,13 +82,12 @@ jobs:
           APK=$(find app/build/outputs/apk \
             -name '*.apk' -print -quit)
           test -n "$APK"
-          echo "APK başarıyla oluşturuldu: $APK"
+          echo "APK oluşturuldu: $APK"
           ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: EmergencySafety-APK
-          path: |
-            app/build/outputs/apk/**/*.apk
+          path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
