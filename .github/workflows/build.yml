@@ -37,27 +37,43 @@ jobs:
           unzip -q /tmp/vosk-model.zip \
             -d /tmp/vosk-model-unpack
 
-          echo "İndirilen modelin klasörleri:"
-          find /tmp/vosk-model-unpack -maxdepth 3 -type d
-
           MODEL_DIR="/tmp/vosk-model-unpack/vosk-model-small-tr-0.3"
 
           if [ ! -d "$MODEL_DIR" ]; then
-            echo "Beklenen model klasörü bulunamadı. ZIP içeriği:"
+            echo "HATA: Türkçe model klasörü bulunamadı."
             find /tmp/vosk-model-unpack -maxdepth 3 -print
             exit 1
           fi
 
+          rm -rf app/src/main/assets/model
           mv "$MODEL_DIR" app/src/main/assets/model
 
-          echo "Uygulamadaki model dosyaları:"
-          find app/src/main/assets/model -maxdepth 3 -type f | head -40
+          # Vosk StorageService bu dosyayı arıyor.
+          printf '%s\n' 'vosk-model-small-tr-0.3' \
+            > app/src/main/assets/model/uuid
 
-          echo "Model klasörü başarıyla hazırlandı."
+          echo "Model dosyaları kontrol ediliyor:"
+          test -s app/src/main/assets/model/uuid
+          test -d app/src/main/assets/model/conf
+          test -d app/src/main/assets/model/am
+
+          echo "UUID dosyası:"
+          cat app/src/main/assets/model/uuid
+
+          echo "Model klasörü hazır."
 
       - name: Build Android APK
         run: |
           gradle assembleDebug --stacktrace --no-daemon
+
+      - name: Verify APK
+        run: |
+          set -e
+          APK=$(find app/build/outputs/apk \
+            -name '*.apk' -print -quit)
+          test -n "$APK"
+          echo "APK başarıyla oluşturuldu: $APK"
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
