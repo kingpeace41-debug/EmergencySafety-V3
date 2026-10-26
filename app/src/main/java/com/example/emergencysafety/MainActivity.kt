@@ -1,4 +1,3 @@
-
 package com.example.emergencysafety
 
 import android.Manifest
@@ -106,6 +105,20 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.wolfTouchArea)?.setOnClickListener {
             vibrateOnClick()
             toggleVoiceService()
+        }
+    }
+
+    // Ana ekrana her dönüşte kurt görselini gerçek dinleme ayarıyla eşleştir.
+    override fun onResume() {
+        super.onResume()
+
+        if (::wolfBackground.isInitialized) {
+            val isVoiceActive = getSharedPreferences(
+                "AppSettings",
+                Context.MODE_PRIVATE
+            ).getBoolean("is_voice_active", false)
+
+            updateWolfImage(isVoiceActive, false)
         }
     }
 
