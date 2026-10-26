@@ -29,48 +29,42 @@ jobs:
 
           MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-tr-0.3.zip"
           TEMP_DIR="/tmp/vosk-model-unpack"
-          ASSET_DIR="app/src/main/assets"
-          MODEL_DIR="$ASSET_DIR/model"
+          MODEL_DIR="app/src/main/assets/model"
 
           rm -rf "$TEMP_DIR" "$MODEL_DIR"
-          mkdir -p "$TEMP_DIR" "$ASSET_DIR"
+          mkdir -p "$TEMP_DIR" app/src/main/assets
 
           curl -fL --retry 3 "$MODEL_URL" \
             -o /tmp/vosk-model.zip
 
           unzip -q /tmp/vosk-model.zip -d "$TEMP_DIR"
 
-          echo "İndirilen klasörler:"
-          find "$TEMP_DIR" -maxdepth 3 -type d
-
           SOURCE_MODEL="$TEMP_DIR/vosk-model-small-tr-0.3"
 
           if [ ! -d "$SOURCE_MODEL" ]; then
-            echo "HATA: Model klasörü bulunamadı."
-            find "$TEMP_DIR" -maxdepth 4 -print
+            echo "HATA: Türkçe model klasörü bulunamadı."
+            find "$TEMP_DIR" -maxdepth 3 -print
             exit 1
           fi
 
           mv "$SOURCE_MODEL" "$MODEL_DIR"
 
-          echo "Modelin üst düzey dosya ve klasörleri:"
-          find "$MODEL_DIR" -maxdepth 2 -print | head -100
+          echo "Vosk model dosyaları kontrol ediliyor..."
 
-          echo "UUID dosyası kontrol ediliyor..."
-          if [ ! -s "$MODEL_DIR/uuid" ]; then
-            printf '%s\n' 'vosk-model-small-tr-0.3' > "$MODEL_DIR/uuid"
-          fi
+          test -s "$MODEL_DIR/final.mdl"
+          test -s "$MODEL_DIR/HCLr.fst"
+          test -s "$MODEL_DIR/Gr.fst"
+          test -s "$MODEL_DIR/mfcc.conf"
 
-          echo "Model klasör yapısı kontrol ediliyor..."
+          printf '%s\n' 'vosk-model-small-tr-0.3' \
+            > "$MODEL_DIR/uuid"
 
-          if [ ! -d "$MODEL_DIR/conf" ] || [ ! -d "$MODEL_DIR/am" ]; then
-            echo "HATA: Beklenen conf veya am klasörü bulunamadı."
-            echo "Mevcut klasörler:"
-            find "$MODEL_DIR" -maxdepth 3 -type d
-            exit 1
-          fi
+          test -s "$MODEL_DIR/uuid"
 
-          echo "Model kontrolü tamamlandı."
+          echo "Model dosyaları bulundu:"
+          ls -lh "$MODEL_DIR"
+
+          echo "Model kontrolü başarılı."
 
       - name: Build Android APK
         run: |
