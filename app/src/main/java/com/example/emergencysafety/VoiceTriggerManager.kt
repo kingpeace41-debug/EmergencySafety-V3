@@ -1,3 +1,4 @@
+
 package com.example.emergencysafety
 
 import android.content.ContentValues
@@ -320,7 +321,8 @@ class VoiceTriggerManager(private val context: Context) {
         val spoken = normalize(text)
         if (spoken.isBlank()) return
 
-        diagnostic("VOSK_TANIMA_METNI_ALINDI")
+        // TEŞHİS: Vosk'un tanıdığı gerçek kelimeleri kaydet.
+        diagnostic("VOSK_TANIMA_METNI: $spoken")
 
         val words = spoken.split(" ")
         val commands = getCommands()
