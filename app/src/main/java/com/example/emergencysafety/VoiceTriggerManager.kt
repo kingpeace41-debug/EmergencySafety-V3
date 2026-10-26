@@ -16,7 +16,6 @@ import org.vosk.Recognizer
 import org.vosk.android.SpeechService
 import org.vosk.android.StorageService
 import java.io.File
-import java.io.IOException
 import java.util.Locale
 
 class VoiceTriggerManager(private val context: Context) {
@@ -147,6 +146,32 @@ class VoiceTriggerManager(private val context: Context) {
         }
     }
 
+    private fun logDetailedError(
+        prefix: String,
+        exception: Throwable
+    ) {
+        Log.e(tag, prefix, exception)
+
+        diagnostic("$prefix: ${exception.javaClass.name}")
+        diagnostic("HATA_MESAJI: ${exception.message ?: "Mesaj yok"}")
+
+        var cause = exception.cause
+        var depth = 1
+
+        while (cause != null && depth <= 5) {
+            diagnostic(
+                "HATA_NEDENI_$depth: " +
+                    "${cause.javaClass.name}: ${cause.message ?: "Mesaj yok"}"
+            )
+            cause = cause.cause
+            depth++
+        }
+
+        exception.stackTrace.take(8).forEachIndexed { index, element ->
+            diagnostic("STACK_$index: $element")
+        }
+    }
+
     private fun normalize(text: String): String {
         var result = text.lowercase(Locale("tr", "TR"))
             .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
@@ -197,8 +222,7 @@ class VoiceTriggerManager(private val context: Context) {
                 }
             }
         } catch (exception: Exception) {
-            Log.e(tag, "Titreşim verilemedi.", exception)
-            diagnostic("TITRESIM_HATASI")
+            logDetailedError("TITRESIM_HATASI", exception)
         }
     }
 
@@ -276,8 +300,10 @@ class VoiceTriggerManager(private val context: Context) {
             try {
                 action()
             } catch (exception: Exception) {
-                Log.e(tag, "Komut işlemi başarısız oldu.", exception)
-                diagnostic("KOMUT_ISLEM_HATASI: $commandKey")
+                logDetailedError(
+                    "KOMUT_ISLEM_HATASI: $commandKey",
+                    exception
+                )
             } finally {
                 vibrate(longArrayOf(0, 100, 70, 100))
             }
@@ -296,10 +322,8 @@ class VoiceTriggerManager(private val context: Context) {
 
         diagnostic("VOSK_TANIMA_METNI_ALINDI")
 
-        val commands = getCommands()
-        if (commands.isEmpty()) return
-
         val words = spoken.split(" ")
+        val commands = getCommands()
         var index = 0
 
         while (index < words.size && isListening) {
@@ -339,8 +363,7 @@ class VoiceTriggerManager(private val context: Context) {
                 processRecognizedText(recognizedText)
             }
         } catch (exception: Exception) {
-            Log.e(tag, "Vosk sonucu okunamadı.", exception)
-            diagnostic("VOSK_SONUC_OKUMA_HATASI")
+            logDetailedError("VOSK_SONUC_OKUMA_HATASI", exception)
         }
     }
 
@@ -374,34 +397,36 @@ class VoiceTriggerManager(private val context: Context) {
                     isPreparingModel = false
 
                     if (!isListening) {
-                        loadedModel.close()
+                        try {
+                            loadedModel.close()
+                        } catch (exception: Exception) {
+                            logDetailedError(
+                                "KULLANILMAYACAK_MODEL_KAPATMA_HATASI",
+                                exception
+                            )
+                        }
+
                         diagnostic("VOSK_MODEL_ACILDI_AMA_DINLEME_KAPALI")
                         return@unpack
                     }
 
                     model = loadedModel
+                    diagnostic("VOSK_MODEL_BASARIYLA_ACILDI")
+
                     startVoskRecognition()
                 },
                 { exception ->
                     isPreparingModel = false
                     isListening = false
 
-                    Log.e(tag, "Vosk modeli açılamadı.", exception)
-                    diagnostic(
-                        "VOSK_MODEL_ACMA_HATASI: " +
-                            exception.javaClass.simpleName
-                    )
+                    logDetailedError("VOSK_MODEL_ACMA_HATASI", exception)
                 }
             )
         } catch (exception: Exception) {
             isPreparingModel = false
             isListening = false
 
-            Log.e(tag, "Vosk hazırlığı başlatılamadı.", exception)
-            diagnostic(
-                "VOSK_HAZIRLIK_HATASI: " +
-                    exception.javaClass.simpleName
-            )
+            logDetailedError("VOSK_HAZIRLIK_HATASI", exception)
         }
     }
 
@@ -422,11 +447,11 @@ class VoiceTriggerManager(private val context: Context) {
 
             speechService = newSpeechService
 
-            val started = newSpeechService.startListening(
+            newSpeechService.startListening(
                 object : org.vosk.android.RecognitionListener {
 
                     override fun onPartialResult(hypothesis: String) {
-                        // Ara sonuçları komut olarak çalıştırmıyoruz.
+                        // Ara sonuçlar komut olarak çalıştırılmaz.
                     }
 
                     override fun onResult(hypothesis: String) {
@@ -434,15 +459,11 @@ class VoiceTriggerManager(private val context: Context) {
                     }
 
                     override fun onFinalResult(hypothesis: String) {
-                        // Servis dururken gelen son sonuç komut çalıştırmaz.
+                        processVoskResult(hypothesis)
                     }
 
                     override fun onError(exception: Exception) {
-                        Log.e(tag, "Vosk ses tanıma hatası.", exception)
-                        diagnostic(
-                            "VOSK_SES_TANIMA_HATASI: " +
-                                exception.javaClass.simpleName
-                        )
+                        logDetailedError("VOSK_SES_TANIMA_HATASI", exception)
                     }
 
                     override fun onTimeout() {
@@ -451,19 +472,9 @@ class VoiceTriggerManager(private val context: Context) {
                 }
             )
 
-            if (!started) {
-                throw IllegalStateException(
-                    "Vosk ses tanıma başlatılamadı"
-                )
-            }
-
             diagnostic("VOSK_DINLEME_BASLADI")
         } catch (exception: Exception) {
-            Log.e(tag, "Vosk dinleme başlatılamadı.", exception)
-            diagnostic(
-                "VOSK_DINLEME_BASLATMA_HATASI: " +
-                    exception.javaClass.simpleName
-            )
+            logDetailedError("VOSK_DINLEME_BASLATMA_HATASI", exception)
 
             isListening = false
             releaseVoskResources()
@@ -474,13 +485,13 @@ class VoiceTriggerManager(private val context: Context) {
         try {
             speechService?.cancel()
         } catch (exception: Exception) {
-            Log.e(tag, "Vosk dinleme iptal edilemedi.", exception)
+            logDetailedError("VOSK_DINLEME_IPTAL_HATASI", exception)
         }
 
         try {
             speechService?.shutdown()
         } catch (exception: Exception) {
-            Log.e(tag, "Vosk ses kaynağı kapatılamadı.", exception)
+            logDetailedError("VOSK_SES_KAYNAGI_KAPATMA_HATASI", exception)
         }
 
         speechService = null
@@ -488,7 +499,7 @@ class VoiceTriggerManager(private val context: Context) {
         try {
             recognizer?.close()
         } catch (exception: Exception) {
-            Log.e(tag, "Vosk tanıyıcı kapatılamadı.", exception)
+            logDetailedError("VOSK_TANIYICI_KAPATMA_HATASI", exception)
         }
 
         recognizer = null
@@ -496,7 +507,7 @@ class VoiceTriggerManager(private val context: Context) {
         try {
             model?.close()
         } catch (exception: Exception) {
-            Log.e(tag, "Vosk modeli kapatılamadı.", exception)
+            logDetailedError("VOSK_MODEL_KAPATMA_HATASI", exception)
         }
 
         model = null
