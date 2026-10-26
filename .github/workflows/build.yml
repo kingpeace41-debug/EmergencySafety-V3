@@ -1,4 +1,3 @@
-
 name: Build Android APK
 
 on:
@@ -38,12 +37,23 @@ jobs:
           unzip -q /tmp/vosk-model.zip \
             -d /tmp/vosk-model-unpack
 
-          mv /tmp/vosk-model-unpack/vosk-model-small-tr-0.3 \
-            app/src/main/assets/model
+          echo "İndirilen modelin klasörleri:"
+          find /tmp/vosk-model-unpack -maxdepth 3 -type d
 
-          test -f app/src/main/assets/model/conf/model.conf
+          MODEL_DIR="/tmp/vosk-model-unpack/vosk-model-small-tr-0.3"
 
-          echo "Turkish Vosk model prepared successfully."
+          if [ ! -d "$MODEL_DIR" ]; then
+            echo "Beklenen model klasörü bulunamadı. ZIP içeriği:"
+            find /tmp/vosk-model-unpack -maxdepth 3 -print
+            exit 1
+          fi
+
+          mv "$MODEL_DIR" app/src/main/assets/model
+
+          echo "Uygulamadaki model dosyaları:"
+          find app/src/main/assets/model -maxdepth 3 -type f | head -40
+
+          echo "Model klasörü başarıyla hazırlandı."
 
       - name: Build Android APK
         run: |
