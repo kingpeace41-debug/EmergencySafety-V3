@@ -9,7 +9,7 @@ import java.net.URL
 object WhatsAppWorkerClient {
 
     private const val WORKER_URL =
-        "https://frosty-disk-6780.kingpeace41.workers.dev/send"
+        "https://emergency-safety-whatsapp.kingpeace41.workers.dev/send"
 
     suspend fun sendMessage(
         phoneNumber: String,
