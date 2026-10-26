@@ -2,22 +2,21 @@ package com.example.emergencysafety
 
 import android.content.ContentValues
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.Bundle
 import android.os.Environment
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.MediaStore
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import android.util.Log
+import org.json.JSONObject
+import org.vosk.Model
+import org.vosk.Recognizer
+import org.vosk.android.SpeechService
+import org.vosk.android.StorageService
 import java.io.File
+import java.io.IOException
 import java.util.Locale
 
 class VoiceTriggerManager(private val context: Context) {
@@ -25,32 +24,29 @@ class VoiceTriggerManager(private val context: Context) {
     private val tag = "VoiceTriggerManager"
     private val diagnosticFileName = "EmergencySafety-diagnostics.txt"
     private val diagnosticLock = Any()
+    private val prefsName = "VoiceCommandSettings"
 
     private var diagnosticUri: Uri? = null
     private var diagnosticFile: File? = null
 
-    private var speechRecognizer: SpeechRecognizer? = null
-    private var recognizerIntent: Intent? = null
+    private var model: Model? = null
+    private var recognizer: Recognizer? = null
+    private var speechService: SpeechService? = null
 
     private var onRedStartCallback: (() -> Unit)? = null
     private var onRedStopCallback: (() -> Unit)? = null
     private var onSirenStartCallback: (() -> Unit)? = null
     private var onSirenStopCallback: (() -> Unit)? = null
 
+    @Volatile
     private var isListening = false
-    private val prefsName = "VoiceCommandSettings"
+
+    @Volatile
+    private var isPreparingModel = false
 
     private var pendingCommand: String? = null
     private var pendingCommandTime = 0L
     private val confirmationWindowMs = 3000L
-
-    private val handler = Handler(Looper.getMainLooper())
-    private var restartPending = false
-    private var restartCount = 0
-
-    // TEŞHİS TESTİ KAPATILDI:
-    // KOD=7 sonrasında otomatik yeniden deneme yapılabilir.
-    private var pauseAfterNoMatch = false
 
     private fun diagnostic(event: String) {
         val line = "${System.currentTimeMillis()} | " +
@@ -178,13 +174,17 @@ class VoiceTriggerManager(private val context: Context) {
             prefsName,
             Context.MODE_PRIVATE
         )
-        return normalize(prefs.getString(key, defaultValue) ?: defaultValue)
+
+        return normalize(
+            prefs.getString(key, defaultValue) ?: defaultValue
+        )
     }
 
     private fun vibrate(pattern: LongArray) {
         try {
             val vibrator =
-                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                context.getSystemService(Context.VIBRATOR_SERVICE)
+                    as? Vibrator
 
             if (vibrator?.hasVibrator() == true) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -251,7 +251,8 @@ class VoiceTriggerManager(private val context: Context) {
             )
         }
 
-        return commands.filter { it.phrase.isNotBlank() }
+        return commands
+            .filter { it.phrase.isNotBlank() }
             .sortedByDescending { it.phrase.length }
     }
 
@@ -259,9 +260,12 @@ class VoiceTriggerManager(private val context: Context) {
         commandKey: String,
         action: () -> Unit
     ) {
+        if (!isListening) return
+
         val now = SystemClock.elapsedRealtime()
 
-        if (pendingCommand == commandKey &&
+        if (
+            pendingCommand == commandKey &&
             now - pendingCommandTime <= confirmationWindowMs
         ) {
             pendingCommand = null
@@ -285,10 +289,12 @@ class VoiceTriggerManager(private val context: Context) {
     }
 
     private fun processRecognizedText(text: String) {
+        if (!isListening) return
+
         val spoken = normalize(text)
         if (spoken.isBlank()) return
 
-        diagnostic("TANIMA_METNI_ALINDI")
+        diagnostic("VOSK_TANIMA_METNI_ALINDI")
 
         val commands = getCommands()
         if (commands.isEmpty()) return
@@ -296,7 +302,7 @@ class VoiceTriggerManager(private val context: Context) {
         val words = spoken.split(" ")
         var index = 0
 
-        while (index < words.size) {
+        while (index < words.size && isListening) {
             var matched: VoiceCommand? = null
             var matchedWordCount = 0
 
@@ -304,7 +310,8 @@ class VoiceTriggerManager(private val context: Context) {
                 val commandWords = command.phrase.split(" ")
                 val end = index + commandWords.size
 
-                if (end <= words.size &&
+                if (
+                    end <= words.size &&
                     words.subList(index, end) == commandWords
                 ) {
                     matched = command
@@ -322,6 +329,21 @@ class VoiceTriggerManager(private val context: Context) {
         }
     }
 
+    private fun processVoskResult(result: String) {
+        if (!isListening || result.isBlank()) return
+
+        try {
+            val recognizedText = JSONObject(result).optString("text", "")
+
+            if (recognizedText.isNotBlank()) {
+                processRecognizedText(recognizedText)
+            }
+        } catch (exception: Exception) {
+            Log.e(tag, "Vosk sonucu okunamadı.", exception)
+            diagnostic("VOSK_SONUC_OKUMA_HATASI")
+        }
+    }
+
     fun startListening(
         onRedStart: () -> Unit,
         onRedStop: () -> Unit,
@@ -333,194 +355,164 @@ class VoiceTriggerManager(private val context: Context) {
         onSirenStartCallback = onSirenStart
         onSirenStopCallback = onSirenStop
 
-        if (isListening && speechRecognizer != null) {
-            diagnostic("DINLEME_ZATEN_AKTIF")
+        if (isListening || isPreparingModel) {
+            diagnostic("VOSK_DINLEME_VEYA_HAZIRLIK_ZATEN_AKTIF")
             return
         }
 
-        diagnostic("DINLEME_BASLATMA_ISTEGI")
+        diagnostic("VOSK_DINLEME_BASLATMA_ISTEGI")
+
         isListening = true
+        isPreparingModel = true
 
-        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
-            diagnostic("HATA: SES_TANIMA_KULLANILAMIYOR")
-            isListening = false
-            return
-        }
+        try {
+            StorageService.unpack(
+                context,
+                "model",
+                "model",
+                { loadedModel ->
+                    isPreparingModel = false
 
-        if (speechRecognizer == null) {
-            try {
-                speechRecognizer =
-                    SpeechRecognizer.createSpeechRecognizer(context).apply {
-                        setRecognitionListener(createRecognitionListener())
+                    if (!isListening) {
+                        loadedModel.close()
+                        diagnostic("VOSK_MODEL_ACILDI_AMA_DINLEME_KAPALI")
+                        return@unpack
                     }
-                diagnostic("SPEECH_RECOGNIZER_OLUSTURULDU")
-            } catch (exception: Exception) {
-                diagnostic(
-                    "RECOGNIZER_OLUSTURMA_HATASI: " +
-                        exception.javaClass.simpleName
-                )
-                isListening = false
-                return
-            }
-        }
 
-        recognizerIntent =
-            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-                )
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "tr-TR")
-                putExtra(
-                    RecognizerIntent.EXTRA_CALLING_PACKAGE,
-                    context.packageName
-                )
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            }
+                    model = loadedModel
+                    startVoskRecognition()
+                },
+                { exception ->
+                    isPreparingModel = false
+                    isListening = false
 
-        scheduleRestart(150)
-    }
-
-    private fun scheduleRestart(delayMs: Long = 250L) {
-        if (!isListening) {
-            diagnostic("YENIDEN_BASLATMA_ATLANDI: DINLEME_KAPALI")
-            return
-        }
-
-        if (restartPending) {
-            diagnostic("YENIDEN_BASLATMA_ATLANDI: ZATEN_BEKLIYOR")
-            return
-        }
-
-        restartPending = true
-        diagnostic("YENIDEN_BASLATMA_PLANLANDI: ${delayMs}ms")
-
-        handler.postDelayed({
-            restartPending = false
-
-            if (!isListening) {
-                diagnostic("YENIDEN_BASLATMA_IPTAL: DINLEME_KAPALI")
-                return@postDelayed
-            }
-
-            try {
-                restartCount++
-                diagnostic("START_LISTENING_CAGRISI: #$restartCount")
-
-                speechRecognizer?.startListening(recognizerIntent)
-                    ?: diagnostic("HATA: RECOGNIZER_NULL")
-            } catch (exception: Exception) {
-                diagnostic(
-                    "START_LISTENING_HATASI: " +
-                        exception.javaClass.simpleName
-                )
-                Log.e(tag, "Dinleme başlatılamadı.", exception)
-                scheduleRestart(700)
-            }
-        }, delayMs)
-    }
-
-    private fun createRecognitionListener() =
-        object : RecognitionListener {
-
-            override fun onReadyForSpeech(params: Bundle?) {
-                diagnostic("DINLEME_HAZIR")
-            }
-
-            override fun onBeginningOfSpeech() {
-                diagnostic("KONUSMA_BASLADI")
-            }
-
-            override fun onRmsChanged(rmsdB: Float) {}
-
-            override fun onBufferReceived(buffer: ByteArray?) {}
-
-            override fun onEndOfSpeech() {
-                diagnostic("KONUSMA_BITTI")
-            }
-
-            override fun onError(error: Int) {
-                diagnostic("DINLEME_HATASI: KOD=$error")
-
-                if (error == SpeechRecognizer.ERROR_NO_MATCH &&
-                    pauseAfterNoMatch
-                ) {
+                    Log.e(tag, "Vosk modeli açılamadı.", exception)
                     diagnostic(
-                        "TEST: KOD_7_SONRASI_OTOMATIK_YENIDEN_BASLATMA_DURDU"
-                    )
-                    return
-                }
-
-                if (error == SpeechRecognizer.ERROR_NO_MATCH) {
-                    diagnostic("NO_MATCH: 2000ms SONRA TEKRAR DENE")
-                    scheduleRestart(2000)
-                } else {
-                    scheduleRestart(500)
-                }
-            }
-
-            override fun onResults(results: Bundle?) {
-                diagnostic("SONUC_GELDI")
-
-                try {
-                    val matches = results?.getStringArrayList(
-                        SpeechRecognizer.RESULTS_RECOGNITION
-                    )
-
-                    if (matches != null && isListening) {
-                        for (recognizedText in matches) {
-                            processRecognizedText(recognizedText)
-                            if (recognizedText.isNotBlank()) break
-                        }
-                    } else {
-                        diagnostic("SONUC_BOS_VEYA_DINLEME_KAPALI")
-                    }
-                } catch (exception: Exception) {
-                    diagnostic(
-                        "SONUC_ISLEME_HATASI: " +
+                        "VOSK_MODEL_ACMA_HATASI: " +
                             exception.javaClass.simpleName
                     )
-                    Log.e(tag, "Sonuç işlenemedi.", exception)
-                } finally {
-                    scheduleRestart(250)
                 }
+            )
+        } catch (exception: Exception) {
+            isPreparingModel = false
+            isListening = false
+
+            Log.e(tag, "Vosk hazırlığı başlatılamadı.", exception)
+            diagnostic(
+                "VOSK_HAZIRLIK_HATASI: " +
+                    exception.javaClass.simpleName
+            )
+        }
+    }
+
+    private fun startVoskRecognition() {
+        if (!isListening) return
+
+        try {
+            val loadedModel = model
+                ?: throw IllegalStateException("Vosk modeli hazır değil")
+
+            val newRecognizer = Recognizer(loadedModel, 16000.0f)
+            recognizer = newRecognizer
+
+            val newSpeechService = SpeechService(
+                newRecognizer,
+                16000.0f
+            )
+
+            speechService = newSpeechService
+
+            val started = newSpeechService.startListening(
+                object : org.vosk.android.RecognitionListener {
+
+                    override fun onPartialResult(hypothesis: String) {
+                        // Ara sonuçları komut olarak çalıştırmıyoruz.
+                    }
+
+                    override fun onResult(hypothesis: String) {
+                        processVoskResult(hypothesis)
+                    }
+
+                    override fun onFinalResult(hypothesis: String) {
+                        // Servis dururken gelen son sonuç komut çalıştırmaz.
+                    }
+
+                    override fun onError(exception: Exception) {
+                        Log.e(tag, "Vosk ses tanıma hatası.", exception)
+                        diagnostic(
+                            "VOSK_SES_TANIMA_HATASI: " +
+                                exception.javaClass.simpleName
+                        )
+                    }
+
+                    override fun onTimeout() {
+                        diagnostic("VOSK_DINLEME_ZAMAN_ASIMI")
+                    }
+                }
+            )
+
+            if (!started) {
+                throw IllegalStateException(
+                    "Vosk ses tanıma başlatılamadı"
+                )
             }
 
-            override fun onPartialResults(partialResults: Bundle?) {
-                diagnostic("KISMİ_SONUC_GELDI")
-            }
+            diagnostic("VOSK_DINLEME_BASLADI")
+        } catch (exception: Exception) {
+            Log.e(tag, "Vosk dinleme başlatılamadı.", exception)
+            diagnostic(
+                "VOSK_DINLEME_BASLATMA_HATASI: " +
+                    exception.javaClass.simpleName
+            )
 
-            override fun onEvent(eventType: Int, params: Bundle?) {
-                diagnostic("TANIMA_EVENTI: $eventType")
-            }
+            isListening = false
+            releaseVoskResources()
+        }
+    }
+
+    private fun releaseVoskResources() {
+        try {
+            speechService?.cancel()
+        } catch (exception: Exception) {
+            Log.e(tag, "Vosk dinleme iptal edilemedi.", exception)
         }
 
+        try {
+            speechService?.shutdown()
+        } catch (exception: Exception) {
+            Log.e(tag, "Vosk ses kaynağı kapatılamadı.", exception)
+        }
+
+        speechService = null
+
+        try {
+            recognizer?.close()
+        } catch (exception: Exception) {
+            Log.e(tag, "Vosk tanıyıcı kapatılamadı.", exception)
+        }
+
+        recognizer = null
+
+        try {
+            model?.close()
+        } catch (exception: Exception) {
+            Log.e(tag, "Vosk modeli kapatılamadı.", exception)
+        }
+
+        model = null
+    }
+
     fun stopListening() {
-        diagnostic("DINLEME_DURDURMA_ISTEGI")
+        diagnostic("VOSK_DINLEME_DURDURMA_ISTEGI")
+
         isListening = false
         pendingCommand = null
         pendingCommandTime = 0L
 
-        handler.removeCallbacksAndMessages(null)
-        restartPending = false
+        releaseVoskResources()
 
-        try {
-            speechRecognizer?.cancel()
-            speechRecognizer?.destroy()
-            diagnostic("SPEECH_RECOGNIZER_YOK_EDILDI")
-        } catch (exception: Exception) {
-            Log.e(
-                tag,
-                "Ses tanıma kapatılırken hata oluştu.",
-                exception
-            )
-            diagnostic(
-                "DURDURMA_HATASI: ${exception.javaClass.simpleName}"
-            )
-        }
+        isPreparingModel = false
 
-        speechRecognizer = null
-        recognizerIntent = null
+        diagnostic("VOSK_DINLEME_DURDURULDU")
     }
 }
