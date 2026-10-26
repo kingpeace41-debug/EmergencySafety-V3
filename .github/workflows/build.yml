@@ -1,3 +1,4 @@
+
 name: Build Android APK
 
 on:
@@ -21,6 +22,28 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.9'
+
+      - name: Download Turkish Vosk Model
+        run: |
+          set -e
+
+          MODEL_URL="https://alphacephei.com/vosk/models/vosk-model-small-tr-0.3.zip"
+
+          mkdir -p /tmp/vosk-model-unpack
+          mkdir -p app/src/main/assets
+
+          curl -fL --retry 3 "$MODEL_URL" \
+            -o /tmp/vosk-model.zip
+
+          unzip -q /tmp/vosk-model.zip \
+            -d /tmp/vosk-model-unpack
+
+          mv /tmp/vosk-model-unpack/vosk-model-small-tr-0.3 \
+            app/src/main/assets/model
+
+          test -f app/src/main/assets/model/conf/model.conf
+
+          echo "Turkish Vosk model prepared successfully."
 
       - name: Build Android APK
         run: |
