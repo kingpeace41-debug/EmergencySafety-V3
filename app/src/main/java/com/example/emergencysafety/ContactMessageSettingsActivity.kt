@@ -21,6 +21,16 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
     companion object {
         private const val REQUEST_SELECT_CONTACT = 1001
+
+        private val DEFAULT_EMERGENCY_MESSAGE = """
+            ACİL DURUM!
+
+            Ben [Ad Soyad].
+
+            Acil durumdayım ve yardıma ihtiyacım var. Lütfen aşağıdaki konuma ivedilikle gelin veya gerekli yardımı yönlendirin.
+
+            Konumum: [Otomatik konum bağlantısı]
+        """.trimIndent()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,8 +65,6 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                 )
             )
 
-            // Kişi alanlarında imleci ve klavyeyi kapat.
-            // Bu alanlar yalnızca rehberden seçim içindir.
             contactNameFields[i].apply {
                 isCursorVisible = false
                 showSoftInputOnFocus = false
@@ -73,7 +81,6 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                 isClickable = true
             }
 
-            // Dokununca doğrudan telefon rehberini aç.
             contactNameFields[i].setOnClickListener {
                 selectedContactIndex = i
                 openContactPicker()
@@ -84,7 +91,6 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                 openContactPicker()
             }
 
-            // Basılı tutunca da rehberi aç.
             contactNameFields[i].setOnLongClickListener {
                 selectedContactIndex = i
                 openContactPicker()
@@ -98,8 +104,14 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
             }
         }
 
+        // Kayıtlı mesajı koru; mesaj yoksa varsayılan şablonu göster.
+        val savedEmergencyMessage =
+            prefs.getString("emergency_message", null)
+
         messageField.setText(
-            prefs.getString("emergency_message", "")
+            savedEmergencyMessage
+                ?.takeIf { it.isNotBlank() }
+                ?: DEFAULT_EMERGENCY_MESSAGE
         )
 
         findViewById<Button>(R.id.btnSaveContacts)
@@ -161,7 +173,6 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
             return ""
         }
 
-        // Rakamları al; baştaki uluslararası + işaretini ayrıca koru.
         val digits = raw.filter { it.isDigit() }
         val hasLeadingPlus = raw.startsWith("+")
 
@@ -169,32 +180,26 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
             return ""
         }
 
-        // Uluslararası + ile başlayan numaralarda +90'ı çoğaltma.
         if (hasLeadingPlus) {
             return "+$digits"
         }
 
-        // 0090XXXXXXXXXX -> +90XXXXXXXXXX
         if (digits.startsWith("0090") && digits.length == 14) {
             return "+${digits.drop(2)}"
         }
 
-        // 90XXXXXXXXXX -> +90XXXXXXXXXX
         if (digits.startsWith("90") && digits.length == 12) {
             return "+$digits"
         }
 
-        // 05XXXXXXXXX -> +905XXXXXXXXX
         if (digits.startsWith("0") && digits.length == 11) {
             return "+90${digits.drop(1)}"
         }
 
-        // 5XXXXXXXXX veya Türkiye'nin 10 haneli alan kodlu numarası.
         if (digits.length == 10) {
             return "+90$digits"
         }
 
-        // Tanınmayan uzunluktaki numarayı yanlış ülke koduyla bozma.
         return raw
     }
 
