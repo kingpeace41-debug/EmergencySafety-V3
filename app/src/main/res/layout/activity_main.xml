@@ -1,34 +1,31 @@
-<escape><?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
 xmlns:app="http://schemas.android.com/apk/res-auto"
 android:layout_width="match_parent"
 android:layout_height="match_parent"
 android:background="#101114">
 
-<!-- ARKA PLAN: ÜST ŞERİT, KURT GÖRSELİ VE ALT ŞERİT -->
+<!-- TAM EKRAN ARKA PLAN: EMERGENCY + KURT + SAFETY -->
 <LinearLayout
     android:id="@+id/backgroundDesign"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <!-- ÜST KIRMIZI ŞERİT -->
     <TextView
         android:id="@+id/stripEmergency"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="#ad0002"
         android:gravity="center"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
         android:text="EMERGENCY"
         android:textColor="#FFFFFF"
         android:textSize="24sp"
         android:textStyle="bold"
         android:letterSpacing="0.08"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
         android:contentDescription="Emergency acil durum şeridi" />
 
-    <!-- KURT GÖRSELİ: İKİ ŞERİT ARASINDAKİ ALAN -->
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -45,25 +42,24 @@ android:background="#101114">
 
     </FrameLayout>
 
-    <!-- ALT LACİVERT ŞERİT -->
     <TextView
         android:id="@+id/stripSafety"
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:background="#03087b"
         android:gravity="center"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
         android:text="SAFETY"
         android:textColor="#FFFFFF"
         android:textSize="24sp"
         android:textStyle="bold"
         android:letterSpacing="0.08"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
         android:contentDescription="Safety güvenlik şeridi" />
 
 </LinearLayout>
 
-<!-- KURT ALANINA DOKUNARAK DİNLEMEYİ AÇMA/KAPATMA -->
+<!-- KURT ALANINA DOKUNMA -->
 <FrameLayout
     android:id="@+id/wolfTouchArea"
     android:layout_width="match_parent"
@@ -73,7 +69,7 @@ android:background="#101114">
     android:focusable="true"
     android:contentDescription="Dinlemeyi aç veya kapat" />
 
-<!-- MEVCUT KONTROLLER: ŞERİTLER BU ALANIN DIŞINDA -->
+<!-- MEVCUT KONTROLLER -->
 <ScrollView
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -87,12 +83,10 @@ android:background="#101114">
         android:orientation="vertical"
         android:padding="10dp">
 
-        <!-- KURT ALANININ İÇİNDEKİ MEVCUT BOŞLUK -->
         <View
             android:layout_width="match_parent"
             android:layout_height="300dp" />
 
-        <!-- MEVCUT KIRMIZI, SARI VE MAVİ BUTONLAR -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="220dp"
@@ -163,7 +157,6 @@ android:background="#101114">
 
         </LinearLayout>
 
-        <!-- ALT SLOGAN -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -174,7 +167,6 @@ android:background="#101114">
             android:textSize="14sp"
             android:textStyle="bold" />
 
-        <!-- MEVCUT GÜÇ / DİNLEME DÜĞMESİ -->
         <androidx.cardview.widget.CardView
             android:id="@+id/btnToggleListening"
             android:layout_width="54dp"
@@ -201,4 +193,4 @@ android:background="#101114">
     </LinearLayout>
 </ScrollView>
 
-</FrameLayout></escape>
+</FrameLayout>
