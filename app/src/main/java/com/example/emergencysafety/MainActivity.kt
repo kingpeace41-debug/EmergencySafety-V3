@@ -49,8 +49,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val COLOR_EMERGENCY_RED = "#F00018"
-        private const val COLOR_SAFETY_NAVY = "#343A56"
+        private const val COLOR_EMERGENCY_RED = "#ad0002"
+        private const val COLOR_SAFETY_NAVY = "#03087b"
         private const val SIREN_STRIP_INTERVAL_MS = 700L
     }
 
