@@ -9,12 +9,25 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 class VoiceTriggerService : Service() {
 
     private lateinit var sirenManager: SirenManager
     private lateinit var voiceTriggerManager: VoiceTriggerManager
+
+    private val serviceScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    private var redCodeInProgress = false
 
     override fun onCreate() {
         super.onCreate()
@@ -46,7 +59,14 @@ class VoiceTriggerService : Service() {
     }
 
     private fun triggerRedCode() {
-        val intent = Intent(
+        if (redCodeInProgress) return
+        redCodeInProgress = true
+
+        // Önce kayıtlı kişilere WhatsApp gönderim işlemini başlat.
+        sendEmergencyMessages()
+
+        // Mevcut acil durum ekranını aç.
+        val screenIntent = Intent(
             this,
             FakeDeadActivity::class.java
         ).apply {
@@ -56,11 +76,161 @@ class VoiceTriggerService : Service() {
             )
         }
 
-        startActivity(intent)
+        startActivity(screenIntent)
+    }
+
+    private fun sendEmergencyMessages() {
+        serviceScope.launch {
+            val contactsPreferences = getSharedPreferences(
+                "EmergencyContactSettings",
+                MODE_PRIVATE
+            )
+
+            val connectionPreferences = getSharedPreferences(
+                "EmergencySafetyConnection",
+                MODE_PRIVATE
+            )
+
+            val message = contactsPreferences
+                .getString("emergency_message", "")
+                .orEmpty()
+                .trim()
+
+            val apiKey = connectionPreferences
+                .getString("worker_api_key", "")
+                .orEmpty()
+                .trim()
+
+            if (message.isBlank()) {
+                reportStatus(
+                    "Acil durum mesajı kayıtlı değil."
+                )
+                return@launch
+            }
+
+            if (apiKey.isBlank()) {
+                reportStatus(
+                    "API anahtarı kayıtlı değil. Önce uygulamadaki WhatsApp testinden anahtarı kaydedin."
+                )
+                return@launch
+            }
+
+            val contacts = (1..3).mapNotNull { number ->
+                val phone = contactsPreferences
+                    .getString("contact${number}_phone", "")
+                    .orEmpty()
+                    .trim()
+
+                if (phone.isBlank()) {
+                    null
+                } else {
+                    phone
+                }
+            }
+
+            if (contacts.isEmpty()) {
+                reportStatus(
+                    "Kayıtlı acil durum telefon numarası bulunamadı."
+                )
+                return@launch
+            }
+
+            var acceptedCount = 0
+            val errors = mutableListOf<String>()
+
+            for (phone in contacts) {
+                try {
+                    val result = WhatsAppWorkerClient.sendMessage(
+                        phoneNumber = phone,
+                        message = message,
+                        apiKey = apiKey
+                    )
+
+                    result.fold(
+                        onSuccess = { response ->
+                            val accepted = try {
+                                JSONObject(response)
+                                    .optBoolean("success", false)
+                            } catch (e: Exception) {
+                                false
+                            }
+
+                            if (accepted) {
+                                acceptedCount++
+                            } else {
+                                errors.add("$phone: gönderim onayı alınamadı.")
+                                Log.e(
+                                    "EmergencySafety",
+                                    "Worker yanıtı başarılı olarak doğrulanamadı."
+                                )
+                            }
+                        },
+                        onFailure = { error ->
+                            errors.add("$phone: ${error.message}")
+                            Log.e(
+                                "EmergencySafety",
+                                "WhatsApp gönderim isteği başarısız.",
+                                error
+                            )
+                        }
+                    )
+                } catch (e: Exception) {
+                    errors.add("$phone: ${e.message}")
+                    Log.e(
+                        "EmergencySafety",
+                        "WhatsApp gönderimi sırasında hata oluştu.",
+                        e
+                    )
+                }
+            }
+
+            val status = when {
+                acceptedCount == contacts.size ->
+                    "WhatsApp gönderim istekleri kabul edildi: $acceptedCount kişi."
+
+                acceptedCount > 0 ->
+                    "Kabul edilen istek: $acceptedCount/${contacts.size}. Bazı gönderimler başarısız."
+
+                else ->
+                    "WhatsApp gönderimi başarısız. Hata kayıtlarını kontrol edin."
+            }
+
+            Log.i(
+                "EmergencySafety",
+                "$status Hata sayısı: ${errors.size}"
+            )
+
+            reportStatus(status)
+        }
+    }
+
+    private fun reportStatus(message: String) {
+        Log.i("EmergencySafety", message)
+
+        Toast.makeText(
+            applicationContext,
+            message,
+            Toast.LENGTH_LONG
+        ).show()
+
+        val notificationManager =
+            getSystemService(NOTIFICATION_SERVICE)
+                as NotificationManager
+
+        val notification = NotificationCompat.Builder(
+            this,
+            "voice_trigger_channel"
+        )
+            .setContentTitle("Emergency Safety")
+            .setContentText(message)
+            .setSmallIcon(R.drawable.ic_app_logo)
+            .setAutoCancel(true)
+            .build()
+
+        notificationManager.notify(2, notification)
     }
 
     private fun stopRedCode() {
-        // Uygulamanın sesli dinleme durumunu kapat.
         getSharedPreferences(
             "AppSettings",
             MODE_PRIVATE
@@ -68,7 +238,6 @@ class VoiceTriggerService : Service() {
             .putBoolean("is_voice_active", false)
             .apply()
 
-        // Acil durum ekranına kapanma bildirimi gönder.
         val stopBroadcast = Intent(
             "com.example.emergencysafety.CLOSE_FAKE_DEAD"
         ).apply {
@@ -77,7 +246,6 @@ class VoiceTriggerService : Service() {
 
         sendBroadcast(stopBroadcast)
 
-        // Acil durum ekranını kapat.
         val closeIntent = Intent(
             this,
             FakeDeadActivity::class.java
@@ -91,7 +259,6 @@ class VoiceTriggerService : Service() {
 
         startActivity(closeIntent)
 
-        // Servisi durdur; onDestroy() dinlemeyi sonlandıracak.
         stopSelf()
     }
 
@@ -142,6 +309,7 @@ class VoiceTriggerService : Service() {
     override fun onDestroy() {
         voiceTriggerManager.stopListening()
         sirenManager.stopSiren()
+        serviceScope.cancel()
         super.onDestroy()
     }
 
