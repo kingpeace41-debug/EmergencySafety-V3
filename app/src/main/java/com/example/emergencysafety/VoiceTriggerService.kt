@@ -17,8 +17,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import org.json.JSONObject
-import java.util.Locale
 
 class VoiceTriggerService : Service() {
 
@@ -90,7 +88,7 @@ class VoiceTriggerService : Service() {
                 MODE_PRIVATE
             )
 
-            val message = contactsPreferences
+            val savedMessage = contactsPreferences
                 .getString("emergency_message", "")
                 .orEmpty()
                 .trim()
@@ -100,7 +98,7 @@ class VoiceTriggerService : Service() {
                 .orEmpty()
                 .trim()
 
-            if (message.isBlank()) {
+            if (savedMessage.isBlank()) {
                 reportStatus(
                     "Acil durum mesajı kayıtlı değil."
                 )
@@ -109,21 +107,30 @@ class VoiceTriggerService : Service() {
 
             if (apiKey.isBlank()) {
                 reportStatus(
-                    "API anahtarı kayıtlı değil. Önce uygulamadaki WhatsApp testinden anahtarı kaydedin."
+                    "Worker API anahtarı kayıtlı değil. " +
+                        "Manuel WhatsApp testinden anahtarı kaydedin."
                 )
                 return@launch
             }
 
-            val contacts = (1..3).mapNotNull { number ->
+            val contacts = (1..3).mapNotNull { index ->
                 val phone = contactsPreferences
-                    .getString("contact${number}_phone", "")
+                    .getString("contact${index}_phone", "")
                     .orEmpty()
                     .trim()
 
                 if (phone.isBlank()) {
                     null
                 } else {
-                    phone
+                    val name = contactsPreferences
+                        .getString("contact${index}_name", "")
+                        .orEmpty()
+                        .trim()
+
+                    EmergencyProtocolContact(
+                        name = name.ifBlank { "Kişi $index" },
+                        phone = phone
+                    )
                 }
             }
 
@@ -134,132 +141,66 @@ class VoiceTriggerService : Service() {
                 return@launch
             }
 
-            // Acil mesajı göndermeden önce kullanılabilir konumu al.
-            // Konum alınamazsa acil mesajın gönderimini engelleme.
-            val emergencyLocation = try {
-                EmergencyLocationProvider
-                    .getBestAvailableLocation(applicationContext)
-            } catch (e: Exception) {
-                Log.e(
-                    "EmergencySafety",
-                    "Acil konum alınırken hata oluştu.",
-                    e
-                )
-                null
-            }
-
-            val locationText = if (emergencyLocation == null) {
-                "Konum şu anda alınamadı. Telefonun konum ayarlarını kontrol edin."
-            } else {
-                val location = emergencyLocation.location
-
-                val coordinates = String.format(
-                    Locale.US,
-                    "%.6f,%.6f",
-                    location.latitude,
-                    location.longitude
-                )
-
-                val mapUrl =
-                    "https://www.google.com/maps/search/?api=1&query=$coordinates"
-
-                if (emergencyLocation.isLastKnown) {
-                    val ageMillis = (
-                        System.currentTimeMillis() - location.time
-                    ).coerceAtLeast(0L)
-
-                    val ageMinutes = ageMillis / 60000L
-
-                    "Son bilinen konum (yaklaşık $ageMinutes dakika önce):\n$mapUrl"
-                } else {
-                    "Güncel konum:\n$mapUrl"
-                }
-            }
-
-            // Kayıtlı mesajdaki konum alanını gerçek bağlantıyla değiştir.
-            // Alan yoksa konum bilgisini mesajın sonuna ekle.
-            val locationPlaceholder = Regex(
-                "\\[Otomatik konum bağlantısı\\]",
-                RegexOption.IGNORE_CASE
+            // Ortak protokol mesajı ve konumu hazırlar.
+            val finalMessage = EmergencyProtocol.prepareMessage(
+                context = applicationContext,
+                originalMessage = savedMessage
             )
 
-            val finalMessage = if (
-                locationPlaceholder.containsMatchIn(message)
-            ) {
-                message.replace(
-                    locationPlaceholder,
-                    locationText
-                )
-            } else {
-                "$message\n\n$locationText"
+            // Gönderim mevcut WhatsAppWorkerClient üzerinden yapılır.
+            val results = EmergencyProtocol.sendToContacts(
+                apiKey = apiKey,
+                message = finalMessage,
+                contacts = contacts
+            )
+
+            val rejectedKey = results.any {
+                it.apiKeyRejected
             }
 
-            var acceptedCount = 0
-            val errors = mutableListOf<String>()
+            if (rejectedKey) {
+                reportStatus(
+                    "Worker API anahtarı kabul edilmedi. " +
+                        "Manuel WhatsApp testinden anahtarı kontrol edin."
+                )
+                return@launch
+            }
 
-            for (phone in contacts) {
-                try {
-                    val result = WhatsAppWorkerClient.sendMessage(
-                        phoneNumber = phone,
-                        message = finalMessage,
-                        apiKey = apiKey
-                    )
+            val acceptedCount = results.count {
+                it.accepted
+            }
 
-                    result.fold(
-                        onSuccess = { response ->
-                            val accepted = try {
-                                JSONObject(response)
-                                    .optBoolean("success", false)
-                            } catch (e: Exception) {
-                                false
-                            }
-
-                            if (accepted) {
-                                acceptedCount++
-                            } else {
-                                errors.add(
-                                    "$phone: gönderim onayı alınamadı."
-                                )
-                                Log.e(
-                                    "EmergencySafety",
-                                    "Worker yanıtı başarılı olarak doğrulanamadı."
-                                )
-                            }
-                        },
-                        onFailure = { error ->
-                            errors.add("$phone: ${error.message}")
-                            Log.e(
-                                "EmergencySafety",
-                                "WhatsApp gönderim isteği başarısız.",
-                                error
-                            )
-                        }
-                    )
-                } catch (e: Exception) {
-                    errors.add("$phone: ${e.message}")
-                    Log.e(
-                        "EmergencySafety",
-                        "WhatsApp gönderimi sırasında hata oluştu.",
-                        e
-                    )
-                }
+            val errors = results.filter {
+                !it.accepted
             }
 
             val status = when {
                 acceptedCount == contacts.size ->
-                    "WhatsApp gönderim istekleri kabul edildi: $acceptedCount kişi."
+                    "WhatsApp gönderim istekleri kabul edildi: " +
+                        "$acceptedCount kişi."
 
                 acceptedCount > 0 ->
-                    "Kabul edilen istek: $acceptedCount/${contacts.size}. Bazı gönderimler başarısız."
+                    "Kabul edilen istek: " +
+                        "$acceptedCount/${contacts.size}. " +
+                        "Bazı gönderimler başarısız."
 
                 else ->
-                    "WhatsApp gönderimi başarısız. Hata kayıtlarını kontrol edin."
+                    "WhatsApp gönderimi başarısız. " +
+                        "Bağlantıyı ve Worker ayarlarını kontrol edin."
             }
 
             Log.i(
                 "EmergencySafety",
                 "$status Hata sayısı: ${errors.size}"
             )
+
+            errors.take(3).forEach { error ->
+                Log.e(
+                    "EmergencySafety",
+                    "${error.contactName}: " +
+                        (error.error ?: "Gönderim başarısız.")
+                )
+            }
 
             reportStatus(status)
         }
