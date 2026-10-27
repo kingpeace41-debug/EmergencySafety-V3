@@ -44,4 +44,7 @@ dependencies {
 
     // Vosk çevrimdışı konuşma tanıma kütüphanesi
     implementation 'com.alphacephei:vosk-android:0.3.75'
+
+    // Google Fused Location Provider: acil durum konumu
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
 }
