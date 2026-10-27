@@ -1,88 +1,110 @@
-<?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?><FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+android:layout_width="match_parent"
+android:layout_height="match_parent"
+android:background="#101114">
+
+<!-- SARI KURT ARKA PLANI -->
+<ImageView
+    android:id="@+id/yellowPageBackground"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#101114">
+    android:src="@drawable/wolf_yellow"
+    android:scaleType="fitCenter"
+    android:contentDescription="Sarı kurt temalı arka plan" />
 
-    <ImageView
-        android:id="@+id/yellowPageBackground"
+<!-- SAYFA İÇERİĞİ -->
+<ScrollView
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="@android:color/transparent"
+    android:clipToPadding="false">
+
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:src="@drawable/wolf_yellow"
-        android:scaleType="fitCenter"
-        android:contentDescription="Sarı kurt temalı arka plan" />
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="80dp"
+        android:paddingBottom="90dp">
 
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fillViewport="true"
-        android:background="@android:color/transparent"
-        android:clipToPadding="false">
-
-        <LinearLayout
+        <!-- YARDIM İSTE -->
+        <ImageView
+            android:id="@+id/btnYellowHelp"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center_horizontal"
-            android:paddingStart="24dp"
-            android:paddingEnd="24dp"
-            android:paddingTop="28dp"
-            android:paddingBottom="24dp">
+            android:layout_height="100dp"
+            android:layout_marginTop="170dp"
+            android:src="@drawable/yellow_button_1"
+            android:scaleType="fitCenter"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Yardım iste" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:gravity="center"
-                android:text="SARI GÜVENLİK"
-                android:textColor="#FFFFFF"
-                android:textSize="25sp"
-                android:textStyle="bold"
-                android:shadowColor="#FFD34D"
-                android:shadowRadius="10" />
+        <!-- KONUMUMU PAYLAŞ -->
+        <ImageView
+            android:id="@+id/btnYellowLocation"
+            android:layout_width="match_parent"
+            android:layout_height="100dp"
+            android:layout_marginTop="5dp"
+            android:src="@drawable/yellow_button_2"
+            android:scaleType="fitCenter"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Konumumu paylaş" />
 
-            <ImageView
-                android:id="@+id/btnYellowHelp"
-                android:layout_width="match_parent"
-                android:layout_height="100dp"
-                android:layout_marginTop="250dp"
-                android:src="@drawable/yellow_button_1"
-                android:scaleType="fitCenter"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Yardım iste" />
+        <!-- GÜVENLİK DESTEĞİ -->
+        <ImageView
+            android:id="@+id/btnYellowSafetySupport"
+            android:layout_width="match_parent"
+            android:layout_height="100dp"
+            android:layout_marginTop="5dp"
+            android:src="@drawable/yellow_button_3"
+            android:scaleType="fitCenter"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Güvenlik desteği" />
 
-            <ImageView
-                android:id="@+id/btnYellowLocation"
-                android:layout_width="match_parent"
-                android:layout_height="100dp"
-                android:layout_marginTop="5dp"
-                android:src="@drawable/yellow_button_2"
-                android:scaleType="fitCenter"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Konumumu paylaş" />
+    </LinearLayout>
+</ScrollView>
 
-            <ImageView
-                android:id="@+id/btnYellowSafetySupport"
-                android:layout_width="match_parent"
-                android:layout_height="100dp"
-                android:layout_marginTop="5dp"
-                android:src="@drawable/yellow_button_3"
-                android:scaleType="fitCenter"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Güvenlik desteği" />
+<!-- ÜST EMERGENCY ŞERİDİ -->
+<TextView
+    android:id="@+id/stripEmergency"
+    android:layout_width="match_parent"
+    android:layout_height="56dp"
+    android:layout_gravity="top"
+    android:background="#ad0002"
+    android:gravity="center"
+    android:text="EMERGENCY"
+    android:textColor="#FFFFFF"
+    android:textSize="24sp"
+    android:fontFamily="sans-serif-condensed"
+    android:textStyle="bold"
+    android:letterSpacing="0.12"
+    android:shadowColor="#99000000"
+    android:shadowDx="1"
+    android:shadowDy="2"
+    android:shadowRadius="3" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="22dp"
-                android:gravity="center"
-                android:text="Emergency Safety"
-                android:textColor="#CCFFFFFF"
-                android:textSize="13sp" />
+<!-- ALT SAFETY ŞERİDİ -->
+<TextView
+    android:id="@+id/stripSafety"
+    android:layout_width="match_parent"
+    android:layout_height="56dp"
+    android:layout_gravity="bottom"
+    android:background="#03087b"
+    android:gravity="center"
+    android:text="SAFETY"
+    android:textColor="#FFFFFF"
+    android:textSize="24sp"
+    android:fontFamily="sans-serif-condensed"
+    android:textStyle="bold"
+    android:letterSpacing="0.16"
+    android:shadowColor="#99000000"
+    android:shadowDx="1"
+    android:shadowDy="2"
+    android:shadowRadius="3" />
 
-        </LinearLayout>
-    </ScrollView>
 </FrameLayout>
