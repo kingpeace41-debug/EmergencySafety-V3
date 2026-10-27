@@ -1,4 +1,3 @@
-
 package com.example.emergencysafety
 
 import android.content.Context
@@ -23,9 +22,13 @@ object EmergencyProtocol {
 
     private const val TAG = "EmergencySafety"
 
+    // WhatsApp acil durum mesajının en üst başlığı.
+    private const val EMERGENCY_HEADER = "🚨 ACİL DURUM 🚨"
+
     /**
      * Kayıtlı mesajı hazırlar ve mümkünse konum bağlantısını ekler.
      * Konum alınamaması mesajın gönderilmesini engellemez.
+     * Acil durum başlığı mesajın en üstüne eklenir.
      */
     suspend fun prepareMessage(
         context: Context,
@@ -80,13 +83,18 @@ object EmergencyProtocol {
             RegexOption.IGNORE_CASE
         )
 
-        return if (placeholder.containsMatchIn(message)) {
+        val messageWithLocation = if (
+            placeholder.containsMatchIn(message)
+        ) {
             placeholder.replace(message) {
                 locationText
             }
         } else {
             "$message\n\n$locationText"
         }
+
+        // Başlık her zaman mesajın en üstünde bulunur.
+        return "$EMERGENCY_HEADER\n\n$messageWithLocation"
     }
 
     /**
