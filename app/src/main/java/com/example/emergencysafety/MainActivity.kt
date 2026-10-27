@@ -34,11 +34,53 @@ class MainActivity : AppCompatActivity() {
 
     private val volumeDownHandler = Handler(Looper.getMainLooper())
     private var volumeDownRunnable: Runnable? = null
+
+    private val sirenStripHandler = Handler(Looper.getMainLooper())
+    private var sirenColorsSwapped = false
+
     private lateinit var wolfBackground: ImageView
+    private lateinit var stripEmergency: TextView
+    private lateinit var stripSafety: TextView
+
     private var growlPlayer: MediaPlayer? = null
 
     private val instructionPrefs by lazy {
         getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
+    }
+
+    companion object {
+        private const val COLOR_EMERGENCY_RED = "#F00018"
+        private const val COLOR_SAFETY_NAVY = "#343A56"
+        private const val SIREN_STRIP_INTERVAL_MS = 700L
+    }
+
+    private val sirenStripRunnable = object : Runnable {
+        override fun run() {
+            if (
+                !::stripEmergency.isInitialized ||
+                !::stripSafety.isInitialized
+            ) {
+                return
+            }
+
+            val isSirenActive = getSharedPreferences(
+                "AppSettings",
+                Context.MODE_PRIVATE
+            ).getBoolean("is_siren_active", false)
+
+            if (isSirenActive) {
+                sirenColorsSwapped = !sirenColorsSwapped
+                applySirenStripColors(sirenColorsSwapped)
+            } else {
+                sirenColorsSwapped = false
+                applySirenStripColors(false)
+            }
+
+            sirenStripHandler.postDelayed(
+                this,
+                SIREN_STRIP_INTERVAL_MS
+            )
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,6 +88,10 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         wolfBackground = findViewById(R.id.wolfBackground)
+        stripEmergency = findViewById(R.id.stripEmergency)
+        stripSafety = findViewById(R.id.stripSafety)
+
+        applySirenStripColors(false)
 
         updateWolfImage(
             getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
@@ -78,7 +124,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Mavi bilgi butonu
+        // Mavi bilgi butonu.
         // XML dosyasındaki mevcut kimlik btnGreenAlert olarak korunuyor.
         val btnBlueAlertId =
             resources.getIdentifier("btnGreenAlert", "id", packageName)
@@ -108,7 +154,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Ana ekrana her dönüşte kurt görselini gerçek dinleme ayarıyla eşleştir.
+    // Ana ekrana dönünce kurt görselini ve şeritleri güncelle.
     override fun onResume() {
         super.onResume()
 
@@ -119,6 +165,47 @@ class MainActivity : AppCompatActivity() {
             ).getBoolean("is_voice_active", false)
 
             updateWolfImage(isVoiceActive, false)
+        }
+
+        if (
+            ::stripEmergency.isInitialized &&
+            ::stripSafety.isInitialized
+        ) {
+            sirenStripHandler.removeCallbacks(sirenStripRunnable)
+            sirenStripHandler.post(sirenStripRunnable)
+        }
+    }
+
+    // Ana ekran görünür değilken animasyon döngüsünü durdur.
+    override fun onPause() {
+        sirenStripHandler.removeCallbacks(sirenStripRunnable)
+        super.onPause()
+    }
+
+    private fun applySirenStripColors(swapped: Boolean) {
+        if (
+            !::stripEmergency.isInitialized ||
+            !::stripSafety.isInitialized
+        ) {
+            return
+        }
+
+        if (swapped) {
+            // Siren aktif: üst lacivert, alt kırmızı.
+            stripEmergency.setBackgroundColor(
+                Color.parseColor(COLOR_SAFETY_NAVY)
+            )
+            stripSafety.setBackgroundColor(
+                Color.parseColor(COLOR_EMERGENCY_RED)
+            )
+        } else {
+            // Normal: üst kırmızı, alt lacivert.
+            stripEmergency.setBackgroundColor(
+                Color.parseColor(COLOR_EMERGENCY_RED)
+            )
+            stripSafety.setBackgroundColor(
+                Color.parseColor(COLOR_SAFETY_NAVY)
+            )
         }
     }
 
@@ -500,8 +587,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        sirenStripHandler.removeCallbacks(sirenStripRunnable)
+
         growlPlayer?.release()
         growlPlayer = null
+
         super.onDestroy()
     }
 }
