@@ -43,6 +43,42 @@
                 android:layout_width="match_parent"
                 android:layout_height="300dp" />
 
+            <!-- KIRMIZI EMERGENCY ŞERİDİ -->
+            <TextView
+                android:id="@+id/stripEmergency"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="5dp"
+                android:background="#F00018"
+                android:gravity="center"
+                android:text="EMERGENCY"
+                android:textColor="#FFFFFF"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08"
+                android:elevation="6dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:contentDescription="Emergency acil durum şeridi" />
+
+            <!-- LACİVERT SAFETY ŞERİDİ -->
+            <TextView
+                android:id="@+id/stripSafety"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginBottom="10dp"
+                android:background="#343A56"
+                android:gravity="center"
+                android:text="SAFETY"
+                android:textColor="#FFFFFF"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08"
+                android:elevation="6dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:contentDescription="Safety güvenlik şeridi" />
+
             <!-- MEVCUT KIRMIZI, SARI VE MAVİ BUTONLAR -->
             <LinearLayout
                 android:layout_width="match_parent"
