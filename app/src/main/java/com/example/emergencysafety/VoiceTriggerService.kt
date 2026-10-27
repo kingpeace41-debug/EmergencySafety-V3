@@ -1,4 +1,3 @@
-
 package com.example.emergencysafety
 
 import android.app.Notification
@@ -33,6 +32,9 @@ class VoiceTriggerService : Service() {
 
         sirenManager = SirenManager(this)
         voiceTriggerManager = VoiceTriggerManager(this)
+
+        // Servis başladığında siren durumu kapalı olarak başlar.
+        setSirenActive(false)
 
         startForegroundServiceWithNotification()
 
@@ -147,7 +149,7 @@ class VoiceTriggerService : Service() {
                 originalMessage = savedMessage
             )
 
-            // Gönderim mevcut WhatsAppWorkerClient üzerinden yapılır.
+            // Mevcut WhatsApp gönderim akışı korunmuştur.
             val results = EmergencyProtocol.sendToContacts(
                 apiKey = apiKey,
                 message = finalMessage,
@@ -266,10 +268,21 @@ class VoiceTriggerService : Service() {
 
     private fun triggerSirenCode() {
         sirenManager.startSiren()
+        setSirenActive(true)
     }
 
     private fun stopSirenCode() {
         sirenManager.stopSiren()
+        setSirenActive(false)
+    }
+
+    private fun setSirenActive(active: Boolean) {
+        getSharedPreferences(
+            "AppSettings",
+            MODE_PRIVATE
+        ).edit()
+            .putBoolean("is_siren_active", active)
+            .apply()
     }
 
     private fun startForegroundServiceWithNotification() {
@@ -309,8 +322,16 @@ class VoiceTriggerService : Service() {
     }
 
     override fun onDestroy() {
-        voiceTriggerManager.stopListening()
-        sirenManager.stopSiren()
+        if (::voiceTriggerManager.isInitialized) {
+            voiceTriggerManager.stopListening()
+        }
+
+        if (::sirenManager.isInitialized) {
+            sirenManager.stopSiren()
+        }
+
+        setSirenActive(false)
+
         serviceScope.cancel()
         super.onDestroy()
     }
