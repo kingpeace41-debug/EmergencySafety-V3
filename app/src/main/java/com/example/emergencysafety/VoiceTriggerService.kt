@@ -18,6 +18,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.util.Locale
 
 class VoiceTriggerService : Service() {
 
@@ -62,10 +63,8 @@ class VoiceTriggerService : Service() {
         if (redCodeInProgress) return
         redCodeInProgress = true
 
-        // Önce kayıtlı kişilere WhatsApp gönderim işlemini başlat.
         sendEmergencyMessages()
 
-        // Mevcut acil durum ekranını aç.
         val screenIntent = Intent(
             this,
             FakeDeadActivity::class.java
@@ -135,6 +134,66 @@ class VoiceTriggerService : Service() {
                 return@launch
             }
 
+            // Acil mesajı göndermeden önce kullanılabilir konumu al.
+            // Konum alınamazsa acil mesajın gönderimini engelleme.
+            val emergencyLocation = try {
+                EmergencyLocationProvider
+                    .getBestAvailableLocation(applicationContext)
+            } catch (e: Exception) {
+                Log.e(
+                    "EmergencySafety",
+                    "Acil konum alınırken hata oluştu.",
+                    e
+                )
+                null
+            }
+
+            val locationText = if (emergencyLocation == null) {
+                "Konum şu anda alınamadı. Telefonun konum ayarlarını kontrol edin."
+            } else {
+                val location = emergencyLocation.location
+
+                val coordinates = String.format(
+                    Locale.US,
+                    "%.6f,%.6f",
+                    location.latitude,
+                    location.longitude
+                )
+
+                val mapUrl =
+                    "https://www.google.com/maps/search/?api=1&query=$coordinates"
+
+                if (emergencyLocation.isLastKnown) {
+                    val ageMillis = (
+                        System.currentTimeMillis() - location.time
+                    ).coerceAtLeast(0L)
+
+                    val ageMinutes = ageMillis / 60000L
+
+                    "Son bilinen konum (yaklaşık $ageMinutes dakika önce):\n$mapUrl"
+                } else {
+                    "Güncel konum:\n$mapUrl"
+                }
+            }
+
+            // Kayıtlı mesajdaki konum alanını gerçek bağlantıyla değiştir.
+            // Alan yoksa konum bilgisini mesajın sonuna ekle.
+            val locationPlaceholder = Regex(
+                "\\[Otomatik konum bağlantısı\\]",
+                RegexOption.IGNORE_CASE
+            )
+
+            val finalMessage = if (
+                locationPlaceholder.containsMatchIn(message)
+            ) {
+                message.replace(
+                    locationPlaceholder,
+                    locationText
+                )
+            } else {
+                "$message\n\n$locationText"
+            }
+
             var acceptedCount = 0
             val errors = mutableListOf<String>()
 
@@ -142,7 +201,7 @@ class VoiceTriggerService : Service() {
                 try {
                     val result = WhatsAppWorkerClient.sendMessage(
                         phoneNumber = phone,
-                        message = message,
+                        message = finalMessage,
                         apiKey = apiKey
                     )
 
@@ -158,7 +217,9 @@ class VoiceTriggerService : Service() {
                             if (accepted) {
                                 acceptedCount++
                             } else {
-                                errors.add("$phone: gönderim onayı alınamadı.")
+                                errors.add(
+                                    "$phone: gönderim onayı alınamadı."
+                                )
                                 Log.e(
                                     "EmergencySafety",
                                     "Worker yanıtı başarılı olarak doğrulanamadı."
