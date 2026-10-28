@@ -6,14 +6,12 @@
     android:layout_height="match_parent"
     android:background="#101114">
 
-    <!-- ÜST BANNER + KURT + ALT BANNER -->
     <LinearLayout
         android:id="@+id/backgroundDesign"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- YENİ ÜST BANNER -->
         <ImageView
             android:id="@+id/stripEmergency"
             android:layout_width="match_parent"
@@ -22,7 +20,6 @@
             android:scaleType="fitXY"
             android:contentDescription="Emergency banner" />
 
-        <!-- KURT ARKA PLANI -->
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -39,7 +36,6 @@
 
         </FrameLayout>
 
-        <!-- YENİ ALT BANNER -->
         <ImageView
             android:id="@+id/stripSafety"
             android:layout_width="match_parent"
@@ -50,7 +46,6 @@
 
     </LinearLayout>
 
-    <!-- KURT ALANINA DOKUNMA -->
     <FrameLayout
         android:id="@+id/wolfTouchArea"
         android:layout_width="match_parent"
@@ -60,7 +55,6 @@
         android:focusable="true"
         android:contentDescription="Dinlemeyi aç veya kapat" />
 
-    <!-- MEVCUT KONTROLLER -->
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -85,7 +79,6 @@
                 android:gravity="center"
                 android:weightSum="3">
 
-                <!-- KIRMIZI ACİL DURUM -->
                 <FrameLayout
                     android:id="@+id/btnRedAlert"
                     android:layout_width="0dp"
@@ -103,9 +96,9 @@
                         android:scaleType="fitCenter"
                         android:contentDescription="Kırmızı acil durum butonu"
                         android:importantForAccessibility="no" />
+
                 </FrameLayout>
 
-                <!-- SARI UYARI -->
                 <FrameLayout
                     android:id="@+id/btnYellowAlert"
                     android:layout_width="0dp"
@@ -124,9 +117,9 @@
                         android:scaleType="fitCenter"
                         android:contentDescription="Sarı uyarı butonu"
                         android:importantForAccessibility="no" />
+
                 </FrameLayout>
 
-                <!-- MAVİ BİLGİ -->
                 <FrameLayout
                     android:id="@+id/btnGreenAlert"
                     android:layout_width="0dp"
@@ -144,6 +137,7 @@
                         android:scaleType="fitCenter"
                         android:contentDescription="Mavi bilgi butonu"
                         android:importantForAccessibility="no" />
+
                 </FrameLayout>
 
             </LinearLayout>
@@ -153,7 +147,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:gravity="center"
-                android:text="Küçük bir dokunuş,\nbüyük bir fark yaratabilir."
+                android:text="Küçük bir dokunuş,&#10;büyük bir fark yaratabilir."
                 android:textColor="#FFFFFF"
                 android:textSize="14sp"
                 android:textStyle="bold" />
