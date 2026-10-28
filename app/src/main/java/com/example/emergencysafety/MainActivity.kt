@@ -1,3 +1,4 @@
+
 package com.example.emergencysafety
 
 import android.Manifest
@@ -36,11 +37,11 @@ class MainActivity : AppCompatActivity() {
     private var volumeDownRunnable: Runnable? = null
 
     private val sirenStripHandler = Handler(Looper.getMainLooper())
-    private var sirenColorsSwapped = false
+    private var sirenBannersSwapped = false
 
     private lateinit var wolfBackground: ImageView
-    private lateinit var stripEmergency: TextView
-    private lateinit var stripSafety: TextView
+    private lateinit var stripEmergency: ImageView
+    private lateinit var stripSafety: ImageView
 
     private var growlPlayer: MediaPlayer? = null
 
@@ -49,8 +50,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val COLOR_EMERGENCY_RED = "#ad0002"
-        private const val COLOR_SAFETY_NAVY = "#03087b"
         private const val SIREN_STRIP_INTERVAL_MS = 700L
     }
 
@@ -69,11 +68,11 @@ class MainActivity : AppCompatActivity() {
             ).getBoolean("is_siren_active", false)
 
             if (isSirenActive) {
-                sirenColorsSwapped = !sirenColorsSwapped
-                applySirenStripColors(sirenColorsSwapped)
+                sirenBannersSwapped = !sirenBannersSwapped
+                applySirenBannerOrder(sirenBannersSwapped)
             } else {
-                sirenColorsSwapped = false
-                applySirenStripColors(false)
+                sirenBannersSwapped = false
+                applySirenBannerOrder(false)
             }
 
             sirenStripHandler.postDelayed(
@@ -91,7 +90,7 @@ class MainActivity : AppCompatActivity() {
         stripEmergency = findViewById(R.id.stripEmergency)
         stripSafety = findViewById(R.id.stripSafety)
 
-        applySirenStripColors(false)
+        applySirenBannerOrder(false)
 
         updateWolfImage(
             getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
@@ -154,7 +153,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Ana ekrana dönünce kurt görselini ve şeritleri güncelle.
+    // Ana ekran görünür olduğunda kurt ve banner'ları güncelle.
     override fun onResume() {
         super.onResume()
 
@@ -182,7 +181,9 @@ class MainActivity : AppCompatActivity() {
         super.onPause()
     }
 
-    private fun applySirenStripColors(swapped: Boolean) {
+    // Normalde banner_1 üstte, banner_2 altta.
+    // Siren sırasında görsellerin yerleri değiştirilir.
+    private fun applySirenBannerOrder(swapped: Boolean) {
         if (
             !::stripEmergency.isInitialized ||
             !::stripSafety.isInitialized
@@ -191,21 +192,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (swapped) {
-            // Siren aktif: üst lacivert, alt kırmızı.
-            stripEmergency.setBackgroundColor(
-                Color.parseColor(COLOR_SAFETY_NAVY)
-            )
-            stripSafety.setBackgroundColor(
-                Color.parseColor(COLOR_EMERGENCY_RED)
-            )
+            stripEmergency.setImageResource(R.drawable.banner_2)
+            stripSafety.setImageResource(R.drawable.banner_1)
         } else {
-            // Normal: üst kırmızı, alt lacivert.
-            stripEmergency.setBackgroundColor(
-                Color.parseColor(COLOR_EMERGENCY_RED)
-            )
-            stripSafety.setBackgroundColor(
-                Color.parseColor(COLOR_SAFETY_NAVY)
-            )
+            stripEmergency.setImageResource(R.drawable.banner_1)
+            stripSafety.setImageResource(R.drawable.banner_2)
         }
     }
 
