@@ -1,196 +1,187 @@
+
+<?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-xmlns:app="http://schemas.android.com/apk/res-auto"
-android:layout_width="match_parent"
-android:layout_height="match_parent"
-android:background="#101114">
-
-<!-- TAM EKRAN ARKA PLAN: EMERGENCY + KURT + SAFETY -->
-<LinearLayout
-    android:id="@+id/backgroundDesign"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:background="#101114">
 
-    <TextView
-        android:id="@+id/stripEmergency"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:background="#ad0002"
-        android:gravity="center"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
-        android:text="EMERGENCY"
-        android:textColor="#FFFFFF"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:letterSpacing="0.08"
-        android:contentDescription="Emergency acil durum şeridi" />
-
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:background="#101114">
-
-        <ImageView
-            android:id="@+id/wolfBackground"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:src="@drawable/wolf_passive"
-            android:scaleType="fitCenter"
-            android:contentDescription="Emergency Safety kurt arka planı" />
-
-    </FrameLayout>
-
-    <TextView
-        android:id="@+id/stripSafety"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:background="#03087b"
-        android:gravity="center"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
-        android:text="SAFETY"
-        android:textColor="#FFFFFF"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:letterSpacing="0.08"
-        android:contentDescription="Safety güvenlik şeridi" />
-
-</LinearLayout>
-
-<!-- KURT ALANINA DOKUNMA -->
-<FrameLayout
-    android:id="@+id/wolfTouchArea"
-    android:layout_width="match_parent"
-    android:layout_height="300dp"
-    android:layout_gravity="top"
-    android:clickable="true"
-    android:focusable="true"
-    android:contentDescription="Dinlemeyi aç veya kapat" />
-
-<!-- MEVCUT KONTROLLER -->
-<ScrollView
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="false"
-    android:background="@android:color/transparent"
-    android:clipToPadding="false">
-
+    <!-- ÜST BANNER + KURT + ALT BANNER -->
     <LinearLayout
+        android:id="@+id/backgroundDesign"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="10dp">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <View
+        <!-- YENİ ÜST BANNER -->
+        <ImageView
+            android:id="@+id/stripEmergency"
             android:layout_width="match_parent"
-            android:layout_height="300dp" />
+            android:layout_height="56dp"
+            android:src="@drawable/banner_1"
+            android:scaleType="fitXY"
+            android:contentDescription="Emergency banner" />
+
+        <!-- KURT ARKA PLANI -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="#101114">
+
+            <ImageView
+                android:id="@+id/wolfBackground"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/wolf_passive"
+                android:scaleType="fitCenter"
+                android:contentDescription="Emergency Safety kurt arka planı" />
+
+        </FrameLayout>
+
+        <!-- YENİ ALT BANNER -->
+        <ImageView
+            android:id="@+id/stripSafety"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:src="@drawable/banner_2"
+            android:scaleType="fitXY"
+            android:contentDescription="Safety banner" />
+
+    </LinearLayout>
+
+    <!-- KURT ALANINA DOKUNMA -->
+    <FrameLayout
+        android:id="@+id/wolfTouchArea"
+        android:layout_width="match_parent"
+        android:layout_height="300dp"
+        android:layout_gravity="top"
+        android:clickable="true"
+        android:focusable="true"
+        android:contentDescription="Dinlemeyi aç veya kapat" />
+
+    <!-- MEVCUT KONTROLLER -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="false"
+        android:background="@android:color/transparent"
+        android:clipToPadding="false">
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="220dp"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:weightSum="3">
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="10dp">
 
-            <!-- KIRMIZI ACİL DURUM -->
-            <FrameLayout
-                android:id="@+id/btnRedAlert"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginEnd="3dp"
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="300dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="220dp"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:weightSum="3">
+
+                <!-- KIRMIZI ACİL DURUM -->
+                <FrameLayout
+                    android:id="@+id/btnRedAlert"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="3dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:contentDescription="Acil durum">
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:src="@drawable/button_red"
+                        android:scaleType="fitCenter"
+                        android:contentDescription="Kırmızı acil durum butonu"
+                        android:importantForAccessibility="no" />
+                </FrameLayout>
+
+                <!-- SARI UYARI -->
+                <FrameLayout
+                    android:id="@+id/btnYellowAlert"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginEnd="3dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:contentDescription="Uyarı">
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:src="@drawable/button_yellow"
+                        android:scaleType="fitCenter"
+                        android:contentDescription="Sarı uyarı butonu"
+                        android:importantForAccessibility="no" />
+                </FrameLayout>
+
+                <!-- MAVİ BİLGİ -->
+                <FrameLayout
+                    android:id="@+id/btnGreenAlert"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:layout_marginStart="3dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:contentDescription="Bilgi">
+
+                    <ImageView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:src="@drawable/button_blue"
+                        android:scaleType="fitCenter"
+                        android:contentDescription="Mavi bilgi butonu"
+                        android:importantForAccessibility="no" />
+                </FrameLayout>
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:text="Küçük bir dokunuş,\nbüyük bir fark yaratabilir."
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/btnToggleListening"
+                android:layout_width="54dp"
+                android:layout_height="54dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="10dp"
                 android:clickable="true"
                 android:focusable="true"
-                android:contentDescription="Acil durum">
+                app:cardBackgroundColor="#F2F4F7"
+                app:cardCornerRadius="27dp"
+                app:cardElevation="6dp">
 
                 <ImageView
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:src="@drawable/button_red"
-                    android:scaleType="fitCenter"
-                    android:contentDescription="Kırmızı acil durum butonu"
-                    android:importantForAccessibility="no" />
-            </FrameLayout>
+                    android:layout_width="26dp"
+                    android:layout_height="26dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="Dinleme düğmesi"
+                    android:src="@android:drawable/ic_lock_power_off"
+                    app:tint="#222222" />
 
-            <!-- SARI UYARI -->
-            <FrameLayout
-                android:id="@+id/btnYellowAlert"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginStart="3dp"
-                android:layout_marginEnd="3dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Uyarı">
-
-                <ImageView
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:src="@drawable/button_yellow"
-                    android:scaleType="fitCenter"
-                    android:contentDescription="Sarı uyarı butonu"
-                    android:importantForAccessibility="no" />
-            </FrameLayout>
-
-            <!-- MAVİ BİLGİ -->
-            <FrameLayout
-                android:id="@+id/btnGreenAlert"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginStart="3dp"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Bilgi">
-
-                <ImageView
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:src="@drawable/button_blue"
-                    android:scaleType="fitCenter"
-                    android:contentDescription="Mavi bilgi butonu"
-                    android:importantForAccessibility="no" />
-            </FrameLayout>
+            </androidx.cardview.widget.CardView>
 
         </LinearLayout>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:gravity="center"
-            android:text="Küçük bir dokunuş,\nbüyük bir fark yaratabilir."
-            android:textColor="#FFFFFF"
-            android:textSize="14sp"
-            android:textStyle="bold" />
-
-        <androidx.cardview.widget.CardView
-            android:id="@+id/btnToggleListening"
-            android:layout_width="54dp"
-            android:layout_height="54dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="10dp"
-            android:clickable="true"
-            android:focusable="true"
-            app:cardBackgroundColor="#F2F4F7"
-            app:cardCornerRadius="27dp"
-            app:cardElevation="6dp">
-
-            <ImageView
-                android:layout_width="26dp"
-                android:layout_height="26dp"
-                android:layout_gravity="center"
-                android:contentDescription="Dinleme düğmesi"
-                android:src="@android:drawable/ic_lock_power_off"
-                app:tint="#222222" />
-
-        </androidx.cardview.widget.CardView>
-
-    </LinearLayout>
-</ScrollView>
+    </ScrollView>
 
 </FrameLayout>
