@@ -63,6 +63,10 @@ class VoiceTriggerService : Service() {
         if (redCodeInProgress) return
         redCodeInProgress = true
 
+        // 1. Canlı konum ve sunucu aktarım servisini başlat
+        startSosLocationService()
+
+        // 2. Mevcut WhatsApp mesaj gönderim akışı
         sendEmergencyMessages()
 
         val screenIntent = Intent(
@@ -76,6 +80,16 @@ class VoiceTriggerService : Service() {
         }
 
         startActivity(screenIntent)
+    }
+
+    // Canlı konum servisini arka planda başlatan fonksiyon
+    private fun startSosLocationService() {
+        val serviceIntent = Intent(this, SosLocationService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
     }
 
     private fun sendEmergencyMessages() {
