@@ -1,4 +1,3 @@
-
 package com.example.emergencysafety
 
 import android.Manifest
@@ -500,6 +499,16 @@ class MainActivity : AppCompatActivity() {
             Intent(this, VoiceTriggerService::class.java)
 
         stopService(serviceIntent)
+    }
+
+    // Acil durum tetiklendiğinde (sesli komut veya acil durum anında) canlı konum servisini başlatmak için bu fonksiyonu kullanabilirsiniz
+    private fun startSosLocationService() {
+        val serviceIntent = Intent(this, SosLocationService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
     }
 
     override fun onKeyDown(
