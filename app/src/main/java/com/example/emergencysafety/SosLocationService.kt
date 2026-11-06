@@ -1,4 +1,5 @@
-package com.ornek.emergencysafety // Kendi paket adınız neyse onunla değiştirin
+
+package com.example.emergencysafety
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -19,23 +20,31 @@ class SosLocationService : Service() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
     private val CHANNEL_ID = "SosServiceChannel"
-    
-    // Sunucuyu aldığınızda buraya sunucu adresinizi yazacaksınız
-    private val SERVER_URL = "http://SUNUCU_IP_ADRESINIZ:3000/update-location"
+
+    // Gerçek sunucu API adresi hazır olduğunda güncellenecek.
+    private val SERVER_URL =
+        "http://SUNUCU_IP_ADRESINIZ:3000/update-location"
 
     override fun onCreate() {
         super.onCreate()
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        fusedLocationClient =
+            LocationServices.getFusedLocationProviderClient(this)
         createNotificationChannel()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val notification: Notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("🚨 SOS Acil Durum Modu Aktif")
-            .setContentText("Canlı konum sunucuya aktarılıyor...")
-            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-            .setOngoing(true)
-            .build()
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int
+    ): Int {
+
+        val notification: Notification =
+            NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("SOS Acil Durum Modu Aktif")
+                .setContentText("Canlı konum servisi çalışıyor.")
+                .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+                .setOngoing(true)
+                .build()
 
         startForeground(1, notification)
         startLocationUpdates()
@@ -44,16 +53,24 @@ class SosLocationService : Service() {
     }
 
     private fun startLocationUpdates() {
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000) // Her 10 saniyede bir
-            .setMinUpdateIntervalMillis(5000)
-            .build()
+
+        val locationRequest =
+            LocationRequest.Builder(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                10000
+            )
+                .setMinUpdateIntervalMillis(5000)
+                .build()
 
         locationCallback = object : LocationCallback() {
-            override fun onLocationResult(locationResult: LocationResult) {
+            override fun onLocationResult(
+                locationResult: LocationResult
+            ) {
                 for (location in locationResult.locations) {
-                    val lat = location.latitude
-                    val lng = location.longitude
-                    sendLocationToServer(lat, lng)
+                    sendLocationToServer(
+                        location.latitude,
+                        location.longitude
+                    )
                 }
             }
         }
@@ -69,16 +86,22 @@ class SosLocationService : Service() {
         }
     }
 
-    private fun sendLocationToServer(lat: Double, lng: Double) {
+    private fun sendLocationToServer(
+        lat: Double,
+        lng: Double
+    ) {
         thread {
             try {
                 val url = URL("$SERVER_URL?lat=$lat&lng=$lng")
-                val connection = url.openConnection() as HttpURLConnection
+                val connection =
+                    url.openConnection() as HttpURLConnection
+
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 5000
                 connection.readTimeout = 5000
                 connection.responseCode
                 connection.disconnect()
+
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -86,22 +109,29 @@ class SosLocationService : Service() {
     }
 
     private fun createNotificationChannel() {
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val serviceChannel = NotificationChannel(
                 CHANNEL_ID,
                 "SOS Konum Servisi",
                 NotificationManager.IMPORTANCE_HIGH
             )
-            val manager = getSystemService(NotificationManager::class.java)
+
+            val manager =
+                getSystemService(NotificationManager::class.java)
+
             manager?.createNotificationChannel(serviceChannel)
         }
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         if (::locationCallback.isInitialized) {
-            fusedLocationClient.removeLocationUpdates(locationCallback)
+            fusedLocationClient.removeLocationUpdates(
+                locationCallback
+            )
         }
+
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? {
