@@ -91,6 +91,17 @@ class MainActivity : AppCompatActivity() {
 
         applySirenBannerOrder(false)
 
+        // GEÇİCİ MATRIX TEST BAĞLANTISI
+        // Üst ve alt banner aynı test ekranını açar.
+        val openMatrixTest = View.OnClickListener {
+            startActivity(
+                Intent(this, MatrixTestActivity::class.java)
+            )
+        }
+
+        stripEmergency.setOnClickListener(openMatrixTest)
+        stripSafety.setOnClickListener(openMatrixTest)
+
         updateWolfImage(
             getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
                 .getBoolean("is_voice_active", false),
@@ -152,7 +163,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Ana ekran görünür olduğunda kurt ve banner'ları güncelle.
     override fun onResume() {
         super.onResume()
 
@@ -174,14 +184,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // Ana ekran görünür değilken animasyon döngüsünü durdur.
     override fun onPause() {
         sirenStripHandler.removeCallbacks(sirenStripRunnable)
         super.onPause()
     }
 
-    // Normalde banner_1 üstte, banner_2 altta.
-    // Siren sırasında görsellerin yerleri değiştirilir.
     private fun applySirenBannerOrder(swapped: Boolean) {
         if (
             !::stripEmergency.isInitialized ||
@@ -501,7 +508,6 @@ class MainActivity : AppCompatActivity() {
         stopService(serviceIntent)
     }
 
-    // Acil durum tetiklendiğinde (sesli komut veya acil durum anında) canlı konum servisini başlatmak için bu fonksiyonu kullanabilirsiniz
     private fun startSosLocationService() {
         val serviceIntent = Intent(this, SosLocationService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
