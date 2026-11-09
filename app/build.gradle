@@ -39,7 +39,7 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 
     // Kotlin Coroutines
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0'
 
     // Vosk çevrimdışı konuşma tanıma
     implementation 'com.alphacephei:vosk-android:0.3.75'
@@ -47,12 +47,15 @@ dependencies {
     // Google Fused Location Provider
     implementation 'com.google.android.gms:play-services-location:21.3.0'
 
-    // Matrix - Trixnity SDK
-    implementation 'de.connect2x.trixnity:trixnity-client:5.10.1'
+    // Trixnity sürümlerini birlikte yöneten BOM
+    implementation platform('de.connect2x.trixnity:trixnity-bom:5.10.1')
+
+    // Matrix SDK
+    implementation 'de.connect2x.trixnity:trixnity-client'
 
     // Matrix uçtan uca şifreleme - Vodozemac
-    implementation 'de.connect2x.trixnity:trixnity-client-cryptodriver-vodozemac:5.10.1'
+    implementation 'de.connect2x.trixnity:trixnity-client-cryptodriver-vodozemac'
 
-    // Ktor CIO ağ motoru
-    implementation 'io.ktor:ktor-client-cio:3.6.1'
+    // Ktor CIO ağ motoru - Trixnity ile aynı sürüm çizgisi
+    implementation 'io.ktor:ktor-client-cio:3.5.2'
 }
