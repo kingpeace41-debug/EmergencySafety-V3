@@ -1,3 +1,4 @@
+
 package com.example.emergencysafety
 
 import android.Manifest
@@ -20,6 +21,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.widget.CheckBox
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -91,17 +93,6 @@ class MainActivity : AppCompatActivity() {
 
         applySirenBannerOrder(false)
 
-        // GEÇİCİ MATRIX TEST BAĞLANTISI
-        // Üst ve alt banner aynı test ekranını açar.
-        val openMatrixTest = View.OnClickListener {
-            startActivity(
-                Intent(this, MatrixTestActivity::class.java)
-            )
-        }
-
-        stripEmergency.setOnClickListener(openMatrixTest)
-        stripSafety.setOnClickListener(openMatrixTest)
-
         updateWolfImage(
             getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
                 .getBoolean("is_voice_active", false),
@@ -133,8 +124,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Mavi bilgi butonu.
-        // XML dosyasındaki mevcut kimlik btnGreenAlert olarak korunuyor.
         val btnBlueAlertId =
             resources.getIdentifier("btnGreenAlert", "id", packageName)
 
@@ -157,10 +146,95 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // YENİ MAVİ MATRIX TEST BUTONU
+        setupMatrixTestButton()
+
         findViewById<View>(R.id.wolfTouchArea)?.setOnClickListener {
             vibrateOnClick()
             toggleVoiceService()
         }
+    }
+
+    private fun setupMatrixTestButton() {
+        val listeningButton =
+            findViewById<androidx.cardview.widget.CardView>(
+                R.id.btnToggleListening
+            )
+
+        val parent = listeningButton.parent as? LinearLayout ?: return
+        val originalIndex = parent.indexOfChild(listeningButton)
+
+        if (originalIndex < 0) return
+
+        val density = resources.displayMetrics.density
+
+        fun dp(value: Int): Int =
+            (value * density + 0.5f).toInt()
+
+        parent.removeView(listeningButton)
+
+        val buttonRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(12)
+                bottomMargin = dp(10)
+            }
+        }
+
+        listeningButton.layoutParams =
+            LinearLayout.LayoutParams(dp(54), dp(54)).apply {
+                marginEnd = dp(12)
+            }
+
+        buttonRow.addView(listeningButton)
+
+        val matrixButton =
+            androidx.cardview.widget.CardView(this).apply {
+                layoutParams =
+                    LinearLayout.LayoutParams(dp(54), dp(54))
+
+                radius = dp(27).toFloat()
+                cardElevation = dp(6).toFloat()
+                setCardBackgroundColor(Color.rgb(21, 101, 192))
+
+                isClickable = true
+                isFocusable = true
+
+                contentDescription = "Matrix sunucu testini aç"
+
+                setOnClickListener {
+                    startActivity(
+                        Intent(
+                            this@MainActivity,
+                            MatrixTestActivity::class.java
+                        )
+                    )
+                }
+            }
+
+        val matrixLabel = TextView(this).apply {
+            text = "M"
+            textSize = 22f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        }
+
+        matrixButton.addView(matrixLabel)
+
+        buttonRow.addView(matrixButton)
+
+        parent.addView(buttonRow, originalIndex)
     }
 
     override fun onResume() {
