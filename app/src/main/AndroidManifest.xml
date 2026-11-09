@@ -1,11 +1,8 @@
-
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- İnternet: Sunucu bağlantısı -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Konuşma tanıma servisini bulabilmek için -->
     <queries>
         <intent>
             <action android:name="android.speech.RecognitionService" />
@@ -21,7 +18,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Konum izinleri -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
@@ -76,14 +72,12 @@
             android:name=".VoiceCommandSettingsActivity"
             android:exported="false" />
 
-        <!-- Sesli tetikleme servisi -->
         <service
             android:name=".VoiceTriggerService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
-        <!-- Canlı konum ve sunucu aktarım servisi -->
         <service
             android:name=".SosLocationService"
             android:enabled="true"
