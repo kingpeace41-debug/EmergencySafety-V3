@@ -67,14 +67,33 @@ jobs:
 
       - name: Build Android APK
         run: |
-          gradle assembleDebug --stacktrace --no-daemon
+          set -o pipefail
+
+          gradle assembleDebug \
+            --stacktrace \
+            --info \
+            --warning-mode all \
+            --no-daemon \
+            2>&1 | tee build-debug.log
+
+      - name: Upload Build Debug Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EmergencySafety-Build-Debug-Log
+          path: build-debug.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Verify APK
         run: |
           set -e
+
           APK=$(find app/build/outputs/apk \
             -name '*.apk' -print -quit)
+
           test -n "$APK"
+
           echo "APK oluşturuldu: $APK"
           ls -lh "$APK"
 
