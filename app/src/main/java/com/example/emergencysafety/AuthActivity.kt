@@ -2,9 +2,16 @@
 package com.example.emergencysafety
 
 import android.content.Intent
+import android.media.MediaPlayer
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.view.MotionEvent
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import io.ktor.client.HttpClient
@@ -36,6 +43,35 @@ class AuthActivity : AppCompatActivity() {
     private lateinit var passwordInput: EditText
     private lateinit var loginButton: Button
     private lateinit var continueWithoutAccountButton: Button
+
+    private lateinit var wolfTouchArea: FrameLayout
+    private lateinit var angryWolfImage: ImageView
+
+    private val wolfHandler = Handler(Looper.getMainLooper())
+    private var wolfPlayer: MediaPlayer? = null
+    private var wolfReactionActive = false
+    private var wolfPressStartedAt = 0L
+
+    private val wolfFadeInDuration = 3000L
+
+    private val wolfFadeRunnable = object : Runnable {
+        override fun run() {
+            if (!wolfReactionActive) return
+
+            val elapsed =
+                SystemClock.elapsedRealtime() - wolfPressStartedAt
+
+            val progress =
+                (elapsed.toFloat() / wolfFadeInDuration)
+                    .coerceIn(0f, 1f)
+
+            angryWolfImage.alpha = progress
+
+            if (progress < 1f) {
+                wolfHandler.postDelayed(this, 16L)
+            }
+        }
+    }
 
     private val accountPreferences by lazy {
         getSharedPreferences(
@@ -73,6 +109,28 @@ class AuthActivity : AppCompatActivity() {
         continueWithoutAccountButton =
             findViewById(R.id.btnAuthContinueWithoutAccount)
 
+        wolfTouchArea = findViewById(R.id.authWolfTouchArea)
+        angryWolfImage = findViewById(R.id.authWolfAngryImage)
+
+        angryWolfImage.alpha = 0f
+
+        wolfTouchArea.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    startWolfReaction()
+                    true
+                }
+
+                MotionEvent.ACTION_UP,
+                MotionEvent.ACTION_CANCEL -> {
+                    stopWolfReaction()
+                    true
+                }
+
+                else -> true
+            }
+        }
+
         loginButton.setOnClickListener {
             attemptLogin()
         }
@@ -85,6 +143,61 @@ class AuthActivity : AppCompatActivity() {
 
             openMainActivity()
         }
+    }
+
+    private fun startWolfReaction() {
+        if (wolfReactionActive) return
+
+        wolfReactionActive = true
+        wolfHandler.removeCallbacks(wolfFadeRunnable)
+
+        angryWolfImage.animate().cancel()
+        angryWolfImage.alpha = 0f
+
+        try {
+            wolfPlayer = MediaPlayer.create(
+                this,
+                R.raw.kangal_growl
+            )
+
+            wolfPlayer?.let { player ->
+                player.isLooping = false
+                player.start()
+            }
+        } catch (e: Exception) {
+            wolfPlayer?.release()
+            wolfPlayer = null
+        }
+
+        wolfPressStartedAt = SystemClock.elapsedRealtime()
+
+        wolfHandler.post(wolfFadeRunnable)
+    }
+
+    private fun stopWolfReaction() {
+        if (!wolfReactionActive) return
+
+        wolfReactionActive = false
+        wolfHandler.removeCallbacks(wolfFadeRunnable)
+
+        try {
+            wolfPlayer?.let { player ->
+                if (player.isPlaying) {
+                    player.stop()
+                }
+                player.release()
+            }
+        } catch (e: Exception) {
+            // Ses zaten bitmiş veya durmuş olabilir.
+        }
+
+        wolfPlayer = null
+
+        angryWolfImage.animate().cancel()
+        angryWolfImage.animate()
+            .alpha(0f)
+            .setDuration(200L)
+            .start()
     }
 
     private fun openMainActivity() {
@@ -222,6 +335,7 @@ class AuthActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        stopWolfReaction()
         activityScope.cancel()
         super.onDestroy()
     }
