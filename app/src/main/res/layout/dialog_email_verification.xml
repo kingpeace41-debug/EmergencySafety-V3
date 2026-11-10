@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:background="#101B30"
+    android:padding="22dp">
+
+    <ImageView
+        android:id="@+id/authVerificationLogo"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:src="@drawable/yeni_logo"
+        android:scaleType="fitCenter"
+        android:contentDescription="EmergencySafety logosu" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:text="EMERGENCY SAFETY"
+        android:textColor="#FFFFFF"
+        android:textSize="19sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:gravity="center"
+        android:text="SECURE ACCESS VERIFICATION"
+        android:textColor="#9EB4D0"
+        android:textSize="10sp"
+        android:letterSpacing="0.08" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="18dp"
+        android:layout_marginBottom="18dp"
+        android:background="#40516B" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="GÜVENLİ GİRİŞ"
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:text="E-posta adresinize gönderilen 6 haneli doğrulama kodunu girin."
+        android:textColor="#C4D0E0"
+        android:textSize="13sp" />
+
+    <EditText
+        android:id="@+id/authVerificationCode"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:layout_marginTop="20dp"
+        android:backgroundTint="#75A9E8"
+        android:gravity="center"
+        android:hint="•  •  •  •  •  •"
+        android:inputType="number"
+        android:maxLength="6"
+        android:singleLine="true"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#8191A8"
+        android:textSize="23sp"
+        android:letterSpacing="0.18" />
+
+    <Button
+        android:id="@+id/btnAuthVerifyCode"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="18dp"
+        android:backgroundTint="#C6283D"
+        android:text="DOĞRULA VE DEVAM ET"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/btnAuthResendCode"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="5dp"
+        android:gravity="center"
+        android:text="KODU TEKRAR GÖNDER"
+        android:textColor="#75B5FF"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="10dp"
+        android:background="#40516B" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="center"
+        android:text="EMERGENCY SAFETY • YOUR SAFETY, OUR PRIORITY"
+        android:textColor="#8495AC"
+        android:textSize="9sp" />
+
+</LinearLayout>
