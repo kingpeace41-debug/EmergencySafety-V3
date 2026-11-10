@@ -102,6 +102,23 @@ class MainActivity : AppCompatActivity() {
         checkPermissionsAndStartService()
         checkOverlayPermission()
 
+        // HESAP BUTONU
+        findViewById<View>(R.id.btnAccount)?.setOnClickListener {
+            vibrateOnClick()
+
+            val accountIntent = Intent(
+                this,
+                AuthActivity::class.java
+            ).apply {
+                putExtra(
+                    AuthActivity.EXTRA_FORCE_SHOW_ACCOUNT,
+                    true
+                )
+            }
+
+            startActivity(accountIntent)
+        }
+
         val btnRedAlertId =
             resources.getIdentifier("btnRedAlert", "id", packageName)
 
