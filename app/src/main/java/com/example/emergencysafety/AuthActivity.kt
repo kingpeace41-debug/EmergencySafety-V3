@@ -279,7 +279,131 @@ class AuthActivity : AppCompatActivity() {
             .setCancelable(true)
             .create()
 
+        // Kod doğrulandıktan sonra oturum başlatma başarısız
+        // olursa aynı doğrulanmış token ile yeniden denenebilir.
+        var pendingAccessToken: String? = null
+        var pendingUserId: String? = null
+        var pendingUsername: String? = null
+        var pendingEmail: String? = null
+
+        fun beginDeviceSession() {
+            val accessToken = pendingAccessToken ?: return
+            val userId = pendingUserId ?: return
+            val username = pendingUsername ?: return
+            val verifiedEmail = pendingEmail ?: return
+
+            verifyButton.isEnabled = false
+            verifyButton.text = "OTURUM AÇILIYOR..."
+
+            networkExecutor.execute {
+                val sessionResult = postJson(
+                    "/auth/session/start",
+                    JSONObject(),
+                    accessToken
+                )
+
+                var sessionSaved = false
+                var errorMessage = sessionResult.message
+
+                if (sessionResult.success) {
+                    val sessionObject =
+                        sessionResult.data.optJSONObject("session")
+
+                    val sessionId =
+                        sessionResult.data.optString(
+                            "sessionId",
+                            sessionResult.data.optString(
+                                "session_id",
+                                sessionObject?.optString("id", "").orEmpty()
+                            )
+                        )
+
+                    val refreshToken =
+                        sessionResult.data.optString(
+                            "refreshToken",
+                            sessionResult.data.optString(
+                                "refresh_token",
+                                sessionObject?.optString(
+                                    "refreshToken",
+                                    ""
+                                ).orEmpty()
+                            )
+                        )
+
+                    if (
+                        sessionId.isBlank() ||
+                        refreshToken.isBlank()
+                    ) {
+                        errorMessage =
+                            "Sunucu oturum bilgilerini eksik gönderdi."
+                    } else {
+                        try {
+                            // Tokenlar Android Keystore ile
+                            // şifrelenerek cihazda saklanır.
+                            SecureSessionStore.saveSession(
+                                applicationContext,
+                                accessToken,
+                                refreshToken,
+                                sessionId,
+                                userId
+                            )
+
+                            val preferencesSaved =
+                                accountPreferences.edit()
+                                    .remove("api_access_token")
+                                    .putString("api_user_id", userId)
+                                    .putString("api_username", username)
+                                    .putString("account_email", verifiedEmail)
+                                    .putBoolean("onboarding_completed", true)
+                                    .putBoolean("guest_mode", false)
+                                    .commit()
+
+                            if (!preferencesSaved) {
+                                throw IllegalStateException(
+                                    "Hesap bilgileri kaydedilemedi."
+                                )
+                            }
+
+                            sessionSaved = true
+
+                        } catch (e: Exception) {
+                            errorMessage =
+                                "Güvenli oturum kaydedilemedi. Tekrar dene."
+                        }
+                    }
+                }
+
+                mainHandler.post {
+                    if (isFinishing || isDestroyed) return@post
+
+                    if (sessionSaved) {
+                        dialog.dismiss()
+
+                        Toast.makeText(
+                            this,
+                            "Giriş başarılı. Güvenli oturum oluşturuldu.",
+                            Toast.LENGTH_LONG
+                        ).show()
+
+                        openMainActivity()
+                    } else {
+                        verifyButton.isEnabled = true
+                        verifyButton.text = "OTURUMU TEKRAR DENE"
+
+                        showMessage(errorMessage)
+                    }
+                }
+            }
+        }
+
         verifyButton.setOnClickListener {
+            // E-posta kodu daha önce doğrulandıysa
+            // tekrar kod istemeden oturum başlatmayı dener.
+            if (!pendingAccessToken.isNullOrBlank()) {
+                beginDeviceSession()
+                return@setOnClickListener
+            }
+
             val code = codeInput.text.toString().trim()
 
             if (!code.matches(Regex("^[0-9]{6}$"))) {
@@ -301,62 +425,62 @@ class AuthActivity : AppCompatActivity() {
                 mainHandler.post {
                     if (isFinishing || isDestroyed) return@post
 
-                    verifyButton.isEnabled = true
-                    verifyButton.text = "DOĞRULA VE DEVAM ET"
-
-                    if (result.success) {
-                        val user =
-                            result.data.optJSONObject("user")
-
-                        val accessToken =
-                            result.data.optString("accessToken", "")
-
-                        val userId =
-                            user?.optString("id", "").orEmpty()
-
-                        val username =
-                            user?.optString("username", "").orEmpty()
-
-                        val verifiedEmail =
-                            user?.optString("email", email).orEmpty()
-
-                        if (
-                            accessToken.isBlank() ||
-                            userId.isBlank() ||
-                            username.isBlank()
-                        ) {
-                            showMessage(
-                                "Sunucu yanıtı eksik. Oturum açılamadı."
-                            )
-                            return@post
-                        }
-
-                        accountPreferences.edit()
-                            .putString("api_access_token", accessToken)
-                            .putString("api_user_id", userId)
-                            .putString("api_username", username)
-                            .putString("account_email", verifiedEmail)
-                            .putBoolean("onboarding_completed", true)
-                            .putBoolean("guest_mode", false)
-                            .apply()
-
-                        dialog.dismiss()
-
-                        Toast.makeText(
-                            this,
-                            "E-posta doğrulandı. Hoş geldin!",
-                            Toast.LENGTH_LONG
-                        ).show()
-
-                        openMainActivity()
-                    } else {
+                    if (!result.success) {
+                        verifyButton.isEnabled = true
+                        verifyButton.text = "DOĞRULA VE DEVAM ET"
                         showMessage(result.message)
+                        return@post
                     }
+
+                    val user =
+                        result.data.optJSONObject("user")
+
+                    val accessToken =
+                        result.data.optString("accessToken", "")
+
+                    val userId =
+                        user?.optString("id", "").orEmpty()
+
+                    val username =
+                        user?.optString("username", "").orEmpty()
+
+                    val verifiedEmail =
+                        user?.optString("email", email).orEmpty()
+
+                    if (
+                        accessToken.isBlank() ||
+                        userId.isBlank() ||
+                        username.isBlank()
+                    ) {
+                        verifyButton.isEnabled = true
+                        verifyButton.text = "DOĞRULA VE DEVAM ET"
+
+                        showMessage(
+                            "Sunucu yanıtı eksik. Oturum açılamadı."
+                        )
+                        return@post
+                    }
+
+                    // Doğrulama tamamlandı.
+                    // Şimdi cihaz oturumu oluşturulacak.
+                    pendingAccessToken = accessToken
+                    pendingUserId = userId
+                    pendingUsername = username
+                    pendingEmail = verifiedEmail
+
+                    beginDeviceSession()
                 }
             }
         }
 
         resendButton.setOnClickListener {
+            if (!pendingAccessToken.isNullOrBlank()) {
+                showMessage(
+                    "E-posta zaten doğrulandı. Oturum işlemini tamamla."
+                )
+                return@setOnClickListener
+            }
+
             resendButton.isEnabled = false
             resendButton.text = "KOD GÖNDERİLİYOR..."
 
@@ -403,7 +527,8 @@ class AuthActivity : AppCompatActivity() {
 
     private fun postJson(
         path: String,
-        body: JSONObject
+        body: JSONObject,
+        bearerToken: String? = null
     ): ApiResult {
         var connection: HttpURLConnection? = null
 
@@ -426,6 +551,13 @@ class AuthActivity : AppCompatActivity() {
                         "Accept",
                         "application/json"
                     )
+
+                    if (!bearerToken.isNullOrBlank()) {
+                        setRequestProperty(
+                            "Authorization",
+                            "Bearer $bearerToken"
+                        )
+                    }
                 }
 
             connection.outputStream.use { output ->
