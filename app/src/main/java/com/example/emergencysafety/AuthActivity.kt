@@ -1,3 +1,4 @@
+
 package com.example.emergencysafety
 
 import android.app.AlertDialog
@@ -17,12 +18,22 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.Executors
 
 class AuthActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_FORCE_SHOW_ACCOUNT =
             "com.example.emergencysafety.FORCE_SHOW_ACCOUNT"
+
+        private const val API_BASE_URL =
+            "https://emergency-safety.com/api"
     }
 
     private lateinit var emailInput: EditText
@@ -32,7 +43,10 @@ class AuthActivity : AppCompatActivity() {
     private lateinit var wolfTouchArea: FrameLayout
     private lateinit var angryWolfImage: ImageView
 
+    private val networkExecutor = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val wolfHandler = Handler(Looper.getMainLooper())
+
     private var wolfPlayer: MediaPlayer? = null
     private var wolfReactionActive = false
     private var wolfPressStartedAt = 0L
@@ -129,9 +143,7 @@ class AuthActivity : AppCompatActivity() {
         }
     }
 
-    // -------------------------------------------------
-    // KURT EFEKTİ
-    // -------------------------------------------------
+    // KANGAL EFEKTI
 
     private fun startWolfReaction() {
         if (wolfReactionActive) return
@@ -175,7 +187,7 @@ class AuthActivity : AppCompatActivity() {
                 player.release()
             }
         } catch (e: Exception) {
-            // Ses zaten bitmiş olabilir.
+            // Ses zaten bitmis olabilir.
         }
 
         wolfPlayer = null
@@ -187,9 +199,7 @@ class AuthActivity : AppCompatActivity() {
             .start()
     }
 
-    // -------------------------------------------------
-    // E-POSTA KODU İSTEME
-    // -------------------------------------------------
+    // E-POSTA KODU ISTEME
 
     private fun requestEmailCode() {
         val email = emailInput.text.toString().trim()
@@ -203,17 +213,40 @@ class AuthActivity : AppCompatActivity() {
         if (!android.util.Patterns.EMAIL_ADDRESS
                 .matcher(email).matches()
         ) {
-            emailInput.error = "Geçerli bir e-posta adresi gir."
+            emailInput.error = "Gecerli bir e-posta adresi gir."
             emailInput.requestFocus()
             return
         }
 
-        showEmailVerificationDialog(email)
+        setLoginLoading(true)
+
+        networkExecutor.execute {
+            val result = postJson(
+                "/auth/email/request",
+                JSONObject().put("email", email)
+            )
+
+            mainHandler.post {
+                if (isFinishing || isDestroyed) return@post
+
+                setLoginLoading(false)
+
+                if (result.success) {
+                    showEmailVerificationDialog(email)
+
+                    Toast.makeText(
+                        this,
+                        "Dogrulama kodu e-posta adresine gonderildi.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    showMessage(result.message)
+                }
+            }
+        }
     }
 
-    // -------------------------------------------------
-    // DOĞRULAMA PENCERESİ
-    // -------------------------------------------------
+    // DOGRULAMA PENCERESI
 
     private fun showEmailVerificationDialog(email: String) {
         val dialogView = layoutInflater.inflate(
@@ -241,11 +274,8 @@ class AuthActivity : AppCompatActivity() {
                 R.id.btnAuthResendCode
             )
 
-        // Sunucu henüz hazır olmadığı için
-        // kod gönderilmediği açıkça belirtilir.
         descriptionText.text =
-            "Doğrulama sunucusu henüz etkin değil. " +
-            "Şimdilik e-posta kodu gönderilmedi."
+            "$email adresine gonderilen 6 haneli kodu gir."
 
         codeInput.filters = arrayOf(
             InputFilter.LengthFilter(6)
@@ -259,24 +289,105 @@ class AuthActivity : AppCompatActivity() {
         verifyButton.setOnClickListener {
             val code = codeInput.text.toString().trim()
 
-            if (code.length != 6) {
+            if (!code.matches(Regex("^[0-9]{6}$"))) {
                 codeInput.error = "6 haneli kodu gir."
                 return@setOnClickListener
             }
 
-            Toast.makeText(
-                this,
-                "E-posta doğrulama sunucusu henüz hazır değil. Kod doğrulanmadı.",
-                Toast.LENGTH_LONG
-            ).show()
+            verifyButton.isEnabled = false
+            verifyButton.text = "DOGRULANIYOR..."
+
+            networkExecutor.execute {
+                val result = postJson(
+                    "/auth/email/verify",
+                    JSONObject()
+                        .put("email", email)
+                        .put("code", code)
+                )
+
+                mainHandler.post {
+                    if (isFinishing || isDestroyed) return@post
+
+                    verifyButton.isEnabled = true
+                    verifyButton.text = "DOGRULA VE DEVAM ET"
+
+                    if (result.success) {
+                        val user =
+                            result.data.optJSONObject("user")
+
+                        val accessToken =
+                            result.data.optString("accessToken", "")
+
+                        val userId =
+                            user?.optString("id", "").orEmpty()
+
+                        val username =
+                            user?.optString("username", "").orEmpty()
+
+                        val verifiedEmail =
+                            user?.optString("email", email).orEmpty()
+
+                        if (
+                            accessToken.isBlank() ||
+                            userId.isBlank() ||
+                            username.isBlank()
+                        ) {
+                            showMessage(
+                                "Sunucu yaniti eksik. Oturum acilamadi."
+                            )
+                            return@post
+                        }
+
+                        accountPreferences.edit()
+                            .putString("api_access_token", accessToken)
+                            .putString("api_user_id", userId)
+                            .putString("api_username", username)
+                            .putString("account_email", verifiedEmail)
+                            .putBoolean("onboarding_completed", true)
+                            .putBoolean("guest_mode", false)
+                            .apply()
+
+                        dialog.dismiss()
+
+                        Toast.makeText(
+                            this,
+                            "E-posta dogrulandi. Hos geldin!",
+                            Toast.LENGTH_LONG
+                        ).show()
+
+                        openMainActivity()
+                    } else {
+                        showMessage(result.message)
+                    }
+                }
+            }
         }
 
         resendButton.setOnClickListener {
-            Toast.makeText(
-                this,
-                "Kod gönderme sunucusu henüz etkinleştirilmedi.",
-                Toast.LENGTH_LONG
-            ).show()
+            resendButton.isEnabled = false
+            resendButton.text = "KOD GONDERILIYOR..."
+
+            networkExecutor.execute {
+                val result = postJson(
+                    "/auth/email/request",
+                    JSONObject().put("email", email)
+                )
+
+                mainHandler.post {
+                    if (isFinishing || isDestroyed) return@post
+
+                    resendButton.isEnabled = true
+                    resendButton.text = "KODU TEKRAR GONDER"
+
+                    showMessage(
+                        if (result.success) {
+                            "Yeni kod e-posta adresine gonderildi."
+                        } else {
+                            result.message
+                        }
+                    )
+                }
+            }
         }
 
         dialog.show()
@@ -291,9 +402,115 @@ class AuthActivity : AppCompatActivity() {
         )
     }
 
-    // -------------------------------------------------
-    // YARDIMCI İŞLEMLER
-    // -------------------------------------------------
+    // API ILETISIMI
+
+    private data class ApiResult(
+        val success: Boolean,
+        val message: String,
+        val data: JSONObject
+    )
+
+    private fun postJson(
+        path: String,
+        body: JSONObject
+    ): ApiResult {
+        var connection: HttpURLConnection? = null
+
+        return try {
+            connection =
+                (URL(API_BASE_URL + path).openConnection()
+                    as HttpURLConnection).apply {
+
+                    requestMethod = "POST"
+                    connectTimeout = 15000
+                    readTimeout = 15000
+                    doOutput = true
+
+                    setRequestProperty(
+                        "Content-Type",
+                        "application/json; charset=utf-8"
+                    )
+
+                    setRequestProperty(
+                        "Accept",
+                        "application/json"
+                    )
+                }
+
+            connection.outputStream.use { output ->
+                output.write(
+                    body.toString().toByteArray(StandardCharsets.UTF_8)
+                )
+            }
+
+            val status = connection.responseCode
+
+            val stream =
+                if (status in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
+
+            val responseText = stream?.use { input ->
+                BufferedReader(
+                    InputStreamReader(
+                        input,
+                        StandardCharsets.UTF_8
+                    )
+                ).readText()
+            }.orEmpty()
+
+            val json =
+                if (responseText.isNotBlank()) {
+                    JSONObject(responseText)
+                } else {
+                    JSONObject()
+                }
+
+            ApiResult(
+                success = status in 200..299 &&
+                    json.optBoolean("success", false),
+
+                message = json.optString(
+                    "message",
+                    "Sunucu istegi tamamlayamadi. Tekrar deneyin."
+                ),
+
+                data = json
+            )
+
+        } catch (e: Exception) {
+            ApiResult(
+                success = false,
+                message = "Sunucuya baglanilamadi. Internet baglantini kontrol et.",
+                data = JSONObject()
+            )
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun setLoginLoading(loading: Boolean) {
+        loginButton.isEnabled = !loading
+
+        loginButton.text =
+            if (loading) {
+                "KOD GONDERILIYOR..."
+            } else {
+                "KOD GONDER"
+            }
+    }
+
+    private fun showMessage(message: String) {
+        Toast.makeText(
+            this,
+            message,
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
+    // YARDIMCI ISLEMLER
 
     private fun openMainActivity() {
         val intent = Intent(this, MainActivity::class.java)
@@ -304,6 +521,7 @@ class AuthActivity : AppCompatActivity() {
     override fun onDestroy() {
         stopWolfReaction()
         wolfHandler.removeCallbacksAndMessages(null)
+        networkExecutor.shutdownNow()
         super.onDestroy()
     }
 }
