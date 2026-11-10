@@ -146,7 +146,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // POWER TUŞUNUN YANINDAKİ HESAP GİRİŞ BUTONU
+        // GÜÇ BUTONU SOLDA, HESAP GİRİŞ BUTONU SAĞDA
         setupAccountButton()
 
         findViewById<View>(R.id.wolfTouchArea)?.setOnClickListener {
@@ -171,8 +171,10 @@ class MainActivity : AppCompatActivity() {
         fun dp(value: Int): Int =
             (value * density + 0.5f).toInt()
 
+        // Mevcut güç butonunu eski yerinden al.
         parent.removeView(listeningButton)
 
+        // İki görseli yan yana tutacak satır.
         val buttonRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -186,21 +188,41 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        listeningButton.layoutParams =
-            LinearLayout.LayoutParams(dp(54), dp(54)).apply {
-                marginEnd = dp(12)
+        // SOL BUTON: button_red.png
+        // Mevcut sesli dinleme tıklama işlevi korunuyor.
+        listeningButton.apply {
+            layoutParams =
+                LinearLayout.LayoutParams(dp(54), dp(54))
+
+            radius = 0f
+            cardElevation = 0f
+            setCardBackgroundColor(Color.TRANSPARENT)
+            contentDescription = "Sesli dinlemeyi aç veya kapat"
+
+            removeAllViews()
+
+            val powerImage = ImageView(this@MainActivity).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setImageResource(R.drawable.button_red)
+                contentDescription = "Sesli dinleme güç butonu"
             }
 
-        buttonRow.addView(listeningButton)
+            addView(powerImage)
+        }
 
+        // SAĞ BUTON: button_log.png
         val accountButton =
             androidx.cardview.widget.CardView(this).apply {
                 layoutParams =
                     LinearLayout.LayoutParams(dp(54), dp(54))
 
-                radius = dp(27).toFloat()
-                cardElevation = dp(6).toFloat()
-                setCardBackgroundColor(Color.rgb(21, 101, 192))
+                radius = 0f
+                cardElevation = 0f
+                setCardBackgroundColor(Color.TRANSPARENT)
 
                 isClickable = true
                 isFocusable = true
@@ -224,22 +246,24 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-        val accountLabel = TextView(this).apply {
-            text = "↪"
-            textSize = 30f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-
+        val accountImage = ImageView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setImageResource(R.drawable.button_log)
+            contentDescription = "Hesap giriş butonu"
         }
 
-        accountButton.addView(accountLabel)
+        accountButton.addView(accountImage)
+
+        // Önce güç, hemen sağına hesap.
+        // Aralarında boşluk veya kenar boşluğu yok.
+        buttonRow.addView(listeningButton)
         buttonRow.addView(accountButton)
 
+        // Yeni satırı eski butonun bulunduğu konuma yerleştir.
         parent.addView(buttonRow, originalIndex)
     }
 
