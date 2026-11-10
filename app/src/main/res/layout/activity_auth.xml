@@ -27,7 +27,7 @@
         android:textColor="#B8C3D1"
         android:textSize="13sp" />
 
-    <!-- 320 x 320 DP KURT ÇERÇEVESİ -->
+    <!-- KURT GÖRSEL ALANI -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="320dp"
@@ -37,7 +37,8 @@
         android:padding="2dp"
         android:orientation="vertical">
 
-        <LinearLayout
+        <FrameLayout
+            android:id="@+id/authWolfTouchArea"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:background="#263B50"
@@ -49,9 +50,18 @@
                 android:layout_height="match_parent"
                 android:src="@drawable/wolf_splash"
                 android:scaleType="fitCenter"
-                android:contentDescription="EmergencySafety kurt görseli" />
+                android:contentDescription="EmergencySafety normal kurt" />
 
-        </LinearLayout>
+            <ImageView
+                android:id="@+id/authWolfAngryImage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/wolf_splash_angry"
+                android:scaleType="fitCenter"
+                android:alpha="0"
+                android:contentDescription="EmergencySafety aktif kurt" />
+
+        </FrameLayout>
     </LinearLayout>
 
     <!-- HESAP BİLGİLERİ -->
