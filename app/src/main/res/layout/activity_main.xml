@@ -177,4 +177,19 @@
         </LinearLayout>
     </ScrollView>
 
+    <!-- Şeffaf profil butonu -->
+    <ImageButton
+        android:id="@+id/btnAccount"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="68dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="Hesap"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:src="@android:drawable/ic_menu_myplaces"
+        android:tint="#DCE8F7" />
+
 </FrameLayout>
