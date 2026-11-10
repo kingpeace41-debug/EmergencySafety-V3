@@ -1,4 +1,3 @@
-
 package com.example.emergencysafety
 
 import android.Manifest
@@ -188,11 +187,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // SOL BUTON: button_red.png
+        // SOL BUTON: button_power.png
         // Mevcut sesli dinleme tıklama işlevi korunuyor.
         listeningButton.apply {
             layoutParams =
-                LinearLayout.LayoutParams(dp(54), dp(54))
+                LinearLayout.LayoutParams(dp(68), dp(68))
 
             radius = 0f
             cardElevation = 0f
@@ -207,7 +206,7 @@ class MainActivity : AppCompatActivity() {
                     FrameLayout.LayoutParams.MATCH_PARENT
                 )
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                setImageResource(R.drawable.button_red)
+                setImageResource(R.drawable.button_power)
                 contentDescription = "Sesli dinleme güç butonu"
             }
 
@@ -218,7 +217,7 @@ class MainActivity : AppCompatActivity() {
         val accountButton =
             androidx.cardview.widget.CardView(this).apply {
                 layoutParams =
-                    LinearLayout.LayoutParams(dp(54), dp(54))
+                    LinearLayout.LayoutParams(dp(68), dp(68))
 
                 radius = 0f
                 cardElevation = 0f
