@@ -7,13 +7,31 @@
     android:background="#080F1D"
     android:paddingStart="20dp"
     android:paddingEnd="20dp"
-    android:paddingTop="10dp"
-    android:paddingBottom="10dp">
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
 
-    <!-- KURT GÖRSELİ: HESAP PANELİYLE AYNI GENİŞLİK -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="30dp"
+        android:gravity="center"
+        android:text="EMERGENCY SAFETY"
+        android:textColor="#EAF0FA"
+        android:textSize="21sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="22dp"
+        android:gravity="center"
+        android:text="Güvenliğiniz için buradayız."
+        android:textColor="#B8C3D1"
+        android:textSize="13sp" />
+
+    <!-- KURT GÖRSELİ -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="150dp"
+        android:layout_height="190dp"
+        android:layout_marginTop="6dp"
         android:background="#B8C3D1"
         android:elevation="8dp"
         android:padding="2dp"
@@ -40,24 +58,24 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="8dp"
         android:background="#121E30"
         android:orientation="vertical"
-        android:padding="12dp">
+        android:padding="10dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="E-posta"
             android:textColor="#EAF0FA"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <EditText
             android:id="@+id/authEmail"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:layout_marginTop="4dp"
+            android:layout_height="42dp"
+            android:layout_marginTop="3dp"
             android:autofillHints="emailAddress"
             android:backgroundTint="#52749F"
             android:hint="ornek@email.com"
@@ -71,17 +89,17 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:text="Şifre"
             android:textColor="#EAF0FA"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:textStyle="bold" />
 
         <EditText
             android:id="@+id/authPassword"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:layout_marginTop="4dp"
+            android:layout_height="42dp"
+            android:layout_marginTop="3dp"
             android:autofillHints="password"
             android:backgroundTint="#52749F"
             android:hint="Şifrenizi girin"
@@ -95,8 +113,8 @@
         <Button
             android:id="@+id/btnAuthLogin"
             android:layout_width="match_parent"
-            android:layout_height="46dp"
-            android:layout_marginTop="10dp"
+            android:layout_height="44dp"
+            android:layout_marginTop="8dp"
             android:backgroundTint="#246BCE"
             android:text="GİRİŞ YAP"
             android:textColor="#FFFFFF"
@@ -105,7 +123,7 @@
         <TextView
             android:id="@+id/btnAuthRegister"
             android:layout_width="match_parent"
-            android:layout_height="36dp"
+            android:layout_height="32dp"
             android:gravity="center"
             android:text="YENİ HESAP OLUŞTUR"
             android:textColor="#75B5FF"
@@ -115,7 +133,7 @@
         <TextView
             android:id="@+id/btnAuthForgotPassword"
             android:layout_width="match_parent"
-            android:layout_height="28dp"
+            android:layout_height="24dp"
             android:gravity="center"
             android:text="Şifremi unuttum"
             android:textColor="#AAB7CA"
@@ -123,12 +141,11 @@
 
     </LinearLayout>
 
-    <!-- HESAPSIZ DEVAM -->
     <Button
         android:id="@+id/btnAuthContinueWithoutAccount"
         android:layout_width="match_parent"
-        android:layout_height="46dp"
-        android:layout_marginTop="10dp"
+        android:layout_height="44dp"
+        android:layout_marginTop="8dp"
         android:backgroundTint="#263B50"
         android:text="HESAPSIZ DEVAM ET"
         android:textColor="#FFFFFF"
