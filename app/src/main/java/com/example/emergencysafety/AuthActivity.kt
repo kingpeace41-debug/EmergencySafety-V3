@@ -32,6 +32,13 @@ class AuthActivity : AppCompatActivity() {
     private lateinit var loginButton: Button
     private lateinit var continueWithoutAccountButton: Button
 
+    private val accountPreferences by lazy {
+        getSharedPreferences(
+            "AccountSettings",
+            MODE_PRIVATE
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_auth)
@@ -48,10 +55,19 @@ class AuthActivity : AppCompatActivity() {
         }
 
         continueWithoutAccountButton.setOnClickListener {
-            val intent = Intent(this, MainActivity::class.java)
-            startActivity(intent)
-            finish()
+            accountPreferences.edit()
+                .putBoolean("onboarding_completed", true)
+                .putBoolean("guest_mode", true)
+                .apply()
+
+            openMainActivity()
         }
+    }
+
+    private fun openMainActivity() {
+        val intent = Intent(this, MainActivity::class.java)
+        startActivity(intent)
+        finish()
     }
 
     private fun attemptLogin() {
@@ -94,11 +110,18 @@ class AuthActivity : AppCompatActivity() {
                 MatrixSession.userId = result.userId
                 MatrixSession.deviceId = result.deviceId
 
+                accountPreferences.edit()
+                    .putBoolean("onboarding_completed", true)
+                    .putBoolean("guest_mode", false)
+                    .apply()
+
                 Toast.makeText(
                     this@AuthActivity,
                     "Matrix hesabına giriş başarılı.",
-                    Toast.LENGTH_LONG
+                    Toast.LENGTH_SHORT
                 ).show()
+
+                openMainActivity()
             } else {
                 Toast.makeText(
                     this@AuthActivity,
