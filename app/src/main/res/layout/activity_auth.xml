@@ -25,14 +25,34 @@
             android:textSize="23sp"
             android:textStyle="bold" />
 
-        <ImageView
-            android:id="@+id/authWolfImage"
-            android:layout_width="190dp"
-            android:layout_height="190dp"
+        <!-- Gümüş dış çerçeve -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
-            android:contentDescription="EmergencySafety pasif kurt görseli"
-            android:scaleType="fitCenter"
-            android:src="@drawable/wolf_passive" />
+            android:background="#B8C3D1"
+            android:elevation="8dp"
+            android:orientation="vertical"
+            android:padding="2dp">
+
+            <!-- Lacivert iç çerçeve -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="#263B50"
+                android:orientation="vertical"
+                android:padding="2dp">
+
+                <ImageView
+                    android:id="@+id/authWolfImage"
+                    android:layout_width="190dp"
+                    android:layout_height="190dp"
+                    android:contentDescription="EmergencySafety kurt görseli"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/wolf_splash" />
+
+            </LinearLayout>
+        </LinearLayout>
 
         <TextView
             android:layout_width="match_parent"
