@@ -1,4 +1,3 @@
-
 package com.example.emergencysafety
 
 import android.app.AlertDialog
@@ -10,7 +9,6 @@ import android.os.Looper
 import android.os.SystemClock
 import android.text.InputFilter
 import android.view.MotionEvent
-import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
@@ -223,6 +221,11 @@ class AuthActivity : AppCompatActivity() {
             null
         )
 
+        val descriptionText =
+            dialogView.findViewById<TextView>(
+                R.id.authVerificationDescription
+            )
+
         val codeInput =
             dialogView.findViewById<EditText>(
                 R.id.authVerificationCode
@@ -238,9 +241,11 @@ class AuthActivity : AppCompatActivity() {
                 R.id.btnAuthResendCode
             )
 
-        // Henüz e-posta sunucusu bağlı olmadığı için
-        // pencerede kod gönderilmediği açıkça belirtilir.
-        updateVerificationNotice(dialogView)
+        // Sunucu henüz hazır olmadığı için
+        // kod gönderilmediği açıkça belirtilir.
+        descriptionText.text =
+            "Doğrulama sunucusu henüz etkin değil. " +
+            "Şimdilik e-posta kodu gönderilmedi."
 
         codeInput.filters = arrayOf(
             InputFilter.LengthFilter(6)
@@ -284,24 +289,6 @@ class AuthActivity : AppCompatActivity() {
             (resources.displayMetrics.widthPixels * 0.90f).toInt(),
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
-    }
-
-    private fun updateVerificationNotice(view: View) {
-        if (view is TextView) {
-            if (view.text.toString().contains(
-                    "E-posta adresinize gönderilen"
-                )
-            ) {
-                view.text =
-                    "Doğrulama sunucusu henüz etkin değil. Şimdilik e-posta kodu gönderilmedi."
-            }
-        }
-
-        if (view is ViewGroup) {
-            for (index in 0 until view.childCount) {
-                updateVerificationNotice(view.getChildAt(index))
-            }
-        }
     }
 
     // -------------------------------------------------
