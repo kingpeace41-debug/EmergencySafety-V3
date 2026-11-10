@@ -24,6 +24,11 @@ import org.json.JSONObject
 
 class AuthActivity : AppCompatActivity() {
 
+    companion object {
+        const val EXTRA_FORCE_SHOW_ACCOUNT =
+            "com.example.emergencysafety.FORCE_SHOW_ACCOUNT"
+    }
+
     private val activityScope =
         CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -41,6 +46,24 @@ class AuthActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val onboardingCompleted =
+            accountPreferences.getBoolean(
+                "onboarding_completed",
+                false
+            )
+
+        val forceShowAccount =
+            intent.getBooleanExtra(
+                EXTRA_FORCE_SHOW_ACCOUNT,
+                false
+            )
+
+        if (onboardingCompleted && !forceShowAccount) {
+            openMainActivity()
+            return
+        }
+
         setContentView(R.layout.activity_auth)
 
         emailInput = findViewById(R.id.authEmail)
