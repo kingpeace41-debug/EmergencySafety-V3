@@ -102,23 +102,6 @@ class MainActivity : AppCompatActivity() {
         checkPermissionsAndStartService()
         checkOverlayPermission()
 
-        // HESAP BUTONU
-        findViewById<View>(R.id.btnAccount)?.setOnClickListener {
-            vibrateOnClick()
-
-            val accountIntent = Intent(
-                this,
-                AuthActivity::class.java
-            ).apply {
-                putExtra(
-                    AuthActivity.EXTRA_FORCE_SHOW_ACCOUNT,
-                    true
-                )
-            }
-
-            startActivity(accountIntent)
-        }
-
         val btnRedAlertId =
             resources.getIdentifier("btnRedAlert", "id", packageName)
 
@@ -163,8 +146,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // YENİ MAVİ MATRIX TEST BUTONU
-        setupMatrixTestButton()
+        // POWER TUŞUNUN YANINDAKİ HESAP GİRİŞ BUTONU
+        setupAccountButton()
 
         findViewById<View>(R.id.wolfTouchArea)?.setOnClickListener {
             vibrateOnClick()
@@ -172,7 +155,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupMatrixTestButton() {
+    private fun setupAccountButton() {
         val listeningButton =
             findViewById<androidx.cardview.widget.CardView>(
                 R.id.btnToggleListening
@@ -210,7 +193,7 @@ class MainActivity : AppCompatActivity() {
 
         buttonRow.addView(listeningButton)
 
-        val matrixButton =
+        val accountButton =
             androidx.cardview.widget.CardView(this).apply {
                 layoutParams =
                     LinearLayout.LayoutParams(dp(54), dp(54))
@@ -222,21 +205,28 @@ class MainActivity : AppCompatActivity() {
                 isClickable = true
                 isFocusable = true
 
-                contentDescription = "Matrix sunucu testini aç"
+                contentDescription = "Hesap girişini aç"
 
                 setOnClickListener {
-                    startActivity(
-                        Intent(
-                            this@MainActivity,
-                            MatrixTestActivity::class.java
+                    vibrateOnClick()
+
+                    val accountIntent = Intent(
+                        this@MainActivity,
+                        AuthActivity::class.java
+                    ).apply {
+                        putExtra(
+                            AuthActivity.EXTRA_FORCE_SHOW_ACCOUNT,
+                            true
                         )
-                    )
+                    }
+
+                    startActivity(accountIntent)
                 }
             }
 
-        val matrixLabel = TextView(this).apply {
-            text = "M"
-            textSize = 22f
+        val accountLabel = TextView(this).apply {
+            text = "↪"
+            textSize = 30f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
@@ -247,9 +237,8 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        matrixButton.addView(matrixLabel)
-
-        buttonRow.addView(matrixButton)
+        accountButton.addView(accountLabel)
+        buttonRow.addView(accountButton)
 
         parent.addView(buttonRow, originalIndex)
     }
