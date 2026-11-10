@@ -146,6 +146,35 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:gravity="center"
+            android:text="VEYA"
+            android:textColor="#66758B"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/btnAuthContinueWithoutAccount"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:layout_marginTop="12dp"
+            android:backgroundTint="#263B50"
+            android:text="HESAPSIZ DEVAM ET"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:text="Acil durum ve güvenlik özelliklerini kullanabilirsin. Bireysel mesajlaşma için hesap gerekir."
+            android:textColor="#AAB7CA"
+            android:textSize="12sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
             android:gravity="center"
             android:text="EmergencySafety • Güvenli iletişim"
