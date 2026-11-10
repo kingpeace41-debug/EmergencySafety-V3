@@ -143,8 +143,6 @@ class AuthActivity : AppCompatActivity() {
         }
     }
 
-    // KANGAL EFEKTI
-
     private fun startWolfReaction() {
         if (wolfReactionActive) return
 
@@ -187,7 +185,6 @@ class AuthActivity : AppCompatActivity() {
                 player.release()
             }
         } catch (e: Exception) {
-            // Ses zaten bitmis olabilir.
         }
 
         wolfPlayer = null
@@ -198,8 +195,6 @@ class AuthActivity : AppCompatActivity() {
             .setDuration(200L)
             .start()
     }
-
-    // E-POSTA KODU ISTEME
 
     private fun requestEmailCode() {
         val email = emailInput.text.toString().trim()
@@ -213,7 +208,7 @@ class AuthActivity : AppCompatActivity() {
         if (!android.util.Patterns.EMAIL_ADDRESS
                 .matcher(email).matches()
         ) {
-            emailInput.error = "Gecerli bir e-posta adresi gir."
+            emailInput.error = "Geçerli bir e-posta adresi gir."
             emailInput.requestFocus()
             return
         }
@@ -236,7 +231,7 @@ class AuthActivity : AppCompatActivity() {
 
                     Toast.makeText(
                         this,
-                        "Dogrulama kodu e-posta adresine gonderildi.",
+                        "Doğrulama kodu e-posta adresine gönderildi.",
                         Toast.LENGTH_LONG
                     ).show()
                 } else {
@@ -245,8 +240,6 @@ class AuthActivity : AppCompatActivity() {
             }
         }
     }
-
-    // DOGRULAMA PENCERESI
 
     private fun showEmailVerificationDialog(email: String) {
         val dialogView = layoutInflater.inflate(
@@ -275,7 +268,7 @@ class AuthActivity : AppCompatActivity() {
             )
 
         descriptionText.text =
-            "$email adresine gonderilen 6 haneli kodu gir."
+            "$email adresine gönderilen 6 haneli kodu gir."
 
         codeInput.filters = arrayOf(
             InputFilter.LengthFilter(6)
@@ -295,7 +288,7 @@ class AuthActivity : AppCompatActivity() {
             }
 
             verifyButton.isEnabled = false
-            verifyButton.text = "DOGRULANIYOR..."
+            verifyButton.text = "DOĞRULANIYOR..."
 
             networkExecutor.execute {
                 val result = postJson(
@@ -309,7 +302,7 @@ class AuthActivity : AppCompatActivity() {
                     if (isFinishing || isDestroyed) return@post
 
                     verifyButton.isEnabled = true
-                    verifyButton.text = "DOGRULA VE DEVAM ET"
+                    verifyButton.text = "DOĞRULA VE DEVAM ET"
 
                     if (result.success) {
                         val user =
@@ -333,7 +326,7 @@ class AuthActivity : AppCompatActivity() {
                             username.isBlank()
                         ) {
                             showMessage(
-                                "Sunucu yaniti eksik. Oturum acilamadi."
+                                "Sunucu yanıtı eksik. Oturum açılamadı."
                             )
                             return@post
                         }
@@ -351,7 +344,7 @@ class AuthActivity : AppCompatActivity() {
 
                         Toast.makeText(
                             this,
-                            "E-posta dogrulandi. Hos geldin!",
+                            "E-posta doğrulandı. Hoş geldin!",
                             Toast.LENGTH_LONG
                         ).show()
 
@@ -365,7 +358,7 @@ class AuthActivity : AppCompatActivity() {
 
         resendButton.setOnClickListener {
             resendButton.isEnabled = false
-            resendButton.text = "KOD GONDERILIYOR..."
+            resendButton.text = "KOD GÖNDERİLİYOR..."
 
             networkExecutor.execute {
                 val result = postJson(
@@ -377,11 +370,11 @@ class AuthActivity : AppCompatActivity() {
                     if (isFinishing || isDestroyed) return@post
 
                     resendButton.isEnabled = true
-                    resendButton.text = "KODU TEKRAR GONDER"
+                    resendButton.text = "KODU TEKRAR GÖNDER"
 
                     showMessage(
                         if (result.success) {
-                            "Yeni kod e-posta adresine gonderildi."
+                            "Yeni kod e-posta adresine gönderildi."
                         } else {
                             result.message
                         }
@@ -401,8 +394,6 @@ class AuthActivity : AppCompatActivity() {
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
     }
-
-    // API ILETISIMI
 
     private data class ApiResult(
         val success: Boolean,
@@ -474,7 +465,7 @@ class AuthActivity : AppCompatActivity() {
 
                 message = json.optString(
                     "message",
-                    "Sunucu istegi tamamlayamadi. Tekrar deneyin."
+                    "Sunucu isteği tamamlayamadı. Tekrar deneyin."
                 ),
 
                 data = json
@@ -483,7 +474,7 @@ class AuthActivity : AppCompatActivity() {
         } catch (e: Exception) {
             ApiResult(
                 success = false,
-                message = "Sunucuya baglanilamadi. Internet baglantini kontrol et.",
+                message = "Sunucuya bağlanılamadı. İnternet bağlantını kontrol et.",
                 data = JSONObject()
             )
         } finally {
@@ -496,9 +487,9 @@ class AuthActivity : AppCompatActivity() {
 
         loginButton.text =
             if (loading) {
-                "KOD GONDERILIYOR..."
+                "KOD GÖNDERİLİYOR..."
             } else {
-                "KOD GONDER"
+                "KOD GÖNDER"
             }
     }
 
@@ -509,8 +500,6 @@ class AuthActivity : AppCompatActivity() {
             Toast.LENGTH_LONG
         ).show()
     }
-
-    // YARDIMCI ISLEMLER
 
     private fun openMainActivity() {
         val intent = Intent(this, MainActivity::class.java)
