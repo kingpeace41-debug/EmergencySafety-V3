@@ -31,6 +31,7 @@
 
         <activity
             android:name=".PermissionGateActivity"
+            android:screenOrientation="portrait"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -40,44 +41,54 @@
 
         <activity
             android:name=".AuthActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".MainActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".MatrixTestActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".YellowSafetyActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".BlueInfoActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".FakeDeadActivity"
+            android:screenOrientation="portrait"
             android:exported="false"
             android:showOnLockScreen="true"
             android:turnScreenOn="true" />
 
         <activity
             android:name=".SettingsActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".SettingsCategoriesActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".ContactMessageSettingsActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".VoiceCommandSettingsActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <service
