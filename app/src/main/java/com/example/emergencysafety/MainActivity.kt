@@ -1,3 +1,4 @@
+
 package com.example.emergencysafety
 
 import android.Manifest
@@ -47,6 +48,10 @@ class MainActivity : AppCompatActivity() {
 
     private val instructionPrefs by lazy {
         getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
+    }
+
+    private val accountPreferences by lazy {
+        getSharedPreferences("AccountSettings", Context.MODE_PRIVATE)
     }
 
     companion object {
@@ -145,7 +150,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // GÜÇ BUTONU SOLDA, HESAP GİRİŞ BUTONU SAĞDA
+        // GÜÇ BUTONU SOLDA, HESAP BUTONU SAĞDA
         setupAccountButton()
 
         findViewById<View>(R.id.wolfTouchArea)?.setOnClickListener {
@@ -170,10 +175,8 @@ class MainActivity : AppCompatActivity() {
         fun dp(value: Int): Int =
             (value * density + 0.5f).toInt()
 
-        // Mevcut güç butonunu eski yerinden al.
         parent.removeView(listeningButton)
 
-        // İki görseli yan yana tutacak satır.
         val buttonRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -187,8 +190,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // SOL BUTON: button_power.png
-        // Mevcut sesli dinleme tıklama işlevi korunuyor.
+        // SOL BUTON: GÜÇ
         listeningButton.apply {
             layoutParams =
                 LinearLayout.LayoutParams(dp(68), dp(68))
@@ -213,7 +215,7 @@ class MainActivity : AppCompatActivity() {
             addView(powerImage)
         }
 
-        // SAĞ BUTON: button_log.png
+        // SAĞ BUTON: LOGO / HESABIM
         val accountButton =
             androidx.cardview.widget.CardView(this).apply {
                 layoutParams =
@@ -226,22 +228,11 @@ class MainActivity : AppCompatActivity() {
                 isClickable = true
                 isFocusable = true
 
-                contentDescription = "Hesap girişini aç"
+                contentDescription = "Hesabım"
 
                 setOnClickListener {
                     vibrateOnClick()
-
-                    val accountIntent = Intent(
-                        this@MainActivity,
-                        AuthActivity::class.java
-                    ).apply {
-                        putExtra(
-                            AuthActivity.EXTRA_FORCE_SHOW_ACCOUNT,
-                            true
-                        )
-                    }
-
-                    startActivity(accountIntent)
+                    showAccountDialog()
                 }
             }
 
@@ -252,18 +243,136 @@ class MainActivity : AppCompatActivity() {
             )
             scaleType = ImageView.ScaleType.FIT_CENTER
             setImageResource(R.drawable.button_log)
-            contentDescription = "Hesap giriş butonu"
+            contentDescription = "Hesabım butonu"
         }
 
         accountButton.addView(accountImage)
 
-        // Önce güç, hemen sağına hesap.
-        // Aralarında boşluk veya kenar boşluğu yok.
         buttonRow.addView(listeningButton)
         buttonRow.addView(accountButton)
 
-        // Yeni satırı eski butonun bulunduğu konuma yerleştir.
         parent.addView(buttonRow, originalIndex)
+    }
+
+    private fun showAccountDialog() {
+        val isGuest = accountPreferences.getBoolean(
+            "guest_mode",
+            false
+        )
+
+        val email = accountPreferences.getString(
+            "account_email",
+            ""
+        ).orEmpty()
+
+        if (isGuest || email.isBlank()) {
+            AlertDialog.Builder(this)
+                .setTitle("Hesabım")
+                .setMessage(
+                    "Şu anda misafir modundasınız.\n\n" +
+                        "Acil durum özelliklerini kullanabilirsiniz. " +
+                        "Mesajlaşma ve kayıtlı kullanıcı özellikleri " +
+                        "için e-posta hesabınızla giriş yapabilirsiniz."
+                )
+                .setPositiveButton("HESABA GİRİŞ YAP") { _, _ ->
+                    openAccountLogin()
+                }
+                .setNegativeButton("KAPAT", null)
+                .show()
+
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Hesabım")
+            .setMessage(
+                "Kayıtlı e-posta adresiniz:\n\n$email"
+            )
+            .setPositiveButton("ÇIKIŞ YAP") { _, _ ->
+                confirmLogout()
+            }
+            .setNegativeButton("KAPAT", null)
+            .show()
+    }
+
+    private fun confirmLogout() {
+        AlertDialog.Builder(this)
+            .setTitle("Çıkış yapılsın mı?")
+            .setMessage(
+                "Bu cihazdaki kayıtlı oturum bilgileri silinecek " +
+                    "ve giriş ekranına dönülecek."
+            )
+            .setNegativeButton("VAZGEÇ", null)
+            .setPositiveButton("ÇIKIŞ YAP") { _, _ ->
+                performLocalLogout()
+            }
+            .show()
+    }
+
+    private fun performLocalLogout() {
+        try {
+            SecureSessionStore.clearSession(applicationContext)
+
+            val accountCleared = accountPreferences.edit()
+                .remove("account_email")
+                .remove("api_user_id")
+                .remove("api_username")
+                .remove("api_access_token")
+                .putBoolean("onboarding_completed", false)
+                .putBoolean("guest_mode", false)
+                .commit()
+
+            if (!accountCleared) {
+                Toast.makeText(
+                    this,
+                    "Hesap bilgileri temizlenemedi. Tekrar dene.",
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            }
+
+            MatrixSession.accessToken = null
+            MatrixSession.userId = null
+            MatrixSession.deviceId = null
+
+            Toast.makeText(
+                this,
+                "Bu cihazdaki oturum kapatıldı.",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            val intent = Intent(
+                this,
+                AuthActivity::class.java
+            ).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
+
+            startActivity(intent)
+            finish()
+
+        } catch (e: Exception) {
+            Toast.makeText(
+                this,
+                "Çıkış sırasında bir hata oluştu. Tekrar dene.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    private fun openAccountLogin() {
+        val intent = Intent(
+            this,
+            AuthActivity::class.java
+        ).apply {
+            putExtra(
+                AuthActivity.EXTRA_FORCE_SHOW_ACCOUNT,
+                true
+            )
+        }
+
+        startActivity(intent)
     }
 
     override fun onResume() {
