@@ -308,7 +308,7 @@ class MainActivity : AppCompatActivity() {
         panel.addView(brand)
 
         val subtitle = TextView(this).apply {
-            text = "YOUR SAFETY, OUR PRIORITY"
+            text = "SİZİN GÜVENLİĞİNİZ, BİZİM ÖNCELİĞİMİZ"
             textSize = 10f
             setTextColor(Color.rgb(158, 180, 208))
             gravity = Gravity.CENTER
