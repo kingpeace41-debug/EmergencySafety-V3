@@ -14,7 +14,7 @@
         <ImageView
             android:id="@+id/stripEmergency"
             android:layout_width="match_parent"
-            android:layout_height="59dp"
+            android:layout_height="60dp"
             android:src="@drawable/banner_1"
             android:scaleType="fitXY"
             android:contentDescription="Emergency banner" />
@@ -38,7 +38,7 @@
         <ImageView
             android:id="@+id/stripSafety"
             android:layout_width="match_parent"
-            android:layout_height="59dp"
+            android:layout_height="60dp"
             android:src="@drawable/banner_2"
             android:scaleType="fitXY"
             android:contentDescription="Safety banner" />
