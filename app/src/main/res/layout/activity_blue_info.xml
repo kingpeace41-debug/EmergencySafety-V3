@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:src="@drawable/wolf_blue"
-        android:scaleType="centerCrop"
+        android:scaleType="fitCenter"
         android:contentDescription="Mavi kurt temalı arka plan" />
 
     <!-- SAYFA BUTONLARI -->
@@ -74,7 +74,7 @@
     <ImageView
         android:id="@+id/stripEmergency"
         android:layout_width="match_parent"
-        android:layout_height="59dp"
+        android:layout_height="60dp"
         android:layout_gravity="top"
         android:src="@drawable/banner_1"
         android:scaleType="fitXY"
@@ -84,7 +84,7 @@
     <ImageView
         android:id="@+id/stripSafety"
         android:layout_width="match_parent"
-        android:layout_height="59dp"
+        android:layout_height="60dp"
         android:layout_gravity="bottom"
         android:src="@drawable/banner_2"
         android:scaleType="fitXY"
