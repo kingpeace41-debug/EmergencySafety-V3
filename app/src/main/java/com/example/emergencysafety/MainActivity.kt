@@ -2,11 +2,13 @@
 package com.example.emergencysafety
 
 import android.Manifest
+import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.media.MediaPlayer
 import android.net.Uri
@@ -20,6 +22,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -150,7 +153,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // GÜÇ BUTONU SOLDA, HESAP BUTONU SAĞDA
         setupAccountButton()
 
         findViewById<View>(R.id.wolfTouchArea)?.setOnClickListener {
@@ -190,7 +192,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // SOL BUTON: GÜÇ
         listeningButton.apply {
             layoutParams =
                 LinearLayout.LayoutParams(dp(68), dp(68))
@@ -215,7 +216,6 @@ class MainActivity : AppCompatActivity() {
             addView(powerImage)
         }
 
-        // SAĞ BUTON: LOGO / HESABIM
         val accountButton =
             androidx.cardview.widget.CardView(this).apply {
                 layoutParams =
@@ -227,7 +227,6 @@ class MainActivity : AppCompatActivity() {
 
                 isClickable = true
                 isFocusable = true
-
                 contentDescription = "Hesabım"
 
                 setOnClickListener {
@@ -254,6 +253,7 @@ class MainActivity : AppCompatActivity() {
         parent.addView(buttonRow, originalIndex)
     }
 
+    // EMERGENCY SAFETY ÖZEL HESAP PENCERESİ
     private fun showAccountDialog() {
         val isGuest = accountPreferences.getBoolean(
             "guest_mode",
@@ -265,48 +265,228 @@ class MainActivity : AppCompatActivity() {
             ""
         ).orEmpty()
 
-        if (isGuest || email.isBlank()) {
-            AlertDialog.Builder(this)
-                .setTitle("Hesabım")
-                .setMessage(
-                    "Şu anda misafir modundasınız.\n\n" +
-                        "Acil durum özelliklerini kullanabilirsiniz. " +
-                        "Mesajlaşma ve kayıtlı kullanıcı özellikleri " +
-                        "için e-posta hesabınızla giriş yapabilirsiniz."
-                )
-                .setPositiveButton("HESABA GİRİŞ YAP") { _, _ ->
-                    openAccountLogin()
-                }
-                .setNegativeButton("KAPAT", null)
-                .show()
+        val density = resources.displayMetrics.density
 
-            return
+        fun dp(value: Int): Int =
+            (value * density + 0.5f).toInt()
+
+        val dialog = Dialog(this)
+
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(22), dp(20), dp(22), dp(20))
+
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(16, 27, 48))
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), Color.rgb(64, 81, 107))
+            }
         }
 
-        AlertDialog.Builder(this)
-            .setTitle("Hesabım")
-            .setMessage(
-                "Kayıtlı e-posta adresiniz:\n\n$email"
+        val logo = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                dp(72),
+                dp(72)
             )
-            .setPositiveButton("ÇIKIŞ YAP") { _, _ ->
-                confirmLogout()
-            }
-            .setNegativeButton("KAPAT", null)
-            .show()
-    }
+            setImageResource(R.drawable.yeni_logo)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            contentDescription = "EmergencySafety kurt logosu"
+        }
 
-    private fun confirmLogout() {
-        AlertDialog.Builder(this)
-            .setTitle("Çıkış yapılsın mı?")
-            .setMessage(
-                "Bu cihazdaki kayıtlı oturum bilgileri silinecek " +
-                    "ve giriş ekranına dönülecek."
+        panel.addView(logo)
+
+        val brand = TextView(this).apply {
+            text = "EMERGENCY SAFETY"
+            textSize = 19f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, 0)
+        }
+
+        panel.addView(brand)
+
+        val subtitle = TextView(this).apply {
+            text = "YOUR SAFETY, OUR PRIORITY"
+            textSize = 10f
+            setTextColor(Color.rgb(158, 180, 208))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, dp(14))
+        }
+
+        panel.addView(subtitle)
+
+        val divider = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(1)
             )
-            .setNegativeButton("VAZGEÇ", null)
-            .setPositiveButton("ÇIKIŞ YAP") { _, _ ->
-                performLocalLogout()
+            setBackgroundColor(Color.rgb(64, 81, 107))
+        }
+
+        panel.addView(divider)
+
+        val title = TextView(this).apply {
+            text = "HESABIM"
+            textSize = 20f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(18), 0, dp(10))
+        }
+
+        panel.addView(title)
+
+        val message = TextView(this).apply {
+            textSize = 14f
+            setTextColor(Color.rgb(196, 208, 224))
+            gravity = Gravity.CENTER
+            setPadding(dp(4), dp(4), dp(4), dp(12))
+        }
+
+        panel.addView(message)
+
+        val buttonRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(12)
             }
-            .show()
+        }
+
+        fun createDialogButton(
+            text: String,
+            backgroundColor: Int,
+            strokeColor: Int
+        ): TextView {
+            return TextView(this).apply {
+                this.text = text
+                textSize = 13f
+                setTypeface(null, Typeface.BOLD)
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+
+                background = GradientDrawable().apply {
+                    setColor(backgroundColor)
+                    cornerRadius = dp(9).toFloat()
+                    setStroke(dp(1), strokeColor)
+                }
+
+                setPadding(dp(8), dp(12), dp(8), dp(12))
+            }
+        }
+
+        val positiveButton = createDialogButton(
+            "ÇIKIŞ YAP",
+            Color.rgb(198, 40, 61),
+            Color.rgb(224, 75, 91)
+        )
+
+        val negativeButton = createDialogButton(
+            "KAPAT",
+            Color.rgb(38, 59, 80),
+            Color.rgb(82, 116, 159)
+        )
+
+        buttonRow.addView(
+            positiveButton,
+            LinearLayout.LayoutParams(
+                0,
+                dp(48),
+                1f
+            ).apply {
+                marginEnd = dp(6)
+            }
+        )
+
+        buttonRow.addView(
+            negativeButton,
+            LinearLayout.LayoutParams(
+                0,
+                dp(48),
+                1f
+            ).apply {
+                marginStart = dp(6)
+            }
+        )
+
+        panel.addView(buttonRow)
+
+        dialog.setContentView(panel)
+        dialog.setCancelable(true)
+        dialog.show()
+
+        dialog.window?.apply {
+            setBackgroundDrawable(
+                ColorDrawable(Color.TRANSPARENT)
+            )
+            setLayout(
+                (resources.displayMetrics.widthPixels * 0.90f).toInt(),
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        if (isGuest || email.isBlank()) {
+            title.text = "MİSAFİR KULLANIMI"
+
+            message.text =
+                "Şu anda misafir modundasınız.\n\n" +
+                    "Acil durum özelliklerini kullanabilirsiniz. " +
+                    "Mesajlaşma ve kayıtlı kullanıcı özellikleri için " +
+                    "e-posta hesabınızla giriş yapabilirsiniz."
+
+            positiveButton.text = "HESABA GİRİŞ"
+
+            positiveButton.setOnClickListener {
+                dialog.dismiss()
+                openAccountLogin()
+            }
+
+            negativeButton.setOnClickListener {
+                dialog.dismiss()
+            }
+
+        } else {
+            title.text = "HESABIM"
+
+            message.text =
+                "Kayıtlı e-posta adresiniz:\n\n$email"
+
+            positiveButton.text = "ÇIKIŞ YAP"
+            negativeButton.text = "KAPAT"
+
+            positiveButton.setOnClickListener {
+                title.text = "ÇIKIŞ ONAYI"
+
+                message.text =
+                    "Bu cihazdaki güvenli oturum bilgileri silinecek " +
+                        "ve giriş ekranına dönülecek.\n\n" +
+                        "Hesabınız silinmez. Yalnızca bu cihazdaki " +
+                        "oturumunuz kapatılır."
+
+                positiveButton.text = "EVET, ÇIKIŞ YAP"
+                negativeButton.text = "VAZGEÇ"
+
+                positiveButton.setOnClickListener {
+                    dialog.dismiss()
+                    performLocalLogout()
+                }
+
+                negativeButton.setOnClickListener {
+                    dialog.dismiss()
+                }
+            }
+
+            negativeButton.setOnClickListener {
+                dialog.dismiss()
+            }
+        }
     }
 
     private fun performLocalLogout() {
@@ -334,12 +514,6 @@ class MainActivity : AppCompatActivity() {
             MatrixSession.accessToken = null
             MatrixSession.userId = null
             MatrixSession.deviceId = null
-
-            Toast.makeText(
-                this,
-                "Bu cihazdaki oturum kapatıldı.",
-                Toast.LENGTH_SHORT
-            ).show()
 
             val intent = Intent(
                 this,
