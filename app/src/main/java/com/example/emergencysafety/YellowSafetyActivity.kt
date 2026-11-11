@@ -444,6 +444,9 @@ class YellowSafetyActivity : AppCompatActivity() {
             false
         )
 
+        // ES BOT HIZLI YARDIM MENÜSÜ
+        addQuickHelpOptions()
+
         // MESAJ YAZMA ALANI
         val composer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -543,6 +546,91 @@ class YellowSafetyActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
         )
+    }
+
+    private fun addQuickHelpOptions() {
+        val helpTitle = createText(
+            "HIZLI YARDIM",
+            11f,
+            gold,
+            true
+        )
+
+        helpTitle.setPadding(
+            dp(4),
+            dp(14),
+            dp(4),
+            dp(8)
+        )
+
+        messagesColumn.addView(
+            helpTitle,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        val options = listOf(
+            Pair(
+                "EmergencySafety nedir?",
+                "EmergencySafety; acil durumlarda güvenlik " +
+                    "ve yardım süreçlerini kolaylaştırmak için " +
+                    "geliştirilen bir uygulamadır. Amacımız, " +
+                    "ihtiyaç anında seçtiğin kişilere ulaşmanı " +
+                    "ve güvenlik araçlarını kullanmanı sağlamaktır."
+            ),
+            Pair(
+                "Acil durumda ne yapmalıyım?",
+                "Öncelikle kendi güvenliğini sağlamaya çalış. " +
+                    "Acil yardıma ihtiyaç varsa Türkiye'de 112'yi " +
+                    "ara. EmergencySafety'nin acil durum " +
+                    "özelliklerini kullanmadan önce telefonunda " +
+                    "doğru şekilde ayarlandığını ve çalıştığını " +
+                    "test ettiğinden emin ol. Bu deneme sohbeti " +
+                    "tek başına acil yardım çağrısı göndermez."
+            ),
+            Pair(
+                "Konum paylaşımı nasıl çalışacak?",
+                "Planımız, sohbet içindeki konum düğmesiyle " +
+                    "konumunu harita bağlantısı olarak karşı " +
+                    "tarafa gönderebilmen. Ancak konum paylaşımı " +
+                    "henüz bu test ekranına bağlanmadı. " +
+                    "Sonraki geliştirme aşamalarında bunu " +
+                    "uygulama içinden çalışır hâle getireceğiz."
+            )
+        )
+
+        options.forEach { option ->
+            val optionButton = TextView(this).apply {
+                text = "›  ${option.first}"
+                textSize = 13f
+                setTextColor(Color.WHITE)
+                setPadding(dp(12), dp(11), dp(12), dp(11))
+                background = roundedBackground(
+                    panelBackground,
+                    Color.rgb(116, 94, 45),
+                    12
+                )
+                isClickable = true
+                isFocusable = true
+
+                setOnClickListener {
+                    addMessageBubble(option.first, true)
+                    addMessageBubble(option.second, false)
+                }
+            }
+
+            messagesColumn.addView(
+                optionButton,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(7)
+                }
+            )
+        }
     }
 
     private fun addMessageBubble(
