@@ -30,6 +30,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+internal data class ESBotMessage(
+    val id: Long,
+    val message: String,
+    val isOutgoing: Boolean,
+    val timestamp: Long
+)
+
 class YellowSafetyActivity : AppCompatActivity() {
 
     private lateinit var panelContainer: FrameLayout
@@ -48,18 +55,8 @@ class YellowSafetyActivity : AppCompatActivity() {
     private val softText = Color.rgb(205, 201, 185)
 
     private val botPreferences by lazy {
-        getSharedPreferences(
-            "ESBotSettings",
-            Context.MODE_PRIVATE
-        )
+        getSharedPreferences("ESBotSettings", Context.MODE_PRIVATE)
     }
-
-    private data class BotMessage(
-        val id: Long,
-        val message: String,
-        val isOutgoing: Boolean,
-        val timestamp: Long
-    )
 
     private data class BotReply(
         val text: String,
@@ -70,20 +67,15 @@ class YellowSafetyActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Misafir kullanıcı mesajlaşma alanına giremez.
         if (!isRegisteredUser()) {
             showGuestAccessDialog()
             return
         }
 
         historyDatabase = ESBotDatabase(this)
-
         setContentView(R.layout.activity_yellow_safety)
 
-        panelContainer = findViewById(
-            R.id.messagePanelContainer
-        )
-
+        panelContainer = findViewById(R.id.messagePanelContainer)
         showConversationList()
 
         onBackPressedDispatcher.addCallback(
@@ -100,32 +92,18 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
-    // KAYITLI KULLANICI KONTROLÜ
     private fun isRegisteredUser(): Boolean {
         val preferences = getSharedPreferences(
             "AccountSettings",
             MODE_PRIVATE
         )
 
-        val isGuest = preferences.getBoolean(
-            "guest_mode",
-            true
-        )
-
-        val email = preferences.getString(
-            "account_email",
-            ""
-        ).orEmpty().trim()
-
-        val userId = preferences.getString(
-            "api_user_id",
-            ""
-        ).orEmpty().trim()
+        val isGuest = preferences.getBoolean("guest_mode", true)
+        val email = preferences.getString("account_email", "").orEmpty().trim()
+        val userId = preferences.getString("api_user_id", "").orEmpty().trim()
 
         val accessToken = try {
-            SecureSessionStore.getAccessToken(
-                applicationContext
-            ).orEmpty()
+            SecureSessionStore.getAccessToken(applicationContext).orEmpty()
         } catch (_: Exception) {
             ""
         }
@@ -136,7 +114,6 @@ class YellowSafetyActivity : AppCompatActivity() {
             accessToken.isNotBlank()
     }
 
-    // MİSAFİR UYARI PENCERESİ
     private fun showGuestAccessDialog() {
         showBrandedDialog(
             title = "KAYITLI KULLANICI GİRİŞİ",
@@ -151,16 +128,9 @@ class YellowSafetyActivity : AppCompatActivity() {
             negativeText = "GERİ DÖN",
             cancelable = false,
             onPositive = {
-                val intent = Intent(
-                    this,
-                    AuthActivity::class.java
-                ).apply {
-                    putExtra(
-                        AuthActivity.EXTRA_FORCE_SHOW_ACCOUNT,
-                        true
-                    )
+                val intent = Intent(this, AuthActivity::class.java).apply {
+                    putExtra(AuthActivity.EXTRA_FORCE_SHOW_ACCOUNT, true)
                 }
-
                 startActivity(intent)
                 finish()
             },
@@ -170,7 +140,6 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
-    // EMERGENCY SAFETY ORTAK UYARI PENCERESİ
     private fun showBrandedDialog(
         title: String,
         message: String,
@@ -185,34 +154,20 @@ class YellowSafetyActivity : AppCompatActivity() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(
-                dp(22),
-                dp(20),
-                dp(22),
-                dp(20)
-            )
-
+            setPadding(dp(22), dp(20), dp(22), dp(20))
             background = GradientDrawable().apply {
                 setColor(Color.rgb(16, 27, 48))
                 cornerRadius = dp(18).toFloat()
-                setStroke(
-                    dp(1),
-                    Color.rgb(64, 81, 107)
-                )
+                setStroke(dp(1), Color.rgb(64, 81, 107))
             }
         }
 
         val logo = ImageView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                dp(72),
-                dp(72)
-            )
-
+            layoutParams = LinearLayout.LayoutParams(dp(72), dp(72))
             setImageResource(R.drawable.yeni_logo)
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "EmergencySafety logosu"
         }
-
         panel.addView(logo)
 
         val brand = TextView(this).apply {
@@ -223,7 +178,6 @@ class YellowSafetyActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, dp(8), 0, 0)
         }
-
         panel.addView(brand)
 
         val subtitle = TextView(this).apply {
@@ -233,7 +187,6 @@ class YellowSafetyActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             setPadding(0, dp(4), 0, dp(14))
         }
-
         panel.addView(subtitle)
 
         val divider = View(this).apply {
@@ -243,7 +196,6 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
             setBackgroundColor(Color.rgb(64, 81, 107))
         }
-
         panel.addView(divider)
 
         val titleView = TextView(this).apply {
@@ -252,14 +204,8 @@ class YellowSafetyActivity : AppCompatActivity() {
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
-            setPadding(
-                dp(4),
-                dp(18),
-                dp(4),
-                dp(10)
-            )
+            setPadding(dp(4), dp(18), dp(4), dp(10))
         }
-
         panel.addView(titleView)
 
         val messageView = TextView(this).apply {
@@ -267,15 +213,9 @@ class YellowSafetyActivity : AppCompatActivity() {
             textSize = 14f
             setTextColor(Color.rgb(196, 208, 224))
             gravity = Gravity.CENTER
-            setPadding(
-                dp(4),
-                dp(4),
-                dp(4),
-                dp(12)
-            )
+            setPadding(dp(4), dp(4), dp(4), dp(12))
             setLineSpacing(dp(3).toFloat(), 1f)
         }
-
         panel.addView(messageView)
 
         val buttonRow = LinearLayout(this).apply {
@@ -303,22 +243,14 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         buttonRow.addView(
             positiveButton,
-            LinearLayout.LayoutParams(
-                0,
-                dp(48),
-                1f
-            ).apply {
+            LinearLayout.LayoutParams(0, dp(48), 1f).apply {
                 marginEnd = dp(6)
             }
         )
 
         buttonRow.addView(
             negativeButton,
-            LinearLayout.LayoutParams(
-                0,
-                dp(48),
-                1f
-            ).apply {
+            LinearLayout.LayoutParams(0, dp(48), 1f).apply {
                 marginStart = dp(6)
             }
         )
@@ -340,13 +272,9 @@ class YellowSafetyActivity : AppCompatActivity() {
         dialog.show()
 
         dialog.window?.apply {
-            setBackgroundDrawable(
-                ColorDrawable(Color.TRANSPARENT)
-            )
-
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
             setLayout(
-                (resources.displayMetrics.widthPixels * 0.90f)
-                    .toInt(),
+                (resources.displayMetrics.widthPixels * 0.90f).toInt(),
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
@@ -365,26 +293,17 @@ class YellowSafetyActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             isClickable = true
             isFocusable = true
-
             background = GradientDrawable().apply {
                 setColor(backgroundColor)
                 cornerRadius = dp(9).toFloat()
                 setStroke(dp(1), strokeColor)
             }
-
-            setPadding(
-                dp(7),
-                dp(10),
-                dp(7),
-                dp(10)
-            )
+            setPadding(dp(7), dp(10), dp(7), dp(10))
         }
     }
 
     private fun dp(value: Int): Int {
-        return (
-            value * resources.displayMetrics.density + 0.5f
-        ).toInt()
+        return (value * resources.displayMetrics.density + 0.5f).toInt()
     }
 
     private fun roundedBackground(
@@ -395,7 +314,6 @@ class YellowSafetyActivity : AppCompatActivity() {
         return GradientDrawable().apply {
             setColor(color)
             cornerRadius = dp(radius).toFloat()
-
             if (strokeColor != Color.TRANSPARENT) {
                 setStroke(dp(1), strokeColor)
             }
@@ -412,66 +330,37 @@ class YellowSafetyActivity : AppCompatActivity() {
             text = value
             textSize = size
             setTextColor(color)
-
-            if (bold) {
-                setTypeface(null, Typeface.BOLD)
-            }
+            if (bold) setTypeface(null, Typeface.BOLD)
         }
     }
 
     private fun formatTime(timestamp: Long): String {
-        return SimpleDateFormat(
-            "HH:mm",
-            Locale("tr", "TR")
-        ).format(Date(timestamp))
+        return SimpleDateFormat("HH:mm", Locale("tr", "TR"))
+            .format(Date(timestamp))
     }
 
     private fun formatListTime(timestamp: Long): String {
-        return SimpleDateFormat(
-            "dd.MM HH:mm",
-            Locale("tr", "TR")
-        ).format(Date(timestamp))
+        return SimpleDateFormat("dd.MM HH:mm", Locale("tr", "TR"))
+            .format(Date(timestamp))
     }
 
-    // SOHBET LİSTESİ
     private fun showConversationList() {
         isChatOpen = false
         panelContainer.removeAllViews()
 
         val screen = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(
-                dp(12),
-                dp(14),
-                dp(12),
-                dp(10)
-            )
-
-            background = roundedBackground(
-                darkBackground,
-                gold,
-                18
-            )
+            setPadding(dp(12), dp(14), dp(12), dp(10))
+            background = roundedBackground(darkBackground, gold, 18)
         }
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(
-                dp(4),
-                dp(4),
-                dp(4),
-                dp(14)
-            )
+            setPadding(dp(4), dp(4), dp(4), dp(14))
         }
 
-        val title = createText(
-            "MESAJLAR",
-            22f,
-            gold,
-            true
-        )
-
+        val title = createText("MESAJLAR", 22f, gold, true)
         header.addView(
             title,
             LinearLayout.LayoutParams(
@@ -481,22 +370,14 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
-        val subtitle = createText(
-            "EMERGENCY SAFETY",
-            10f,
-            softText,
-            true
-        )
-
+        val subtitle = createText("EMERGENCY SAFETY", 10f, softText, true)
         subtitle.gravity = Gravity.CENTER_VERTICAL
         header.addView(subtitle)
-
         screen.addView(header)
 
         val divider = View(this).apply {
             setBackgroundColor(Color.rgb(91, 75, 37))
         }
-
         screen.addView(
             divider,
             LinearLayout.LayoutParams(
@@ -505,45 +386,18 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
-        val sectionTitle = createText(
-            "SOHBETLER",
-            11f,
-            gold,
-            true
-        )
-
-        sectionTitle.setPadding(
-            dp(5),
-            dp(16),
-            dp(5),
-            dp(10)
-        )
-
+        val sectionTitle = createText("SOHBETLER", 11f, gold, true)
+        sectionTitle.setPadding(dp(5), dp(16), dp(5), dp(10))
         screen.addView(sectionTitle)
 
-        // ES BOT HER ZAMAN LİSTENİN EN ÜSTÜNDE
         val botRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(
-                dp(10),
-                dp(12),
-                dp(10),
-                dp(12)
-            )
-
-            background = roundedBackground(
-                panelBackground,
-                gold,
-                14
-            )
-
+            setPadding(dp(10), dp(12), dp(10), dp(12))
+            background = roundedBackground(panelBackground, gold, 14)
             isClickable = true
             isFocusable = true
-
-            setOnClickListener {
-                showBotChat()
-            }
+            setOnClickListener { showBotChat() }
         }
 
         val botAvatar = TextView(this).apply {
@@ -552,52 +406,23 @@ class YellowSafetyActivity : AppCompatActivity() {
             setTypeface(null, Typeface.BOLD)
             setTextColor(darkBackground)
             gravity = Gravity.CENTER
-            background = roundedBackground(
-                gold,
-                gold,
-                50
-            )
+            background = roundedBackground(gold, gold, 50)
         }
-
-        botRow.addView(
-            botAvatar,
-            LinearLayout.LayoutParams(
-                dp(48),
-                dp(48)
-            )
-        )
+        botRow.addView(botAvatar, LinearLayout.LayoutParams(dp(48), dp(48)))
 
         val botInfo = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(
-                dp(12),
-                0,
-                dp(4),
-                0
-            )
+            setPadding(dp(12), 0, dp(4), 0)
         }
 
-        val botName = createText(
-            "ES Bot",
-            16f,
-            Color.WHITE,
-            true
-        )
-
+        val botName = createText("ES Bot", 16f, Color.WHITE, true)
         val latestMessage = historyDatabase.getLatestMessage()
-
         val previewText = latestMessage?.message
             ?: "Merhaba! Ben EmergencySafety Bot."
 
-        val botPreview = createText(
-            previewText,
-            12f,
-            softText
-        )
-
+        val botPreview = createText(previewText, 12f, softText)
         botPreview.maxLines = 1
-        botPreview.ellipsize =
-            android.text.TextUtils.TruncateAt.END
+        botPreview.ellipsize = android.text.TextUtils.TruncateAt.END
 
         botInfo.addView(botName)
         botInfo.addView(botPreview)
@@ -616,23 +441,16 @@ class YellowSafetyActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         }
 
-        val testLabel = createText(
-            "TEST",
-            10f,
-            gold,
-            true
-        )
-
-        rightInfo.addView(testLabel)
+        rightInfo.addView(createText("TEST", 10f, gold, true))
 
         if (latestMessage != null) {
-            val timeText = createText(
-                formatListTime(latestMessage.timestamp),
-                9f,
-                softText
+            rightInfo.addView(
+                createText(
+                    formatListTime(latestMessage.timestamp),
+                    9f,
+                    softText
+                )
             )
-
-            rightInfo.addView(timeText)
         }
 
         botRow.addView(rightInfo)
@@ -650,7 +468,6 @@ class YellowSafetyActivity : AppCompatActivity() {
         val listDivider = View(this).apply {
             setBackgroundColor(Color.rgb(65, 61, 48))
         }
-
         screen.addView(
             listDivider,
             LinearLayout.LayoutParams(
@@ -662,20 +479,10 @@ class YellowSafetyActivity : AppCompatActivity() {
         val emptyArea = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(
-                dp(15),
-                dp(30),
-                dp(15),
-                dp(30)
-            )
+            setPadding(dp(15), dp(30), dp(15), dp(30))
         }
 
-        val emptyIcon = createText(
-            "◌",
-            42f,
-            gold
-        )
-
+        val emptyIcon = createText("◌", 42f, gold)
         emptyIcon.gravity = Gravity.CENTER
 
         val emptyTitle = createText(
@@ -684,7 +491,6 @@ class YellowSafetyActivity : AppCompatActivity() {
             Color.WHITE,
             true
         )
-
         emptyTitle.gravity = Gravity.CENTER
 
         val emptyDescription = createText(
@@ -693,12 +499,10 @@ class YellowSafetyActivity : AppCompatActivity() {
             12f,
             softText
         )
-
         emptyDescription.gravity = Gravity.CENTER
 
         emptyArea.addView(emptyIcon)
         emptyArea.addView(emptyTitle)
-
         emptyArea.addView(
             emptyDescription,
             LinearLayout.LayoutParams(
@@ -727,60 +531,26 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
-    // ES BOT SOHBET EKRANI
     private fun showBotChat() {
         isChatOpen = true
         panelContainer.removeAllViews()
 
         val screen = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-
-            background = roundedBackground(
-                darkBackground,
-                gold,
-                18
-            )
-
-            setPadding(
-                dp(10),
-                dp(8),
-                dp(10),
-                dp(10)
-            )
+            background = roundedBackground(darkBackground, gold, 18)
+            setPadding(dp(10), dp(8), dp(10), dp(10))
         }
 
-        // SOHBET BAŞLIĞI
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(
-                dp(2),
-                dp(4),
-                dp(2),
-                dp(10)
-            )
+            setPadding(dp(2), dp(4), dp(2), dp(10))
         }
 
-        val backButton = createText(
-            "‹",
-            36f,
-            gold,
-            true
-        )
-
+        val backButton = createText("‹", 36f, gold, true)
         backButton.gravity = Gravity.CENTER
-
-        backButton.setOnClickListener {
-            showConversationList()
-        }
-
-        header.addView(
-            backButton,
-            LinearLayout.LayoutParams(
-                dp(42),
-                dp(46)
-            )
-        )
+        backButton.setOnClickListener { showConversationList() }
+        header.addView(backButton, LinearLayout.LayoutParams(dp(42), dp(46)))
 
         val avatar = TextView(this).apply {
             text = "ES"
@@ -788,48 +558,17 @@ class YellowSafetyActivity : AppCompatActivity() {
             setTypeface(null, Typeface.BOLD)
             setTextColor(darkBackground)
             gravity = Gravity.CENTER
-
-            background = roundedBackground(
-                gold,
-                gold,
-                50
-            )
+            background = roundedBackground(gold, gold, 50)
         }
-
-        header.addView(
-            avatar,
-            LinearLayout.LayoutParams(
-                dp(42),
-                dp(42)
-            )
-        )
+        header.addView(avatar, LinearLayout.LayoutParams(dp(42), dp(42)))
 
         val nameArea = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(
-                dp(10),
-                0,
-                0,
-                0
-            )
+            setPadding(dp(10), 0, 0, 0)
         }
 
-        nameArea.addView(
-            createText(
-                "ES Bot",
-                16f,
-                Color.WHITE,
-                true
-            )
-        )
-
-        nameArea.addView(
-            createText(
-                "Yerel uygulama asistanı",
-                11f,
-                gold
-            )
-        )
+        nameArea.addView(createText("ES Bot", 16f, Color.WHITE, true))
+        nameArea.addView(createText("Yerel uygulama asistanı", 11f, gold))
 
         header.addView(
             nameArea,
@@ -840,39 +579,17 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
-        val menuButton = createText(
-            "⋮",
-            27f,
-            gold,
-            true
-        )
-
+        val menuButton = createText("⋮", 27f, gold, true)
         menuButton.gravity = Gravity.CENTER
-        menuButton.setPadding(
-            dp(8),
-            0,
-            dp(4),
-            0
-        )
-
-        menuButton.setOnClickListener {
-            showChatMenu(menuButton)
-        }
-
-        header.addView(
-            menuButton,
-            LinearLayout.LayoutParams(
-                dp(42),
-                dp(46)
-            )
-        )
+        menuButton.setPadding(dp(8), 0, dp(4), 0)
+        menuButton.setOnClickListener { showChatMenu(menuButton) }
+        header.addView(menuButton, LinearLayout.LayoutParams(dp(42), dp(46)))
 
         screen.addView(header)
 
         val divider = View(this).apply {
             setBackgroundColor(Color.rgb(91, 75, 37))
         }
-
         screen.addView(
             divider,
             LinearLayout.LayoutParams(
@@ -881,17 +598,10 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
-        // MESAJLARIN GÖRÜNDÜĞÜ ALAN
         messagesScroll = ScrollView(this).apply {
             isFillViewport = true
             clipToPadding = false
-
-            setPadding(
-                dp(2),
-                dp(10),
-                dp(2),
-                dp(10)
-            )
+            setPadding(dp(2), dp(10), dp(2), dp(10))
         }
 
         messagesColumn = LinearLayout(this).apply {
@@ -915,7 +625,6 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
-        // KAYITLI MESAJLARI YÜKLE
         var history = historyDatabase.getMessages()
 
         if (history.isEmpty()) {
@@ -926,7 +635,6 @@ class YellowSafetyActivity : AppCompatActivity() {
                     "yardım seçeneklerinden birini seçebilirsin.",
                 false
             )
-
             history = historyDatabase.getMessages()
         }
 
@@ -938,29 +646,18 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         }
 
-        // HIZLI YARDIM SADECE İLK AÇILIŞTA
         quickHelpContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
 
-        if (!botPreferences.getBoolean(
-                "quick_help_seen",
-                false
-            )
-        ) {
+        if (!botPreferences.getBoolean("quick_help_seen", false)) {
             addQuickHelpOptions()
         }
 
-        // MESAJ YAZMA ALANI
         val composer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(
-                0,
-                dp(8),
-                0,
-                0
-            )
+            setPadding(0, dp(8), 0, 0)
         }
 
         val locationButton = TextView(this).apply {
@@ -971,7 +668,6 @@ class YellowSafetyActivity : AppCompatActivity() {
             isClickable = true
             isFocusable = true
             contentDescription = "Konum paylaş"
-
             setOnClickListener {
                 Toast.makeText(
                     this@YellowSafetyActivity,
@@ -984,10 +680,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         composer.addView(
             locationButton,
-            LinearLayout.LayoutParams(
-                dp(42),
-                dp(48)
-            )
+            LinearLayout.LayoutParams(dp(42), dp(48))
         )
 
         val messageInput = EditText(this).apply {
@@ -997,14 +690,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             textSize = 14f
             maxLines = 3
             minLines = 1
-
-            setPadding(
-                dp(12),
-                dp(8),
-                dp(12),
-                dp(8)
-            )
-
+            setPadding(dp(12), dp(8), dp(12), dp(8))
             background = roundedBackground(
                 panelBackground,
                 Color.rgb(116, 94, 45),
@@ -1014,11 +700,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         composer.addView(
             messageInput,
-            LinearLayout.LayoutParams(
-                0,
-                dp(48),
-                1f
-            )
+            LinearLayout.LayoutParams(0, dp(48), 1f)
         )
 
         val sendButton = TextView(this).apply {
@@ -1027,13 +709,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             setTypeface(null, Typeface.BOLD)
             setTextColor(darkBackground)
             gravity = Gravity.CENTER
-
-            background = roundedBackground(
-                gold,
-                gold,
-                50
-            )
-
+            background = roundedBackground(gold, gold, 50)
             isClickable = true
             isFocusable = true
             contentDescription = "Mesaj gönder"
@@ -1041,17 +717,12 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         composer.addView(
             sendButton,
-            LinearLayout.LayoutParams(
-                dp(46),
-                dp(46)
-            ).apply {
+            LinearLayout.LayoutParams(dp(46), dp(46)).apply {
                 marginStart = dp(8)
             }
         )
 
-        sendButton.setOnClickListener {
-            sendBotMessage(messageInput)
-        }
+        sendButton.setOnClickListener { sendBotMessage(messageInput) }
 
         messageInput.setOnEditorActionListener { _, _, _ ->
             sendBotMessage(messageInput)
@@ -1073,29 +744,22 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
     }
 
-    // SOHBET MENÜSÜ
     private fun showChatMenu(anchor: View) {
         val popup = PopupMenu(this, anchor)
 
-        if (botPreferences.getBoolean(
-                "quick_help_seen",
-                false
-            )
-        ) {
-            popup.menu.add(
-                "Hızlı yardımı tekrar göster"
-            ).setOnMenuItemClickListener {
-                showQuickHelpAgain()
-                true
-            }
+        if (botPreferences.getBoolean("quick_help_seen", false)) {
+            popup.menu.add("Hızlı yardımı tekrar göster")
+                .setOnMenuItemClickListener {
+                    showQuickHelpAgain()
+                    true
+                }
         }
 
-        popup.menu.add(
-            "Sohbeti temizle"
-        ).setOnMenuItemClickListener {
-            confirmClearChat()
-            true
-        }
+        popup.menu.add("Sohbeti temizle")
+            .setOnMenuItemClickListener {
+                confirmClearChat()
+                true
+            }
 
         popup.show()
     }
@@ -1115,24 +779,16 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
     }
 
-    // HIZLI YARDIM SEÇENEKLERİ
     private fun addQuickHelpOptions() {
+        // Hızlı yardım görünümü daha önce eklenmişse önce eski
+        // ebeveyninden çıkarılır. Böylece aynı görünüm iki kez eklenmez.
+        (quickHelpContainer.parent as? ViewGroup)
+            ?.removeView(quickHelpContainer)
+
         quickHelpContainer.removeAllViews()
 
-        val helpTitle = createText(
-            "HIZLI YARDIM",
-            11f,
-            gold,
-            true
-        )
-
-        helpTitle.setPadding(
-            dp(4),
-            dp(14),
-            dp(4),
-            dp(8)
-        )
-
+        val helpTitle = createText("HIZLI YARDIM", 11f, gold, true)
+        helpTitle.setPadding(dp(4), dp(14), dp(4), dp(8))
         quickHelpContainer.addView(helpTitle)
 
         val options = listOf(
@@ -1168,35 +824,19 @@ class YellowSafetyActivity : AppCompatActivity() {
                 text = "›  ${option.first}"
                 textSize = 13f
                 setTextColor(Color.WHITE)
-
-                setPadding(
-                    dp(12),
-                    dp(11),
-                    dp(12),
-                    dp(11)
-                )
-
+                setPadding(dp(12), dp(11), dp(12), dp(11))
                 background = roundedBackground(
                     panelBackground,
                     Color.rgb(116, 94, 45),
                     12
                 )
-
                 isClickable = true
                 isFocusable = true
 
                 setOnClickListener {
                     hideQuickHelp()
-
-                    addMessageBubble(
-                        option.first,
-                        true
-                    )
-
-                    addMessageBubble(
-                        option.second,
-                        false
-                    )
+                    addMessageBubble(option.first, true)
+                    addMessageBubble(option.second, false)
                 }
             }
 
@@ -1230,42 +870,22 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
     }
 
-    // KULLANICI MESAJI GÖNDERİR
     private fun sendBotMessage(input: EditText) {
         val message = input.text.toString().trim()
-
-        if (message.isBlank()) {
-            return
-        }
+        if (message.isBlank()) return
 
         hideQuickHelp()
-
-        addMessageBubble(
-            message,
-            true
-        )
-
+        addMessageBubble(message, true)
         input.setText("")
 
         val reply = getBotResponse(message)
+        addMessageBubble(reply.text, false)
 
-        addMessageBubble(
-            reply.text,
-            false
-        )
-
-        if (
-            reply.destination != null &&
-            !reply.actionLabel.isNullOrBlank()
-        ) {
-            addNavigationButton(
-                reply.actionLabel,
-                reply.destination
-            )
+        if (reply.destination != null && !reply.actionLabel.isNullOrBlank()) {
+            addNavigationButton(reply.actionLabel, reply.destination)
         }
     }
 
-    // BOT YANITLARI VE EKRAN YÖNLENDİRMELERİ
     private fun getBotResponse(message: String): BotReply {
         val question = message
             .lowercase(Locale("tr", "TR"))
@@ -1457,7 +1077,6 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
     }
 
-    // BOTUN AÇABİLECEĞİ MEVCUT EKRANLAR
     private fun addNavigationButton(
         label: String,
         destination: Class<out Activity>
@@ -1467,30 +1086,19 @@ class YellowSafetyActivity : AppCompatActivity() {
             textSize = 12f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
-
-            setPadding(
-                dp(13),
-                dp(11),
-                dp(13),
-                dp(11)
-            )
-
+            setPadding(dp(13), dp(11), dp(13), dp(11))
             background = roundedBackground(
                 Color.rgb(38, 59, 80),
                 Color.rgb(82, 116, 159),
                 12
             )
-
             isClickable = true
             isFocusable = true
 
             setOnClickListener {
                 try {
                     startActivity(
-                        Intent(
-                            this@YellowSafetyActivity,
-                            destination
-                        )
+                        Intent(this@YellowSafetyActivity, destination)
                     )
                 } catch (_: Exception) {
                     Toast.makeText(
@@ -1518,27 +1126,16 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
     }
 
-    // MESAJI VERİTABANINA KAYDET VE GÖSTER
     private fun addMessageBubble(
         message: String,
         isOutgoing: Boolean
     ) {
         val timestamp = System.currentTimeMillis()
 
-        historyDatabase.addMessage(
-            message,
-            isOutgoing,
-            timestamp
-        )
-
-        renderMessageBubble(
-            message,
-            isOutgoing,
-            timestamp
-        )
+        historyDatabase.addMessage(message, isOutgoing, timestamp)
+        renderMessageBubble(message, isOutgoing, timestamp)
     }
 
-    // MESAJ GÖRÜNÜMÜ
     private fun renderMessageBubble(
         message: String,
         isOutgoing: Boolean,
@@ -1546,57 +1143,24 @@ class YellowSafetyActivity : AppCompatActivity() {
     ) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-
-            gravity = if (isOutgoing) {
-                Gravity.END
-            } else {
-                Gravity.START
-            }
-
-            setPadding(
-                0,
-                dp(4),
-                0,
-                dp(4)
-            )
+            gravity = if (isOutgoing) Gravity.END else Gravity.START
+            setPadding(0, dp(4), 0, dp(4))
         }
 
         val messageColumn = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = if (isOutgoing) {
-                Gravity.END
-            } else {
-                Gravity.START
-            }
+            gravity = if (isOutgoing) Gravity.END else Gravity.START
         }
 
         val bubble = TextView(this).apply {
             text = message
             textSize = 14f
             setTextColor(Color.WHITE)
-
-            setPadding(
-                dp(12),
-                dp(10),
-                dp(12),
-                dp(10)
-            )
-
-            maxWidth = (
-                resources.displayMetrics.widthPixels * 0.70f
-            ).toInt()
-
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            maxWidth = (resources.displayMetrics.widthPixels * 0.70f).toInt()
             background = roundedBackground(
-                if (isOutgoing) {
-                    outgoingBubble
-                } else {
-                    incomingBubble
-                },
-                if (isOutgoing) {
-                    gold
-                } else {
-                    Color.rgb(85, 78, 58)
-                },
+                if (isOutgoing) outgoingBubble else incomingBubble,
+                if (isOutgoing) gold else Color.rgb(85, 78, 58),
                 14
             )
         }
@@ -1609,19 +1173,8 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
-        val time = createText(
-            formatTime(timestamp),
-            9f,
-            softText
-        )
-
-        time.setPadding(
-            dp(4),
-            dp(3),
-            dp(4),
-            0
-        )
-
+        val time = createText(formatTime(timestamp), 9f, softText)
+        time.setPadding(dp(4), dp(3), dp(4), 0)
         messageColumn.addView(time)
 
         row.addView(
@@ -1645,7 +1198,6 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
     }
 
-    // SOHBET TEMİZLEME ONAYI
     private fun confirmClearChat() {
         showBrandedDialog(
             title = "SOHBETİ TEMİZLE",
@@ -1660,11 +1212,9 @@ class YellowSafetyActivity : AppCompatActivity() {
             negativeText = "VAZGEÇ",
             onPositive = {
                 historyDatabase.clearMessages()
-
                 botPreferences.edit()
                     .putBoolean("quick_help_seen", false)
                     .apply()
-
                 showBotChat()
 
                 Toast.makeText(
@@ -1683,15 +1233,9 @@ class YellowSafetyActivity : AppCompatActivity() {
         if (::historyDatabase.isInitialized) {
             historyDatabase.close()
         }
-
         super.onDestroy()
     }
 }
-
-// ES BOT YEREL SOHBET VERİTABANI
-// Yalnızca ES Bot mesajlarını saklar.
-// Telefonun uygulamaya özel alanında tutulur.
-// Harici depolama izni gerektirmez.
 
 private class ESBotDatabase(context: Context) :
     SQLiteOpenHelper(
@@ -1704,7 +1248,6 @@ private class ESBotDatabase(context: Context) :
     companion object {
         private const val DATABASE_NAME = "es_bot_history.db"
         private const val DATABASE_VERSION = 1
-
         private const val TABLE_MESSAGES = "bot_messages"
         private const val COLUMN_ID = "id"
         private const val COLUMN_MESSAGE = "message"
@@ -1740,22 +1283,15 @@ private class ESBotDatabase(context: Context) :
     ) {
         val values = ContentValues().apply {
             put(COLUMN_MESSAGE, message)
-            put(
-                COLUMN_OUTGOING,
-                if (isOutgoing) 1 else 0
-            )
+            put(COLUMN_OUTGOING, if (isOutgoing) 1 else 0)
             put(COLUMN_TIMESTAMP, timestamp)
         }
 
-        writableDatabase.insert(
-            TABLE_MESSAGES,
-            null,
-            values
-        )
+        writableDatabase.insert(TABLE_MESSAGES, null, values)
     }
 
-    fun getMessages(): List<YellowSafetyActivity.BotMessage> {
-        val result = mutableListOf<YellowSafetyActivity.BotMessage>()
+    fun getMessages(): List<ESBotMessage> {
+        val result = mutableListOf<ESBotMessage>()
 
         val cursor = readableDatabase.query(
             TABLE_MESSAGES,
@@ -1775,7 +1311,7 @@ private class ESBotDatabase(context: Context) :
         cursor.use {
             while (it.moveToNext()) {
                 result.add(
-                    YellowSafetyActivity.BotMessage(
+                    ESBotMessage(
                         id = it.getLong(0),
                         message = it.getString(1),
                         isOutgoing = it.getInt(2) == 1,
@@ -1788,7 +1324,7 @@ private class ESBotDatabase(context: Context) :
         return result
     }
 
-    fun getLatestMessage(): YellowSafetyActivity.BotMessage? {
+    fun getLatestMessage(): ESBotMessage? {
         val cursor = readableDatabase.query(
             TABLE_MESSAGES,
             arrayOf(
@@ -1806,11 +1342,9 @@ private class ESBotDatabase(context: Context) :
         )
 
         cursor.use {
-            if (!it.moveToFirst()) {
-                return null
-            }
+            if (!it.moveToFirst()) return null
 
-            return YellowSafetyActivity.BotMessage(
+            return ESBotMessage(
                 id = it.getLong(0),
                 message = it.getString(1),
                 isOutgoing = it.getInt(2) == 1,
@@ -1820,10 +1354,6 @@ private class ESBotDatabase(context: Context) :
     }
 
     fun clearMessages() {
-        writableDatabase.delete(
-            TABLE_MESSAGES,
-            null,
-            null
-        )
+        writableDatabase.delete(TABLE_MESSAGES, null, null)
     }
 }
