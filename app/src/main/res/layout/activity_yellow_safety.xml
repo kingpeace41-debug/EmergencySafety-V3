@@ -11,64 +11,17 @@
         android:layout_height="match_parent"
         android:src="@drawable/wolf_yellow"
         android:scaleType="fitCenter"
-        android:contentDescription="Sarı kurt temalı arka plan" />
+        android:alpha="0.22"
+        android:contentDescription="Sarı kurt arka planı" />
 
-    <!-- SAYFA İÇERİĞİ -->
-    <ScrollView
+    <!-- YENİ MESAJLAŞMA PANELİ -->
+    <FrameLayout
+        android:id="@+id/messagePanelContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fillViewport="true"
-        android:background="@android:color/transparent"
-        android:clipToPadding="false">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center_horizontal"
-            android:paddingStart="24dp"
-            android:paddingEnd="24dp"
-            android:paddingTop="80dp"
-            android:paddingBottom="90dp">
-
-            <!-- YARDIM İSTE -->
-            <ImageView
-                android:id="@+id/btnYellowHelp"
-                android:layout_width="match_parent"
-                android:layout_height="100dp"
-                android:layout_marginTop="170dp"
-                android:src="@drawable/yellow_button_1"
-                android:scaleType="fitCenter"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Yardım iste" />
-
-            <!-- KONUMUMU PAYLAŞ -->
-            <ImageView
-                android:id="@+id/btnYellowLocation"
-                android:layout_width="match_parent"
-                android:layout_height="100dp"
-                android:layout_marginTop="5dp"
-                android:src="@drawable/yellow_button_2"
-                android:scaleType="fitCenter"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Konumumu paylaş" />
-
-            <!-- GÜVENLİK DESTEĞİ -->
-            <ImageView
-                android:id="@+id/btnYellowSafetySupport"
-                android:layout_width="match_parent"
-                android:layout_height="100dp"
-                android:layout_marginTop="5dp"
-                android:src="@drawable/yellow_button_3"
-                android:scaleType="fitCenter"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Güvenlik desteği" />
-
-        </LinearLayout>
-    </ScrollView>
+        android:layout_marginTop="60dp"
+        android:layout_marginBottom="60dp"
+        android:padding="12dp" />
 
     <!-- ÜST BANNER -->
     <ImageView
