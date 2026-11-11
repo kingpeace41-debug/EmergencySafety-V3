@@ -30,7 +30,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:gravity="center"
-        android:text="SECURE ACCESS VERIFICATION"
+        android:text="GÜVENLİ ERİŞİM DOĞRULAMASI"
         android:textColor="#9EB4D0"
         android:textSize="10sp"
         android:letterSpacing="0.08" />
@@ -109,7 +109,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
         android:gravity="center"
-        android:text="EMERGENCY SAFETY • YOUR SAFETY, OUR PRIORITY"
+        android:text="EMERGENCY SAFETY • SİZİN GÜVENLİĞİNİZ, BİZİM ÖNCELİĞİMİZ"
         android:textColor="#8495AC"
         android:textSize="9sp" />
 
