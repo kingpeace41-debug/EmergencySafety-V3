@@ -383,7 +383,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
 
         nameArea.addView(
-            createText("Test sohbeti", 11f, gold)
+            createText("Yerel test asistanı", 11f, gold)
         )
 
         header.addView(
@@ -440,7 +440,8 @@ class YellowSafetyActivity : AppCompatActivity() {
         addMessageBubble(
             "Merhaba! Ben ES Bot.\n\n" +
                 "EmergencySafety test sohbetine hoş geldin. " +
-                "Burada mesajlaşma ekranımızı deneyeceğiz.",
+                "Sorularını yazabilir veya aşağıdaki hızlı " +
+                "yardım seçeneklerinden birini seçebilirsin.",
             false
         )
 
@@ -531,8 +532,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             messageInput.setText("")
 
             addMessageBubble(
-                "Mesajını aldım. ES Bot şu anda deneme modunda. " +
-                    "Gerçek kullanıcı mesajlaşması sonraki aşamada bağlanacak.",
+                getBotResponse(message),
                 false
             )
         }
@@ -630,6 +630,103 @@ class YellowSafetyActivity : AppCompatActivity() {
                     bottomMargin = dp(7)
                 }
             )
+        }
+    }
+
+    // KULLANICININ YAZDIĞI MESAJI KONUYA GÖRE CEVAPLA
+    private fun getBotResponse(message: String): String {
+        val question = message
+            .lowercase()
+            .replace("ı", "i")
+            .replace("ğ", "g")
+            .replace("ü", "u")
+            .replace("ş", "s")
+            .replace("ö", "o")
+            .replace("ç", "c")
+
+        return when {
+            listOf(
+                "acil",
+                "yardim",
+                "tehlike",
+                "guvenlik",
+                "112"
+            ).any { question.contains(it) } -> {
+                "Acil bir durumdaysan öncelikle kendi " +
+                    "güvenliğini sağlamaya çalış. Türkiye'de " +
+                    "acil yardım için 112'yi arayabilirsin. " +
+                    "EmergencySafety'nin acil durum " +
+                    "özelliklerinin önceden ayarlanmış ve " +
+                    "test edilmiş olması önemlidir. Ben bu " +
+                    "deneme sohbetinden acil çağrı gönderemem."
+            }
+
+            listOf(
+                "konum",
+                "harita",
+                "neredeyim",
+                "nerede"
+            ).any { question.contains(it) } -> {
+                "Konum paylaşımı için planımız, sohbet " +
+                    "içinden konumunu harita bağlantısı " +
+                    "olarak gönderebilmen. Bu özellik henüz " +
+                    "bağlanmadı; sonraki geliştirme " +
+                    "aşamasında üzerinde çalışacağız."
+            }
+
+            listOf(
+                "uygulama",
+                "emergencysafety",
+                "nedir",
+                "ne ise yarar"
+            ).any { question.contains(it) } -> {
+                "EmergencySafety, acil durum ve kişisel " +
+                    "güvenlik amacıyla geliştirilen bir " +
+                    "uygulamadır. Acil durum protokolleri, " +
+                    "güvenlik araçları ve ileride uygulama " +
+                    "içi kullanıcı iletişimi sunmayı hedefliyor."
+            }
+
+            listOf(
+                "mesaj",
+                "sohbet",
+                "iletisim",
+                "baglanti"
+            ).any { question.contains(it) } -> {
+                "Uygulama içinde kullanıcıların birbirini " +
+                    "bulabildiği, bağlantı isteği gönderdiği " +
+                    "ve karşılıklı onaydan sonra özel sohbet " +
+                    "edebildiği bir sistem hazırlamayı " +
+                    "hedefliyoruz. Şu an bu ekran deneme " +
+                    "aşamasında."
+            }
+
+            listOf(
+                "merhaba",
+                "selam",
+                "gunaydin",
+                "iyi aksamlar"
+            ).any { question.contains(it) } -> {
+                "Merhaba! EmergencySafety Bot olarak " +
+                    "buradayım. Acil durum, uygulama " +
+                    "özellikleri veya mesajlaşma hakkında " +
+                    "sorularını yazabilirsin."
+            }
+
+            question.contains("tesekkur") ||
+                question.contains("sagol") -> {
+                "Rica ederim! EmergencySafety'yi " +
+                    "geliştirmeye devam ediyoruz."
+            }
+
+            else -> {
+                "Seni tam anlayamadım. Şimdilik acil " +
+                    "durum, EmergencySafety uygulaması, " +
+                    "mesajlaşma veya konum paylaşımı " +
+                    "hakkında soru sorabilirsin. Ben şu anda " +
+                    "internet bağlantısı olmayan yerel " +
+                    "deneme asistanıyım."
+            }
         }
     }
 
