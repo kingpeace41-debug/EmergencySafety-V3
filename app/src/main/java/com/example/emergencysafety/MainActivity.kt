@@ -1,4 +1,3 @@
-
 package com.example.emergencysafety
 
 import android.Manifest
@@ -856,41 +855,23 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // İlk açılış izinleri AuthActivity tarafından istenir.
+    // Burada yalnızca mikrofon izni varsa önceden etkin olan servis başlatılır.
     private fun checkPermissionsAndStartService() {
-        val permissions = mutableListOf(
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.CAMERA,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        val missingPermissions = permissions.filter {
+        val hasMicrophonePermission =
             ContextCompat.checkSelfPermission(
                 this,
-                it
-            ) != PackageManager.PERMISSION_GRANTED
-        }
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
 
-        if (missingPermissions.isNotEmpty()) {
-            ActivityCompat.requestPermissions(
-                this,
-                missingPermissions.toTypedArray(),
-                101
-            )
-        } else {
-            val sharedPref =
-                getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
+        val sharedPref =
+            getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
 
-            val isVoiceActive =
-                sharedPref.getBoolean("is_voice_active", false)
+        val isVoiceActive =
+            sharedPref.getBoolean("is_voice_active", false)
 
-            if (isVoiceActive) {
-                startVoiceService()
-            }
+        if (isVoiceActive && hasMicrophonePermission) {
+            startVoiceService()
         }
     }
 
@@ -1017,4 +998,3 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 }
- a
