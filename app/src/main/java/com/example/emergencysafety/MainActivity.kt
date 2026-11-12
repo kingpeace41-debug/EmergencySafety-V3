@@ -32,8 +32,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
 
@@ -55,10 +53,6 @@ class MainActivity : AppCompatActivity() {
 
     private val accountPreferences by lazy {
         getSharedPreferences("AccountSettings", Context.MODE_PRIVATE)
-    }
-
-    private val permissionPreferences by lazy {
-        getSharedPreferences("PermissionSettings", Context.MODE_PRIVATE)
     }
 
     companion object {
@@ -112,7 +106,6 @@ class MainActivity : AppCompatActivity() {
         )
 
         checkPermissionsAndStartService()
-        checkOverlayPermission()
 
         val btnRedAlertId =
             resources.getIdentifier("btnRedAlert", "id", packageName)
@@ -844,33 +837,17 @@ class MainActivity : AppCompatActivity() {
     private fun ensureMicrophonePermission() {
         val permission = Manifest.permission.RECORD_AUDIO
 
-        if (
-            ContextCompat.checkSelfPermission(
-                this,
-                permission
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
+        if (AppPermissionManager.isGranted(this, permission)) {
             activateVoiceService()
             return
         }
 
-        val deniedBefore = permissionPreferences.getBoolean(
-            "denied_before_$permission",
-            false
-        )
-
-        val shouldShowRationale =
-            ActivityCompat.shouldShowRequestPermissionRationale(
-                this,
-                permission
-            )
-
-        if (deniedBefore && !shouldShowRationale) {
+        if (AppPermissionManager.shouldOpenSettings(this, permission)) {
             showMicrophoneSettingsDialog()
             return
         }
 
-        if (shouldShowRationale) {
+        if (AppPermissionManager.shouldShowRationale(this, permission)) {
             AlertDialog.Builder(this)
                 .setTitle("Mikrofon izni gerekli")
                 .setMessage(
@@ -889,8 +866,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestMicrophonePermission() {
-        ActivityCompat.requestPermissions(
-            this,
+        requestPermissions(
             arrayOf(Manifest.permission.RECORD_AUDIO),
             REQUEST_MICROPHONE_PERMISSION
         )
@@ -944,13 +920,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     // İlk açılış izinleri AuthActivity tarafından istenir.
-    // Burada yalnızca mikrofon izni varsa önceden etkin olan servis başlatılır.
+    // Burada ortak izin yöneticisiyle mikrofon izni kontrol edilir.
     private fun checkPermissionsAndStartService() {
-        val hasMicrophonePermission =
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
+        val hasMicrophonePermission = AppPermissionManager.isGranted(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        )
 
         val sharedPref =
             getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
@@ -960,18 +935,6 @@ class MainActivity : AppCompatActivity() {
 
         if (isVoiceActive && hasMicrophonePermission) {
             startVoiceService()
-        }
-    }
-
-    private fun checkOverlayPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!Settings.canDrawOverlays(this)) {
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-                startActivityForResult(intent, 102)
-            }
         }
     }
 
@@ -1069,12 +1032,11 @@ class MainActivity : AppCompatActivity() {
                 grantResults.isNotEmpty() &&
                     grantResults[0] == PackageManager.PERMISSION_GRANTED
 
-            permissionPreferences.edit()
-                .putBoolean(
-                    "denied_before_${Manifest.permission.RECORD_AUDIO}",
-                    !permissionGranted
-                )
-                .apply()
+            AppPermissionManager.recordPermissionResults(
+                this,
+                permissions,
+                grantResults
+            )
 
             if (permissionGranted) {
                 activateVoiceService()
@@ -1086,7 +1048,7 @@ class MainActivity : AppCompatActivity() {
                 ).show()
 
                 if (
-                    !ActivityCompat.shouldShowRequestPermissionRationale(
+                    AppPermissionManager.shouldOpenSettings(
                         this,
                         Manifest.permission.RECORD_AUDIO
                     )
