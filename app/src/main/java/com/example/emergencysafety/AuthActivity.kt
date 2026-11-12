@@ -192,6 +192,45 @@ class AuthActivity : AppCompatActivity() {
         }
     }
 
+    // İlk açılışta kullanıcının izin yanıtlarını kaydeder.
+    // Bu bilgi, ilgili özellik kullanıldığında tekrar izin
+    // istenip istenemeyeceğini anlamak için kullanılır.
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(
+            requestCode,
+            permissions,
+            grantResults
+        )
+
+        if (requestCode == REQUEST_INITIAL_PERMISSIONS) {
+            val permissionPreferences = getSharedPreferences(
+                "PermissionSettings",
+                MODE_PRIVATE
+            )
+
+            val editor = permissionPreferences.edit()
+
+            permissions.forEachIndexed { index, permission ->
+                if (index < grantResults.size) {
+                    val isGranted =
+                        grantResults[index] ==
+                            PackageManager.PERMISSION_GRANTED
+
+                    editor.putBoolean(
+                        "denied_before_$permission",
+                        !isGranted
+                    )
+                }
+            }
+
+            editor.apply()
+        }
+    }
+
     private fun startWolfReaction() {
         if (wolfReactionActive) return
 
