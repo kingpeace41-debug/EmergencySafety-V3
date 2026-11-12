@@ -1,12 +1,9 @@
 
 package com.example.emergencysafety
 
-import android.Manifest
 import android.app.AlertDialog
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.media.MediaPlayer
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -21,8 +18,6 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -162,39 +157,34 @@ class AuthActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * İlk açılışta bütün normal izinleri ortak
+     * izin yöneticisi üzerinden topluca ister.
+     */
     private fun requestInitialPermissions() {
-        val permissions = mutableListOf(
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.CAMERA,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(
-                Manifest.permission.POST_NOTIFICATIONS
-            )
-        }
+        val permissions =
+            AppPermissionManager.getInitialPermissions()
 
-        val missingPermissions = permissions.filter {
-            ContextCompat.checkSelfPermission(
+        val missingPermissions =
+            AppPermissionManager.getMissingPermissions(
                 this,
-                it
-            ) != PackageManager.PERMISSION_GRANTED
-        }
+                permissions
+            )
 
         if (missingPermissions.isNotEmpty()) {
-            ActivityCompat.requestPermissions(
+            androidx.core.app.ActivityCompat.requestPermissions(
                 this,
-                missingPermissions.toTypedArray(),
+                missingPermissions,
                 REQUEST_INITIAL_PERMISSIONS
             )
         }
     }
 
-    // İlk açılışta kullanıcının izin yanıtlarını kaydeder.
-    // Bu bilgi, ilgili özellik kullanıldığında tekrar izin
-    // istenip istenemeyeceğini anlamak için kullanılır.
+    /**
+     * İlk açılışta verilen veya reddedilen bütün
+     * izin yanıtlarını ortak yöneticide kaydeder.
+     */
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -207,27 +197,27 @@ class AuthActivity : AppCompatActivity() {
         )
 
         if (requestCode == REQUEST_INITIAL_PERMISSIONS) {
-            val permissionPreferences = getSharedPreferences(
-                "PermissionSettings",
-                MODE_PRIVATE
+
+            AppPermissionManager.recordPermissionResults(
+                this,
+                permissions,
+                grantResults
             )
 
-            val editor = permissionPreferences.edit()
-
-            permissions.forEachIndexed { index, permission ->
-                if (index < grantResults.size) {
-                    val isGranted =
-                        grantResults[index] ==
-                            PackageManager.PERMISSION_GRANTED
-
-                    editor.putBoolean(
-                        "denied_before_$permission",
-                        !isGranted
-                    )
+            val deniedPermissions =
+                permissions.filterIndexed { index, _ ->
+                    index < grantResults.size &&
+                        grantResults[index] !=
+                        android.content.pm.PackageManager.PERMISSION_GRANTED
                 }
-            }
 
-            editor.apply()
+            if (deniedPermissions.isNotEmpty()) {
+                Toast.makeText(
+                    this,
+                    "Bazı izinler verilmedi. İlgili özellikleri kullanırken tekrar isteyebiliriz.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
