@@ -1,3 +1,4 @@
+
 package com.example.emergencysafety
 
 import android.Manifest
@@ -56,8 +57,13 @@ class MainActivity : AppCompatActivity() {
         getSharedPreferences("AccountSettings", Context.MODE_PRIVATE)
     }
 
+    private val permissionPreferences by lazy {
+        getSharedPreferences("PermissionSettings", Context.MODE_PRIVATE)
+    }
+
     companion object {
         private const val SIREN_STRIP_INTERVAL_MS = 700L
+        private const val REQUEST_MICROPHONE_PERMISSION = 401
     }
 
     private val sirenStripRunnable = object : Runnable {
@@ -822,20 +828,102 @@ class MainActivity : AppCompatActivity() {
         val isCurrentlyActive =
             sharedPref.getBoolean("is_voice_active", false)
 
-        val newActiveState = !isCurrentlyActive
+        if (isCurrentlyActive) {
+            sharedPref.edit()
+                .putBoolean("is_voice_active", false)
+                .apply()
 
-        sharedPref.edit()
-            .putBoolean("is_voice_active", newActiveState)
-            .apply()
-
-        if (newActiveState) {
-            startVoiceService()
-            playGrowl()
-        } else {
             stopVoiceService()
+            updateWolfImage(false)
+            return
         }
 
-        updateWolfImage(newActiveState)
+        ensureMicrophonePermission()
+    }
+
+    private fun ensureMicrophonePermission() {
+        val permission = Manifest.permission.RECORD_AUDIO
+
+        if (
+            ContextCompat.checkSelfPermission(
+                this,
+                permission
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            activateVoiceService()
+            return
+        }
+
+        val deniedBefore = permissionPreferences.getBoolean(
+            "denied_before_$permission",
+            false
+        )
+
+        val shouldShowRationale =
+            ActivityCompat.shouldShowRequestPermissionRationale(
+                this,
+                permission
+            )
+
+        if (deniedBefore && !shouldShowRationale) {
+            showMicrophoneSettingsDialog()
+            return
+        }
+
+        if (shouldShowRationale) {
+            AlertDialog.Builder(this)
+                .setTitle("Mikrofon izni gerekli")
+                .setMessage(
+                    "Sesli acil durum komutlarını dinleyebilmek için " +
+                        "mikrofon iznine ihtiyacımız var. İzin verirsen " +
+                        "sesli dinleme özelliği açılacak."
+                )
+                .setNegativeButton("ŞİMDİ DEĞİL", null)
+                .setPositiveButton("İZİN VER") { _, _ ->
+                    requestMicrophonePermission()
+                }
+                .show()
+        } else {
+            requestMicrophonePermission()
+        }
+    }
+
+    private fun requestMicrophonePermission() {
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.RECORD_AUDIO),
+            REQUEST_MICROPHONE_PERMISSION
+        )
+    }
+
+    private fun showMicrophoneSettingsDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Mikrofon izni kapalı")
+            .setMessage(
+                "Mikrofon izni daha önce kalıcı olarak reddedilmiş " +
+                    "görünüyor. Sesli dinlemeyi kullanmak için " +
+                    "Android uygulama ayarlarından mikrofon iznini açmalısın."
+            )
+            .setNegativeButton("VAZGEÇ", null)
+            .setPositiveButton("AYARLARI AÇ") { _, _ ->
+                val intent = Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+            }
+            .show()
+    }
+
+    private fun activateVoiceService() {
+        getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("is_voice_active", true)
+            .apply()
+
+        startVoiceService()
+        playGrowl()
+        updateWolfImage(true)
     }
 
     private fun vibrateOnClick() {
@@ -976,15 +1064,35 @@ class MainActivity : AppCompatActivity() {
             grantResults
         )
 
-        if (requestCode == 101) {
-            val sharedPref =
-                getSharedPreferences("AppSettings", Context.MODE_PRIVATE)
+        if (requestCode == REQUEST_MICROPHONE_PERMISSION) {
+            val permissionGranted =
+                grantResults.isNotEmpty() &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED
 
-            val isVoiceActive =
-                sharedPref.getBoolean("is_voice_active", false)
+            permissionPreferences.edit()
+                .putBoolean(
+                    "denied_before_${Manifest.permission.RECORD_AUDIO}",
+                    !permissionGranted
+                )
+                .apply()
 
-            if (isVoiceActive) {
-                startVoiceService()
+            if (permissionGranted) {
+                activateVoiceService()
+            } else {
+                Toast.makeText(
+                    this,
+                    "Mikrofon izni verilmedi. Sesli dinleme açılmadı.",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                if (
+                    !ActivityCompat.shouldShowRequestPermissionRationale(
+                        this,
+                        Manifest.permission.RECORD_AUDIO
+                    )
+                ) {
+                    showMicrophoneSettingsDialog()
+                }
             }
         }
     }
