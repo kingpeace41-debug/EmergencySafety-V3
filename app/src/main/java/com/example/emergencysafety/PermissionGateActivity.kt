@@ -1,24 +1,21 @@
 
 package com.example.emergencysafety
 
-import android.Manifest
 import android.app.AlertDialog
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 
 class PermissionGateActivity : AppCompatActivity() {
 
     companion object {
         private const val REQUEST_OVERLAY = 201
-        private const val REQUEST_RUNTIME = 202
+
+        const val EXTRA_REQUEST_INITIAL_PERMISSIONS =
+            "com.example.emergencysafety.REQUEST_INITIAL_PERMISSIONS"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,7 +36,7 @@ class PermissionGateActivity : AppCompatActivity() {
 
             startActivityForResult(intent, REQUEST_OVERLAY)
         } else {
-            requestOtherPermissions()
+            openAccountScreen()
         }
     }
 
@@ -56,7 +53,7 @@ class PermissionGateActivity : AppCompatActivity() {
                 Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
                 Settings.canDrawOverlays(this)
             ) {
-                requestOtherPermissions()
+                openAccountScreen()
             } else {
                 showOverlayPermissionDialog()
             }
@@ -68,8 +65,8 @@ class PermissionGateActivity : AppCompatActivity() {
             .setTitle("İzin gerekli")
             .setMessage(
                 "EmergencySafety uygulamasının bazı güvenlik " +
-                "özellikleri için diğer uygulamaların üzerinde " +
-                "görünme iznine ihtiyacı var."
+                    "özellikleri için diğer uygulamaların üzerinde " +
+                    "görünme iznine ihtiyacı var."
             )
             .setCancelable(false)
             .setPositiveButton("TEKRAR DENE") { _, _ ->
@@ -81,57 +78,18 @@ class PermissionGateActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun requestOtherPermissions() {
-        val permissions = mutableListOf(
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.CAMERA,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-
-        val missingPermissions = permissions.filter {
-            ContextCompat.checkSelfPermission(
-                this,
-                it
-            ) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (missingPermissions.isEmpty()) {
-            openAccountScreen()
-            return
-        }
-
-        ActivityCompat.requestPermissions(
-            this,
-            missingPermissions.toTypedArray(),
-            REQUEST_RUNTIME
-        )
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(
-            requestCode,
-            permissions,
-            grantResults
-        )
-
-        if (requestCode == REQUEST_RUNTIME) {
-            openAccountScreen()
-        }
-    }
-
     private fun openAccountScreen() {
-        startActivity(
-            Intent(this, AuthActivity::class.java)
-        )
+        val intent = Intent(
+            this,
+            AuthActivity::class.java
+        ).apply {
+            putExtra(
+                EXTRA_REQUEST_INITIAL_PERMISSIONS,
+                true
+            )
+        }
+
+        startActivity(intent)
         finish()
     }
 }
