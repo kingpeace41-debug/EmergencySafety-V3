@@ -1,9 +1,12 @@
 
 package com.example.emergencysafety
 
+import android.Manifest
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.MediaPlayer
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -18,6 +21,8 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -34,11 +39,13 @@ class AuthActivity : AppCompatActivity() {
 
         private const val API_BASE_URL =
             "https://emergency-safety.com/api"
+
+        private const val REQUEST_INITIAL_PERMISSIONS = 301
     }
 
     private lateinit var emailInput: EditText
     private lateinit var loginButton: Button
-    private lateinit var continueWithoutAccountButton: Button
+    private lateinit var continueWithoutAccountButton
 
     private lateinit var wolfTouchArea: FrameLayout
     private lateinit var angryWolfImage: ImageView
@@ -140,6 +147,48 @@ class AuthActivity : AppCompatActivity() {
                 .apply()
 
             openMainActivity()
+        }
+
+        val requestInitialPermissions =
+            intent.getBooleanExtra(
+                PermissionGateActivity.EXTRA_REQUEST_INITIAL_PERMISSIONS,
+                false
+            )
+
+        if (requestInitialPermissions) {
+            window.decorView.post {
+                requestInitialPermissions()
+            }
+        }
+    }
+
+    private fun requestInitialPermissions() {
+        val permissions = mutableListOf(
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CAMERA,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+        }
+
+        val missingPermissions = permissions.filter {
+            ContextCompat.checkSelfPermission(
+                this,
+                it
+            ) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missingPermissions.isNotEmpty()) {
+            ActivityCompat.requestPermissions(
+                this,
+                missingPermissions.toTypedArray(),
+                REQUEST_INITIAL_PERMISSIONS
+            )
         }
     }
 
@@ -279,8 +328,6 @@ class AuthActivity : AppCompatActivity() {
             .setCancelable(true)
             .create()
 
-        // Kod doğrulandıktan sonra oturum başlatma başarısız
-        // olursa aynı doğrulanmış token ile yeniden denenebilir.
         var pendingAccessToken: String? = null
         var pendingUserId: String? = null
         var pendingUsername: String? = null
@@ -338,8 +385,6 @@ class AuthActivity : AppCompatActivity() {
                             "Sunucu oturum bilgilerini eksik gönderdi."
                     } else {
                         try {
-                            // Tokenlar Android Keystore ile
-                            // şifrelenerek cihazda saklanır.
                             SecureSessionStore.saveSession(
                                 applicationContext,
                                 accessToken,
@@ -397,8 +442,6 @@ class AuthActivity : AppCompatActivity() {
         }
 
         verifyButton.setOnClickListener {
-            // E-posta kodu daha önce doğrulandıysa
-            // tekrar kod istemeden oturum başlatmayı dener.
             if (!pendingAccessToken.isNullOrBlank()) {
                 beginDeviceSession()
                 return@setOnClickListener
@@ -461,8 +504,6 @@ class AuthActivity : AppCompatActivity() {
                         return@post
                     }
 
-                    // Doğrulama tamamlandı.
-                    // Şimdi cihaz oturumu oluşturulacak.
                     pendingAccessToken = accessToken
                     pendingUserId = userId
                     pendingUsername = username
