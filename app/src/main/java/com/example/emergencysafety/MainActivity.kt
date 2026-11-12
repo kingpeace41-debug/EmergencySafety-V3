@@ -125,9 +125,14 @@ class MainActivity : AppCompatActivity() {
         if (btnYellowAlertId != 0) {
             findViewById<View>(btnYellowAlertId)?.setOnClickListener {
                 vibrateOnClick()
-                startActivity(
-                    Intent(this, YellowSafetyActivity::class.java)
-                )
+
+                if (isRegisteredUser()) {
+                    startActivity(
+                        Intent(this, YellowSafetyActivity::class.java)
+                    )
+                } else {
+                    showAccountDialog()
+                }
             }
         }
 
@@ -159,6 +164,34 @@ class MainActivity : AppCompatActivity() {
             vibrateOnClick()
             toggleVoiceService()
         }
+    }
+
+    private fun isRegisteredUser(): Boolean {
+        val isGuest = accountPreferences.getBoolean(
+            "guest_mode",
+            true
+        )
+
+        val email = accountPreferences.getString(
+            "account_email",
+            ""
+        ).orEmpty().trim()
+
+        val userId = accountPreferences.getString(
+            "api_user_id",
+            ""
+        ).orEmpty().trim()
+
+        val accessToken = try {
+            SecureSessionStore.getAccessToken(applicationContext).orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+
+        return !isGuest &&
+            email.isNotBlank() &&
+            userId.isNotBlank() &&
+            accessToken.isNotBlank()
     }
 
     private fun setupAccountButton() {
@@ -255,10 +288,7 @@ class MainActivity : AppCompatActivity() {
 
     // EMERGENCY SAFETY ÖZEL HESAP PENCERESİ
     private fun showAccountDialog() {
-        val isGuest = accountPreferences.getBoolean(
-            "guest_mode",
-            false
-        )
+        val isRegistered = isRegisteredUser()
 
         val email = accountPreferences.getString(
             "account_email",
@@ -432,7 +462,7 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        if (isGuest || email.isBlank()) {
+        if (!isRegistered) {
             title.text = "MİSAFİR KULLANIMI"
 
             message.text =
@@ -987,3 +1017,4 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 }
+ a
