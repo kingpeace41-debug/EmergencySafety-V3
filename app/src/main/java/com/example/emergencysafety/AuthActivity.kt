@@ -45,7 +45,7 @@ class AuthActivity : AppCompatActivity() {
 
     private lateinit var emailInput: EditText
     private lateinit var loginButton: Button
-    private lateinit var continueWithoutAccountButton
+    private lateinit var continueWithoutAccountButton: Button
 
     private lateinit var wolfTouchArea: FrameLayout
     private lateinit var angryWolfImage: ImageView
