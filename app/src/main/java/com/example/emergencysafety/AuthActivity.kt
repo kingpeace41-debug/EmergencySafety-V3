@@ -393,9 +393,8 @@ class AuthActivity : AppCompatActivity() {
                             )
                         )
 
-                    // ÖNEMLİ:
-                    // Başlangıç token'ı değil, sunucunun
-                    // oluşturduğu oturuma bağlı accessToken kaydedilir.
+                    // Sunucunun oluşturduğu oturuma bağlı
+                    // yeni accessToken alınır.
                     val sessionAccessToken =
                         sessionResult.data.optString(
                             "accessToken",
@@ -428,36 +427,50 @@ class AuthActivity : AppCompatActivity() {
                         errorMessage =
                             "Sunucu oturum bilgilerini eksik gönderdi."
                     } else {
-                        try {
-                            SecureSessionStore.saveSession(
-                                applicationContext,
-                                sessionAccessToken,
-                                refreshToken,
-                                sessionId,
-                                userId
-                            )
 
-                            val preferencesSaved =
-                                accountPreferences.edit()
-                                    .remove("api_access_token")
-                                    .putString("api_user_id", userId)
-                                    .putString("api_username", username)
-                                    .putString("account_email", verifiedEmail)
-                                    .putBoolean("onboarding_completed", true)
-                                    .putBoolean("guest_mode", false)
-                                    .commit()
+                        // ÖNEMLİ GÜVENLİK KONTROLÜ:
+                        // Yeni erişim anahtarı, oturum kaydedilmeden
+                        // önce korumalı /auth/me adresinde doğrulanır.
+                        val authCheck = getJson(
+                            "/auth/me",
+                            sessionAccessToken
+                        )
 
-                            if (!preferencesSaved) {
-                                throw IllegalStateException(
-                                    "Hesap bilgileri kaydedilemedi."
-                                )
-                            }
-
-                            sessionSaved = true
-
-                        } catch (e: Exception) {
+                        if (!authCheck.success) {
                             errorMessage =
-                                "Güvenli oturum kaydedilemedi. Tekrar dene."
+                                "Sunucu yeni oturumu doğrulayamadı. Lütfen tekrar giriş yap."
+                        } else {
+                            try {
+                                SecureSessionStore.saveSession(
+                                    applicationContext,
+                                    sessionAccessToken,
+                                    refreshToken,
+                                    sessionId,
+                                    userId
+                                )
+
+                                val preferencesSaved =
+                                    accountPreferences.edit()
+                                        .remove("api_access_token")
+                                        .putString("api_user_id", userId)
+                                        .putString("api_username", username)
+                                        .putString("account_email", verifiedEmail)
+                                        .putBoolean("onboarding_completed", true)
+                                        .putBoolean("guest_mode", false)
+                                        .commit()
+
+                                if (!preferencesSaved) {
+                                    throw IllegalStateException(
+                                        "Hesap bilgileri kaydedilemedi."
+                                    )
+                                }
+
+                                sessionSaved = true
+
+                            } catch (e: Exception) {
+                                errorMessage =
+                                    "Güvenli oturum kaydedilemedi. Tekrar dene."
+                            }
                         }
                     }
                 }
@@ -470,7 +483,7 @@ class AuthActivity : AppCompatActivity() {
 
                         Toast.makeText(
                             this,
-                            "Giriş başarılı. Güvenli oturum oluşturuldu.",
+                            "Giriş başarılı. Sunucu oturumu doğrulandı.",
                             Toast.LENGTH_LONG
                         ).show()
 
@@ -610,9 +623,45 @@ class AuthActivity : AppCompatActivity() {
         val data: JSONObject
     )
 
+    /**
+     * POST istekleri.
+     */
     private fun postJson(
         path: String,
         body: JSONObject,
+        bearerToken: String? = null
+    ): ApiResult {
+        return requestJson(
+            path = path,
+            method = "POST",
+            body = body,
+            bearerToken = bearerToken
+        )
+    }
+
+    /**
+     * Korumalı GET isteği.
+     * /auth/me kontrolü bu metodu kullanır.
+     */
+    private fun getJson(
+        path: String,
+        bearerToken: String
+    ): ApiResult {
+        return requestJson(
+            path = path,
+            method = "GET",
+            body = null,
+            bearerToken = bearerToken
+        )
+    }
+
+    /**
+     * Ortak HTTP istek yöneticisi.
+     */
+    private fun requestJson(
+        path: String,
+        method: String,
+        body: JSONObject?,
         bearerToken: String? = null
     ): ApiResult {
         var connection: HttpURLConnection? = null
@@ -622,20 +671,25 @@ class AuthActivity : AppCompatActivity() {
                 (URL(API_BASE_URL + path).openConnection()
                     as HttpURLConnection).apply {
 
-                    requestMethod = "POST"
+                    requestMethod = method
                     connectTimeout = 15000
                     readTimeout = 15000
-                    doOutput = true
 
-                    setRequestProperty(
-                        "Content-Type",
-                        "application/json; charset=utf-8"
-                    )
+                    if (method == "POST") {
+                        doOutput = true
+                    }
 
                     setRequestProperty(
                         "Accept",
                         "application/json"
                     )
+
+                    if (body != null) {
+                        setRequestProperty(
+                            "Content-Type",
+                            "application/json; charset=utf-8"
+                        )
+                    }
 
                     if (!bearerToken.isNullOrBlank()) {
                         setRequestProperty(
@@ -645,10 +699,12 @@ class AuthActivity : AppCompatActivity() {
                     }
                 }
 
-            connection.outputStream.use { output ->
-                output.write(
-                    body.toString().toByteArray(StandardCharsets.UTF_8)
-                )
+            if (body != null) {
+                connection.outputStream.use { output ->
+                    output.write(
+                        body.toString().toByteArray(StandardCharsets.UTF_8)
+                    )
+                }
             }
 
             val status = connection.responseCode
