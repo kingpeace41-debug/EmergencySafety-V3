@@ -1,4 +1,3 @@
-
 package com.example.emergencysafety
 
 import android.app.AlertDialog
@@ -363,7 +362,7 @@ class AuthActivity : AppCompatActivity() {
         var pendingEmail: String? = null
 
         fun beginDeviceSession() {
-            val accessToken = pendingAccessToken ?: return
+            val bootstrapToken = pendingAccessToken ?: return
             val userId = pendingUserId ?: return
             val username = pendingUsername ?: return
             val verifiedEmail = pendingEmail ?: return
@@ -375,7 +374,7 @@ class AuthActivity : AppCompatActivity() {
                 val sessionResult = postJson(
                     "/auth/session/start",
                     JSONObject(),
-                    accessToken
+                    bootstrapToken
                 )
 
                 var sessionSaved = false
@@ -394,6 +393,21 @@ class AuthActivity : AppCompatActivity() {
                             )
                         )
 
+                    // ÖNEMLİ:
+                    // Başlangıç token'ı değil, sunucunun
+                    // oluşturduğu oturuma bağlı accessToken kaydedilir.
+                    val sessionAccessToken =
+                        sessionResult.data.optString(
+                            "accessToken",
+                            sessionResult.data.optString(
+                                "access_token",
+                                sessionObject?.optString(
+                                    "accessToken",
+                                    ""
+                                ).orEmpty()
+                            )
+                        )
+
                     val refreshToken =
                         sessionResult.data.optString(
                             "refreshToken",
@@ -407,6 +421,7 @@ class AuthActivity : AppCompatActivity() {
                         )
 
                     if (
+                        sessionAccessToken.isBlank() ||
                         sessionId.isBlank() ||
                         refreshToken.isBlank()
                     ) {
@@ -416,7 +431,7 @@ class AuthActivity : AppCompatActivity() {
                         try {
                             SecureSessionStore.saveSession(
                                 applicationContext,
-                                accessToken,
+                                sessionAccessToken,
                                 refreshToken,
                                 sessionId,
                                 userId
