@@ -1,5 +1,3 @@
-Kotlin
-
 package com.example.emergencysafety
 
 import android.app.AlertDialog
