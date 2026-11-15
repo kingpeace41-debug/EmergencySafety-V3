@@ -23,6 +23,7 @@ import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 import java.util.concurrent.Executors
 
 class AuthActivity : AppCompatActivity() {
@@ -304,7 +305,10 @@ class AuthActivity : AppCompatActivity() {
                 setLoginLoading(false)
 
                 if (result.success) {
-                    showEmailVerificationDialog(email)
+                    showEmailVerificationDialog(
+                        email,
+                        result.data.optLong("expiresIn", 120L)
+                    )
 
                     Toast.makeText(
                         this,
@@ -318,7 +322,10 @@ class AuthActivity : AppCompatActivity() {
         }
     }
 
-    private fun showEmailVerificationDialog(email: String) {
+    private fun showEmailVerificationDialog(
+        email: String,
+        initialOtpLifetimeSeconds: Long
+    ) {
         val dialogView = layoutInflater.inflate(
             R.layout.dialog_email_verification,
             null
@@ -360,6 +367,49 @@ class AuthActivity : AppCompatActivity() {
         var pendingUserId: String? = null
         var pendingUsername: String? = null
         var pendingEmail: String? = null
+
+        // OTP geri sayımı: sunucunun bildirdiği süreyi kullanır.
+        var otpCountdownEndElapsedRealtime = 0L
+
+        val otpCountdownRunnable = object : Runnable {
+            override fun run() {
+                val remainingMillis =
+                    (otpCountdownEndElapsedRealtime -
+                        SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+
+                if (remainingMillis > 0L) {
+                    val remainingSeconds =
+                        (remainingMillis + 999L) / 1000L
+
+                    val minutes = remainingSeconds / 60L
+                    val seconds = remainingSeconds % 60L
+
+                    resendButton.isEnabled = false
+                    resendButton.text = String.format(
+                        Locale("tr", "TR"),
+                        "YENİ KOD İSTE (%02d:%02d)",
+                        minutes,
+                        seconds
+                    )
+
+                    mainHandler.postDelayed(this, 1000L)
+                } else {
+                    resendButton.isEnabled = true
+                    resendButton.text = "KODU TEKRAR GÖNDER"
+                }
+            }
+        }
+
+        fun startOtpCountdown(seconds: Long) {
+            mainHandler.removeCallbacks(otpCountdownRunnable)
+
+            val safeSeconds = seconds.coerceIn(1L, 300L)
+            otpCountdownEndElapsedRealtime =
+                SystemClock.elapsedRealtime() + safeSeconds * 1000L
+
+            resendButton.isEnabled = false
+            mainHandler.post(otpCountdownRunnable)
+        }
 
         fun beginDeviceSession() {
             val bootstrapToken = pendingAccessToken ?: return
@@ -428,8 +478,7 @@ class AuthActivity : AppCompatActivity() {
                             "Sunucu oturum bilgilerini eksik gönderdi."
                     } else {
 
-                        // ÖNEMLİ GÜVENLİK KONTROLÜ:
-                        // Yeni erişim anahtarı, oturum kaydedilmeden
+                        // Yeni erişim anahtarı oturum kaydedilmeden
                         // önce korumalı /auth/me adresinde doğrulanır.
                         val authCheck = getJson(
                             "/auth/me",
@@ -580,7 +629,7 @@ class AuthActivity : AppCompatActivity() {
             }
 
             resendButton.isEnabled = false
-            resendButton.text = "KOD GÖNDERİLİYOR..."
+            resendButton.text = "YENİ KOD GÖNDERİLİYOR..."
 
             networkExecutor.execute {
                 val result = postJson(
@@ -591,21 +640,40 @@ class AuthActivity : AppCompatActivity() {
                 mainHandler.post {
                     if (isFinishing || isDestroyed) return@post
 
-                    resendButton.isEnabled = true
-                    resendButton.text = "KODU TEKRAR GÖNDER"
+                    if (result.success) {
+                        startOtpCountdown(
+                            result.data.optLong("expiresIn", 120L)
+                        )
 
-                    showMessage(
-                        if (result.success) {
+                        showMessage(
                             "Yeni kod e-posta adresine gönderildi."
+                        )
+                    } else {
+                        val retryAfter = result.data.optLong(
+                            "retryAfter",
+                            result.data.optLong("retry_after", 0L)
+                        )
+
+                        if (retryAfter > 0L) {
+                            startOtpCountdown(retryAfter)
                         } else {
-                            result.message
+                            resendButton.isEnabled = true
+                            resendButton.text = "KODU TEKRAR GÖNDER"
                         }
-                    )
+
+                        showMessage(result.message)
+                    }
                 }
             }
         }
 
+        dialog.setOnDismissListener {
+            mainHandler.removeCallbacks(otpCountdownRunnable)
+        }
+
         dialog.show()
+
+        startOtpCountdown(initialOtpLifetimeSeconds)
 
         dialog.window?.setBackgroundDrawableResource(
             android.R.color.transparent
