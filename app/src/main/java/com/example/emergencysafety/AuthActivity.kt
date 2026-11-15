@@ -1,3 +1,4 @@
+
 package com.example.emergencysafety
 
 import android.app.AlertDialog
@@ -25,6 +26,9 @@ import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.concurrent.Executors
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class AuthActivity : AppCompatActivity() {
 
@@ -94,6 +98,24 @@ class AuthActivity : AppCompatActivity() {
             )
 
         if (onboardingCompleted && !forceShowAccount) {
+            val isGuest = accountPreferences.getBoolean(
+                "guest_mode",
+                true
+            )
+            val savedUserId = accountPreferences.getString(
+                "api_user_id",
+                ""
+            ).orEmpty()
+            val savedAccessToken = try {
+                SecureSessionStore.getAccessToken(applicationContext)
+            } catch (_: Exception) {
+                null
+            }
+
+            if (!isGuest && !savedAccessToken.isNullOrBlank() && savedUserId.isNotBlank()) {
+                initializeMatrixInBackground(savedAccessToken, savedUserId)
+            }
+
             openMainActivity()
             return
         }
@@ -516,6 +538,11 @@ class AuthActivity : AppCompatActivity() {
 
                                 sessionSaved = true
 
+                                initializeMatrixInBackground(
+                                    sessionAccessToken,
+                                    userId
+                                )
+
                             } catch (e: Exception) {
                                 errorMessage =
                                     "Güvenli oturum kaydedilemedi. Tekrar dene."
@@ -820,6 +847,43 @@ class AuthActivity : AppCompatActivity() {
             )
         } finally {
             connection?.disconnect()
+        }
+    }
+
+    /**
+     * Matrix hesabını arka planda hazırlar.
+     * Bu işlem giriş akışını veya acil durum özelliklerini bekletmez.
+     * Başarılı hazırlama kullanıcı kimliğiyle işaretlenir;
+     * başarısız olursa sonraki uygulama açılışında tekrar denenir.
+     */
+    private fun initializeMatrixInBackground(
+        accessToken: String,
+        userId: String
+    ) {
+        val initializedUserId = accountPreferences.getString(
+            "matrix_initialized_user_id",
+            ""
+        ).orEmpty()
+
+        if (initializedUserId == userId) return
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val result = postJson(
+                "/matrix/initialize",
+                JSONObject(),
+                accessToken
+            )
+
+            if (result.success) {
+                accountPreferences.edit()
+                    .putString("matrix_initialized_user_id", userId)
+                    .apply()
+            } else {
+                android.util.Log.w(
+                    "EmergencySafety",
+                    "Matrix hesabi simdilik hazirlanamadi."
+                )
+            }
         }
     }
 
