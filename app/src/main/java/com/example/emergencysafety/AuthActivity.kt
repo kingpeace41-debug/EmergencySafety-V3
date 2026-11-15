@@ -1,3 +1,4 @@
+Kotlin
 
 package com.example.emergencysafety
 
@@ -102,18 +103,14 @@ class AuthActivity : AppCompatActivity() {
                 "guest_mode",
                 true
             )
+
             val savedUserId = accountPreferences.getString(
                 "api_user_id",
                 ""
             ).orEmpty()
-            val savedAccessToken = try {
-                SecureSessionStore.getAccessToken(applicationContext)
-            } catch (_: Exception) {
-                null
-            }
 
-            if (!isGuest && !savedAccessToken.isNullOrBlank() && savedUserId.isNotBlank()) {
-                initializeMatrixInBackground(savedAccessToken, savedUserId)
+            if (!isGuest && savedUserId.isNotBlank()) {
+                initializeMatrixInBackground(savedUserId)
             }
 
             openMainActivity()
@@ -390,7 +387,6 @@ class AuthActivity : AppCompatActivity() {
         var pendingUsername: String? = null
         var pendingEmail: String? = null
 
-        // OTP geri sayımı: sunucunun bildirdiği süreyi kullanır.
         var otpCountdownEndElapsedRealtime = 0L
 
         val otpCountdownRunnable = object : Runnable {
@@ -465,8 +461,6 @@ class AuthActivity : AppCompatActivity() {
                             )
                         )
 
-                    // Sunucunun oluşturduğu oturuma bağlı
-                    // yeni accessToken alınır.
                     val sessionAccessToken =
                         sessionResult.data.optString(
                             "accessToken",
@@ -500,8 +494,6 @@ class AuthActivity : AppCompatActivity() {
                             "Sunucu oturum bilgilerini eksik gönderdi."
                     } else {
 
-                        // Yeni erişim anahtarı oturum kaydedilmeden
-                        // önce korumalı /auth/me adresinde doğrulanır.
                         val authCheck = getJson(
                             "/auth/me",
                             sessionAccessToken
@@ -538,10 +530,7 @@ class AuthActivity : AppCompatActivity() {
 
                                 sessionSaved = true
 
-                                initializeMatrixInBackground(
-                                    sessionAccessToken,
-                                    userId
-                                )
+                                initializeMatrixInBackground(userId)
 
                             } catch (e: Exception) {
                                 errorMessage =
@@ -736,7 +725,6 @@ class AuthActivity : AppCompatActivity() {
 
     /**
      * Korumalı GET isteği.
-     * /auth/me kontrolü bu metodu kullanır.
      */
     private fun getJson(
         path: String,
@@ -852,36 +840,112 @@ class AuthActivity : AppCompatActivity() {
 
     /**
      * Matrix hesabını arka planda hazırlar.
-     * Bu işlem giriş akışını veya acil durum özelliklerini bekletmez.
-     * Başarılı hazırlama kullanıcı kimliğiyle işaretlenir;
-     * başarısız olursa sonraki uygulama açılışında tekrar denenir.
+     *
+     * Önce kayıtlı refresh token ile sunucu oturumu yenilenir.
+     * Sunucu refresh token değerini de değiştirdiği için
+     * iki yeni token birlikte güvenli alana kaydedilir.
+     *
+     * Ardından yeni access token ile Matrix hazırlığı yapılır.
+     * Başarısız olursa sonraki uygulama açılışında yeniden denenir.
      */
     private fun initializeMatrixInBackground(
-        accessToken: String,
         userId: String
     ) {
-        val initializedUserId = accountPreferences.getString(
-            "matrix_initialized_user_id",
-            ""
-        ).orEmpty()
-
-        if (initializedUserId == userId) return
+        if (userId.isBlank()) return
 
         CoroutineScope(Dispatchers.IO).launch {
-            val result = postJson(
-                "/matrix/initialize",
-                JSONObject(),
-                accessToken
-            )
+            try {
+                val savedRefreshToken =
+                    SecureSessionStore.getRefreshToken(
+                        applicationContext
+                    )
 
-            if (result.success) {
-                accountPreferences.edit()
-                    .putString("matrix_initialized_user_id", userId)
-                    .apply()
-            } else {
-                android.util.Log.w(
+                if (savedRefreshToken.isNullOrBlank()) {
+                    android.util.Log.w(
+                        "EmergencySafety",
+                        "Matrix hazırlığı: kayıtlı yenileme anahtarı bulunamadı."
+                    )
+                    return@launch
+                }
+
+                // Önce cihaz oturumunu yenile.
+                val refreshResult = postJson(
+                    "/auth/session/refresh",
+                    JSONObject().put(
+                        "refreshToken",
+                        savedRefreshToken
+                    )
+                )
+
+                if (!refreshResult.success) {
+                    android.util.Log.w(
+                        "EmergencySafety",
+                        "Matrix hazırlığı: sunucu oturumu yenilenemedi."
+                    )
+                    return@launch
+                }
+
+                val newAccessToken =
+                    refreshResult.data.optString(
+                        "accessToken",
+                        ""
+                    )
+
+                val newRefreshToken =
+                    refreshResult.data.optString(
+                        "refreshToken",
+                        ""
+                    )
+
+                if (
+                    newAccessToken.isBlank() ||
+                    newRefreshToken.isBlank()
+                ) {
+                    android.util.Log.w(
+                        "EmergencySafety",
+                        "Matrix hazırlığı: yenileme yanıtı eksik."
+                    )
+                    return@launch
+                }
+
+                // Dönen iki yeni anahtarı güvenli alana kaydet.
+                SecureSessionStore.updateTokens(
+                    applicationContext,
+                    newAccessToken,
+                    newRefreshToken
+                )
+
+                // Yeni erişim anahtarıyla Matrix hesabını hazırla.
+                val matrixResult = postJson(
+                    "/matrix/initialize",
+                    JSONObject(),
+                    newAccessToken
+                )
+
+                if (matrixResult.success) {
+                    accountPreferences.edit()
+                        .putString(
+                            "matrix_initialized_user_id",
+                            userId
+                        )
+                        .apply()
+
+                    android.util.Log.i(
+                        "EmergencySafety",
+                        "Matrix hesabı hazırlandı."
+                    )
+                } else {
+                    android.util.Log.w(
+                        "EmergencySafety",
+                        "Matrix hesabı simdilik hazirlanamadi."
+                    )
+                }
+
+            } catch (e: Exception) {
+                android.util.Log.e(
                     "EmergencySafety",
-                    "Matrix hesabi simdilik hazirlanamadi."
+                    "Matrix hazırlığı sırasında beklenmeyen hata.",
+                    e
                 )
             }
         }
