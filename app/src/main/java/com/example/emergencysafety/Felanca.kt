@@ -973,7 +973,12 @@ class YellowSafetyActivity : AppCompatActivity() {
 
                 val shouldRender =
                     column.childCount == 0 ||
-                    signature != lastPrivateMessageSignature
+                    signature != lastPrivateMessageSignature ||
+                    (messages.isEmpty() &&
+                        column.childCount == 1 &&
+                        (column.getChildAt(0) as? TextView)?.text
+                            ?.toString()
+                            ?.contains("Mesajlar yükleniyor") == true)
 
                 if (shouldRender) {
                     lastPrivateMessageSignature = signature
@@ -1081,6 +1086,13 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         if (cleanMessage.isEmpty()) return
 
+        // Önceki gönderim hâlâ devam ediyorsa tekrar gönderme.
+        if (isSendingMessage) return
+
+        isSendingMessage = true
+        privateSendButton?.isEnabled = false
+        privateSendButton?.alpha = 0.5f
+
         Thread {
             val result = ConnectionApi.sendMessage(
                 this,
@@ -1091,6 +1103,10 @@ class YellowSafetyActivity : AppCompatActivity() {
 
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
+
+                isSendingMessage = false
+                privateSendButton?.isEnabled = true
+                privateSendButton?.alpha = 1f
 
                 if (result.success) {
                     privateInput?.text?.clear()
