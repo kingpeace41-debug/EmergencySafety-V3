@@ -57,6 +57,8 @@ class AuthActivity : AppCompatActivity() {
     private var wolfReactionActive = false
     private var wolfPressStartedAt = 0L
 
+    private var sessionRestoreDialog: AlertDialog? = null
+
     private val wolfFadeInDuration = 3000L
 
     private val accountPreferences by lazy {
@@ -109,13 +111,21 @@ class AuthActivity : AppCompatActivity() {
             ).orEmpty()
 
             if (!isGuest && savedUserId.isNotBlank()) {
-                initializeMatrixInBackground(savedUserId)
+                restoreRegisteredSession(savedUserId)
+                return
             }
 
             openMainActivity()
             return
         }
 
+        showAuthenticationScreen()
+    }
+
+    /**
+     * E-posta ile giriş ekranını hazırlar.
+     */
+    private fun showAuthenticationScreen() {
         setContentView(R.layout.activity_auth)
 
         emailInput = findViewById(R.id.authEmail)
@@ -176,11 +186,113 @@ class AuthActivity : AppCompatActivity() {
     }
 
     /**
+     * Kayıtlı kullanıcı ana ekrana geçmeden önce
+     * sunucu oturumunu yeniler.
+     *
+     * Refresh token sunucu tarafından döndürüldüğünde
+     * iki yeni token birlikte güvenli alana kaydedilir.
+     */
+    private fun restoreRegisteredSession(userId: String) {
+        val progressDialog = AlertDialog.Builder(this)
+            .setMessage("Güvenli oturum kontrol ediliyor...")
+            .setCancelable(false)
+            .create()
+
+        sessionRestoreDialog = progressDialog
+        progressDialog.show()
+
+        networkExecutor.execute {
+            var restored = false
+            var newAccessToken = ""
+            var errorMessage =
+                "Oturum yenilenemedi. Lütfen tekrar giriş yap."
+
+            try {
+                val savedRefreshToken =
+                    SecureSessionStore.getRefreshToken(
+                        applicationContext
+                    )
+
+                if (savedRefreshToken.isNullOrBlank()) {
+                    errorMessage =
+                        "Kayıtlı oturum anahtarı bulunamadı. Lütfen tekrar giriş yap."
+                } else {
+                    val refreshResult = postJson(
+                        "/auth/session/refresh",
+                        JSONObject().put(
+                            "refreshToken",
+                            savedRefreshToken
+                        )
+                    )
+
+                    if (!refreshResult.success) {
+                        errorMessage = refreshResult.message
+                    } else {
+                        newAccessToken =
+                            refreshResult.data.optString(
+                                "accessToken",
+                                ""
+                            )
+
+                        val newRefreshToken =
+                            refreshResult.data.optString(
+                                "refreshToken",
+                                ""
+                            )
+
+                        if (
+                            newAccessToken.isBlank() ||
+                            newRefreshToken.isBlank()
+                        ) {
+                            errorMessage =
+                                "Sunucu oturum yenileme bilgilerini eksik gönderdi."
+                        } else {
+                            SecureSessionStore.updateTokens(
+                                applicationContext,
+                                newAccessToken,
+                                newRefreshToken
+                            )
+
+                            restored = true
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                errorMessage =
+                    "Oturum kontrolünde bağlantı hatası oluştu. İnternet bağlantını kontrol et."
+            }
+
+            mainHandler.post {
+                if (isFinishing || isDestroyed) return@post
+
+                sessionRestoreDialog?.dismiss()
+                sessionRestoreDialog = null
+
+                if (restored) {
+                    initializeMatrixInBackground(
+                        userId,
+                        newAccessToken
+                    )
+
+                    openMainActivity()
+                } else {
+                    Toast.makeText(
+                        this,
+                        errorMessage,
+                        Toast.LENGTH_LONG
+                    ).show()
+
+                    showAuthenticationScreen()
+                }
+            }
+        }
+    }
+
+    /**
      * İlk açılışta bütün normal izinleri ortak
      * izin yöneticisi üzerinden topluca ister.
      */
     private fun requestInitialPermissions() {
-
         val permissions =
             AppPermissionManager.getInitialPermissions()
 
@@ -215,7 +327,6 @@ class AuthActivity : AppCompatActivity() {
         )
 
         if (requestCode == REQUEST_INITIAL_PERMISSIONS) {
-
             AppPermissionManager.recordPermissionResults(
                 this,
                 permissions,
@@ -446,6 +557,7 @@ class AuthActivity : AppCompatActivity() {
 
                 var sessionSaved = false
                 var errorMessage = sessionResult.message
+                var savedSessionAccessToken = ""
 
                 if (sessionResult.success) {
                     val sessionObject =
@@ -492,7 +604,6 @@ class AuthActivity : AppCompatActivity() {
                         errorMessage =
                             "Sunucu oturum bilgilerini eksik gönderdi."
                     } else {
-
                         val authCheck = getJson(
                             "/auth/me",
                             sessionAccessToken
@@ -518,7 +629,10 @@ class AuthActivity : AppCompatActivity() {
                         } else if (
                             !serverEmailVerified ||
                             serverVerifiedEmail.isBlank() ||
-                            !serverVerifiedEmail.equals(verifiedEmail, ignoreCase = true)
+                            !serverVerifiedEmail.equals(
+                                verifiedEmail,
+                                ignoreCase = true
+                            )
                         ) {
                             errorMessage =
                                 "Sunucu doğrulanmış e-posta bilgisini onaylayamadı. Lütfen tekrar giriş yap."
@@ -549,8 +663,7 @@ class AuthActivity : AppCompatActivity() {
                                 }
 
                                 sessionSaved = true
-
-                                initializeMatrixInBackground(userId)
+                                savedSessionAccessToken = sessionAccessToken
 
                             } catch (e: Exception) {
                                 errorMessage =
@@ -565,6 +678,11 @@ class AuthActivity : AppCompatActivity() {
 
                     if (sessionSaved) {
                         dialog.dismiss()
+
+                        initializeMatrixInBackground(
+                            userId,
+                            savedSessionAccessToken
+                        )
 
                         Toast.makeText(
                             this,
@@ -861,85 +979,22 @@ class AuthActivity : AppCompatActivity() {
     /**
      * Matrix hesabını arka planda hazırlar.
      *
-     * Önce kayıtlı refresh token ile sunucu oturumu yenilenir.
-     * Sunucu refresh token değerini de değiştirdiği için
-     * iki yeni token birlikte güvenli alana kaydedilir.
-     *
-     * Ardından yeni access token ile Matrix hazırlığı yapılır.
-     * Başarısız olursa sonraki uygulama açılışında yeniden denenir.
+     * Bu metot artık oturum yenilemez.
+     * Oturum yenilemesi AuthActivity tarafından tamamlanır.
+     * Buraya hazır access token verilir.
      */
     private fun initializeMatrixInBackground(
-        userId: String
+        userId: String,
+        accessToken: String
     ) {
-        if (userId.isBlank()) return
+        if (userId.isBlank() || accessToken.isBlank()) return
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val savedRefreshToken =
-                    SecureSessionStore.getRefreshToken(
-                        applicationContext
-                    )
-
-                if (savedRefreshToken.isNullOrBlank()) {
-                    android.util.Log.w(
-                        "EmergencySafety",
-                        "Matrix hazırlığı: kayıtlı yenileme anahtarı bulunamadı."
-                    )
-                    return@launch
-                }
-
-                // Önce cihaz oturumunu yenile.
-                val refreshResult = postJson(
-                    "/auth/session/refresh",
-                    JSONObject().put(
-                        "refreshToken",
-                        savedRefreshToken
-                    )
-                )
-
-                if (!refreshResult.success) {
-                    android.util.Log.w(
-                        "EmergencySafety",
-                        "Matrix hazırlığı: sunucu oturumu yenilenemedi."
-                    )
-                    return@launch
-                }
-
-                val newAccessToken =
-                    refreshResult.data.optString(
-                        "accessToken",
-                        ""
-                    )
-
-                val newRefreshToken =
-                    refreshResult.data.optString(
-                        "refreshToken",
-                        ""
-                    )
-
-                if (
-                    newAccessToken.isBlank() ||
-                    newRefreshToken.isBlank()
-                ) {
-                    android.util.Log.w(
-                        "EmergencySafety",
-                        "Matrix hazırlığı: yenileme yanıtı eksik."
-                    )
-                    return@launch
-                }
-
-                // Dönen iki yeni anahtarı güvenli alana kaydet.
-                SecureSessionStore.updateTokens(
-                    applicationContext,
-                    newAccessToken,
-                    newRefreshToken
-                )
-
-                // Yeni erişim anahtarıyla Matrix hesabını hazırla.
                 val matrixResult = postJson(
                     "/matrix/initialize",
                     JSONObject(),
-                    newAccessToken
+                    accessToken
                 )
 
                 if (matrixResult.success) {
@@ -997,9 +1052,14 @@ class AuthActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        sessionRestoreDialog?.dismiss()
+        sessionRestoreDialog = null
+
         stopWolfReaction()
         wolfHandler.removeCallbacksAndMessages(null)
+
         networkExecutor.shutdownNow()
+
         super.onDestroy()
     }
 }
