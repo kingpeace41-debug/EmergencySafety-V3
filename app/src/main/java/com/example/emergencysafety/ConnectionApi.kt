@@ -54,13 +54,19 @@ internal object ConnectionApi {
                 "Sunucu bağlantı bilgilerini döndürmedi."
             )
 
+        val item = ConnectionApiItem(
+            id = connection.optString("id", ""),
+            email = response.optString("recipientEmail", ""),
+            createdAt = connection.optString("created_at", "")
+        )
+
         return ConnectionApiResult(
             success = true,
             message = response.optString(
                 "message",
                 "Bağlantı isteği gönderildi."
             ),
-            data = parseItem(connection, "recipientEmail")
+            data = item
         )
     }
 
@@ -85,10 +91,7 @@ internal object ConnectionApi {
 
         for (index in 0 until array.length()) {
             val item = array.optJSONObject(index) ?: continue
-
-            items.add(
-                parseItem(item, "email")
-            )
+            items.add(parseItem(item, "email"))
         }
 
         return ConnectionApiResult(
@@ -119,10 +122,7 @@ internal object ConnectionApi {
 
         for (index in 0 until array.length()) {
             val item = array.optJSONObject(index) ?: continue
-
-            items.add(
-                parseItem(item, "email")
-            )
+            items.add(parseItem(item, "email"))
         }
 
         return ConnectionApiResult(
@@ -217,7 +217,10 @@ internal object ConnectionApi {
             if (token.isNullOrBlank()) {
                 return JSONObject()
                     .put("success", false)
-                    .put("message", "Oturum bulunamadı. Yeniden giriş yapın.")
+                    .put(
+                        "message",
+                        "Oturum bulunamadı. Yeniden giriş yapın."
+                    )
             }
 
             connection = (
