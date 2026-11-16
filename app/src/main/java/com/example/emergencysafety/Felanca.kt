@@ -56,7 +56,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     private var privateSendButton: TextView? = null
     private var isSendingMessage = false
 
-    // Özel sohbetin otomatik yenilenmesi için.
+    // Özel sohbetin otomatik yenilenmesi için (Polling)
     private val privateChatHandler = Handler(Looper.getMainLooper())
     private var privateChatRefreshRunnable: Runnable? = null
     private var isLoadingPrivateMessages = false
@@ -953,13 +953,13 @@ class YellowSafetyActivity : AppCompatActivity() {
                 val column = privateMessagesColumn ?: return@runOnUiThread
 
                 if (!result.success || result.data == null) {
-                    if (column.childCount == 0) {
-                        addPrivateInfoMessage(
-                            result.message.ifBlank {
-                                "Mesajlar şu anda alınamadı."
-                            }
-                        )
-                    }
+                    // Yükleniyor yazısını temizleyip hatayı gösteriyoruz (Ekranda takılma önlendi)
+                    column.removeAllViews()
+                    addPrivateInfoMessage(
+                        result.message.ifBlank {
+                            "Mesajlar şu anda alınamadı."
+                        }
+                    )
                     return@runOnUiThread
                 }
 
@@ -994,11 +994,19 @@ class YellowSafetyActivity : AppCompatActivity() {
                         }
                     }
 
-                    privateMessagesScroll?.post {
-                        privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
+                    // Kullanıcı zaten yukarıda eski mesajları okumuyorsa (en alttaysa) aşağı kaydır
+                    privateMessagesScroll?.let { scroll ->
+                        val child = scroll.getChildAt(0)
+                        val isNearBottom = child == null || scroll.scrollY >= (child.measuredHeight - scroll.height - 150)
+                        if (isNearBottom || column.childCount <= 1) {
+                            scroll.post {
+                                scroll.fullScroll(View.FOCUS_DOWN)
+                            }
+                        }
                     }
                 }
 
+                // Okundu bilgisi: Sadece başarılı olunca set'e eklenir, hata alırsa tekrar denenebilir
                 val unreadIds = messages
                     .filter {
                         !it.isOutgoing &&
@@ -1086,7 +1094,6 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         if (cleanMessage.isEmpty()) return
 
-        // Önceki gönderim hâlâ devam ediyorsa tekrar gönderme.
         if (isSendingMessage) return
 
         isSendingMessage = true
@@ -1128,15 +1135,12 @@ class YellowSafetyActivity : AppCompatActivity() {
         connection: ConnectionApiItem,
         messageIds: List<String>
     ) {
-        val newIds = messageIds.filter {
-            attemptedReadMessageIds.add(it)
-        }
-
-        if (newIds.isEmpty()) return
-
         Thread {
-            newIds.forEach { messageId ->
-                ConnectionApi.markMessageRead(this, messageId)
+            messageIds.forEach { messageId ->
+                val res = ConnectionApi.markMessageRead(this, messageId)
+                if (res.success) {
+                    attemptedReadMessageIds.add(messageId)
+                }
             }
         }.start()
     }
