@@ -12,6 +12,8 @@ import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -53,6 +55,13 @@ class YellowSafetyActivity : AppCompatActivity() {
     private var privateInput: EditText? = null
     private var privateSendButton: TextView? = null
     private var isSendingMessage = false
+
+    // Özel sohbetin otomatik yenilenmesi için.
+    private val privateChatHandler = Handler(Looper.getMainLooper())
+    private var privateChatRefreshRunnable: Runnable? = null
+    private var isLoadingPrivateMessages = false
+    private val attemptedReadMessageIds = mutableSetOf<String>()
+    private var lastPrivateMessageSignature = ""
 
     private val gold = Color.rgb(232, 184, 55)
     private val darkBackground = Color.rgb(19, 19, 18)
@@ -353,7 +362,13 @@ class YellowSafetyActivity : AppCompatActivity() {
         if (value.isBlank()) return System.currentTimeMillis()
 
         return try {
-            val normalized = value.replace("Z", "+0000")
+            val normalized = value.trim()
+                .replace("Z", "+0000")
+                .replace(
+                    Regex("([+-]\\d{2}):(\\d{2})$"),
+                    "$1$2"
+                )
+
             val formats = listOf(
                 SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US),
                 SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US),
@@ -362,6 +377,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
             formats.firstNotNullOfOrNull { format ->
                 try {
+                    format.isLenient = false
                     format.parse(normalized)?.time
                 } catch (_: Exception) {
                     null
@@ -373,6 +389,8 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun showConversationList() {
+        stopPrivateChatAutoRefresh()
+
         isChatOpen = false
         activePrivateConnection = null
         privateMessagesColumn = null
@@ -380,6 +398,8 @@ class YellowSafetyActivity : AppCompatActivity() {
         privateStatusText = null
         privateInput = null
         privateSendButton = null
+        isLoadingPrivateMessages = false
+        attemptedReadMessageIds.clear()
 
         panelContainer.removeAllViews()
 
@@ -556,7 +576,9 @@ class YellowSafetyActivity : AppCompatActivity() {
             val result = ConnectionApi.getConnections(this)
 
             runOnUiThread {
-                if (isFinishing || isDestroyed || isChatOpen) return@runOnUiThread
+                if (isFinishing || isDestroyed || isChatOpen) {
+                    return@runOnUiThread
+                }
 
                 container.removeAllViews()
 
@@ -670,9 +692,14 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun showPrivateChat(connection: ConnectionApiItem) {
+        stopPrivateChatAutoRefresh()
+
         activePrivateConnection = connection
         isChatOpen = true
         isSendingMessage = false
+        isLoadingPrivateMessages = false
+        attemptedReadMessageIds.clear()
+
         panelContainer.removeAllViews()
 
         val screen = LinearLayout(this).apply {
@@ -845,12 +872,12 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
 
         privateSendButton?.setOnClickListener {
-            sendPrivateMessage()
+            sendPrivateMessage(connection, privateInput?.text?.toString().orEmpty())
         }
 
         privateInput?.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEND) {
-                sendPrivateMessage()
+                sendPrivateMessage(connection, privateInput?.text?.toString().orEmpty())
                 true
             } else {
                 false
@@ -868,240 +895,212 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
 
         loadPrivateMessages(connection, showLoading = true)
+        startPrivateChatAutoRefresh(connection)
+    }
+
+    private fun startPrivateChatAutoRefresh(connection: ConnectionApiItem) {
+        stopPrivateChatAutoRefresh()
+
+        val refreshRunnable = object : Runnable {
+            override fun run() {
+                if (isFinishing || isDestroyed) return
+
+                if (!isChatOpen || activePrivateConnection?.id != connection.id) {
+                    return
+                }
+
+                loadPrivateMessages(connection, showLoading = false)
+                privateChatHandler.postDelayed(this, 4000)
+            }
+        }
+
+        privateChatRefreshRunnable = refreshRunnable
+        privateChatHandler.postDelayed(refreshRunnable, 4000)
+    }
+
+    private fun stopPrivateChatAutoRefresh() {
+        privateChatRefreshRunnable?.let {
+            privateChatHandler.removeCallbacks(it)
+        }
+        privateChatRefreshRunnable = null
     }
 
     private fun loadPrivateMessages(
         connection: ConnectionApiItem,
         showLoading: Boolean
     ) {
-        if (
-            activePrivateConnection?.id != connection.id ||
-            !isChatOpen
-        ) {
-            return
-        }
+        if (isLoadingPrivateMessages) return
+        if (!isChatOpen || activePrivateConnection?.id != connection.id) return
+
+        isLoadingPrivateMessages = true
 
         if (showLoading) {
-            privateStatusText?.text = "Mesajlar yükleniyor..."
+            privateMessagesColumn?.removeAllViews()
+            addPrivateInfoMessage("Mesajlar yükleniyor...")
         }
 
         Thread {
             val result = ConnectionApi.getInbox(this, 50)
 
             runOnUiThread {
-                if (
-                    isFinishing ||
-                    isDestroyed ||
-                    !isChatOpen ||
-                    activePrivateConnection?.id != connection.id
-                ) {
+                isLoadingPrivateMessages = false
+
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (!isChatOpen || activePrivateConnection?.id != connection.id) {
                     return@runOnUiThread
                 }
 
                 val column = privateMessagesColumn ?: return@runOnUiThread
-                column.removeAllViews()
 
-                if (!result.success) {
-                    privateStatusText?.text = result.message
-                    addPrivateInfoMessage(
-                        column,
-                        "Mesajlar alınamadı. Yenile düğmesine dokunarak tekrar deneyebilirsin."
-                    )
+                if (!result.success || result.data == null) {
+                    if (column.childCount == 0) {
+                        addPrivateInfoMessage(
+                            result.message.ifBlank {
+                                "Mesajlar şu anda alınamadı."
+                            }
+                        )
+                    }
                     return@runOnUiThread
                 }
 
-                val messages = result.data.orEmpty()
+                val messages = result.data
                     .filter { it.connectionId == connection.id }
                     .sortedBy { parseServerTime(it.createdAt) }
 
-                if (messages.isEmpty()) {
-                    privateStatusText?.text = "Bağlantı hazır"
-                    addPrivateInfoMessage(
-                        column,
-                        "Henüz mesaj yok. İlk mesajı sen gönderebilirsin."
-                    )
-                    return@runOnUiThread
+                val signature = messages.joinToString("|") {
+                    "${it.id}:${it.deliveredAt ?: ""}:${it.readAt ?: ""}"
                 }
 
-                privateStatusText?.text =
-                    "${messages.size} mesaj gösteriliyor"
+                val shouldRender =
+                    column.childCount == 0 ||
+                    signature != lastPrivateMessageSignature
 
-                messages.forEach { message ->
-                    addServerMessageBubble(
-                        column,
-                        message.body,
-                        message.isOutgoing,
-                        parseServerTime(message.createdAt),
-                        message.readAt != null,
-                        message.deliveredAt != null
-                    )
+                if (shouldRender) {
+                    lastPrivateMessageSignature = signature
+                    column.removeAllViews()
+
+                    if (messages.isEmpty()) {
+                        addPrivateInfoMessage(
+                            "Henüz mesaj yok. İlk mesajı sen gönder."
+                        )
+                    } else {
+                        messages.forEach { message ->
+                            addServerMessageBubble(message)
+                        }
+                    }
+
+                    privateMessagesScroll?.post {
+                        privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
+                    }
                 }
 
-                privateMessagesScroll?.post {
-                    privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
-                }
+                val unreadIds = messages
+                    .filter {
+                        !it.isOutgoing &&
+                        it.readAt.isNullOrBlank() &&
+                        !attemptedReadMessageIds.contains(it.id)
+                    }
+                    .map { it.id }
 
-                val unreadMessages = messages.filter {
-                    !it.isOutgoing && it.readAt == null
-                }
-
-                if (unreadMessages.isNotEmpty()) {
-                    markPrivateMessagesRead(
-                        connection,
-                        unreadMessages.map { it.id }
-                    )
+                if (unreadIds.isNotEmpty()) {
+                    markPrivateMessagesRead(connection, unreadIds)
                 }
             }
         }.start()
     }
 
-    private fun addPrivateInfoMessage(
-        container: LinearLayout,
-        message: String
-    ) {
-        val info = createText(message, 12f, softText)
-        info.gravity = Gravity.CENTER
-        info.setPadding(dp(18), dp(24), dp(18), dp(24))
+    private fun addPrivateInfoMessage(message: String) {
+        val textView = TextView(this).apply {
+            text = message
+            textSize = 13f
+            setTextColor(Color.GRAY)
+            gravity = Gravity.CENTER
+            setPadding(16, 20, 16, 20)
+        }
 
-        container.addView(
-            info,
+        privateMessagesColumn?.addView(
+            textView,
             LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
             )
         )
     }
 
-    private fun addServerMessageBubble(
-        container: LinearLayout,
-        message: String,
-        isOutgoing: Boolean,
-        timestamp: Long,
-        isRead: Boolean,
-        isDelivered: Boolean
-    ) {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = if (isOutgoing) Gravity.END else Gravity.START
-            setPadding(0, dp(4), 0, dp(4))
-        }
+    private fun addServerMessageBubble(message: MessageApiItem) {
+        val isOutgoing = message.isOutgoing
 
-        val messageColumn = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = if (isOutgoing) Gravity.END else Gravity.START
+        val bubbleText = buildString {
+            append(message.body)
+
+            if (isOutgoing) {
+                append("\n")
+
+                when {
+                    !message.readAt.isNullOrBlank() -> append("✓✓ Okundu")
+                    !message.deliveredAt.isNullOrBlank() -> append("✓✓ İletildi")
+                    else -> append("✓ Gönderildi")
+                }
+            }
         }
 
         val bubble = TextView(this).apply {
-            text = message
-            textSize = 14f
+            text = bubbleText
+            textSize = 15f
             setTextColor(Color.WHITE)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            maxWidth = (resources.displayMetrics.widthPixels * 0.70f).toInt()
-            background = roundedBackground(
-                if (isOutgoing) outgoingBubble else incomingBubble,
-                if (isOutgoing) gold else Color.rgb(85, 78, 58),
-                14
-            )
-        }
-
-        messageColumn.addView(
-            bubble,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-
-        val timeLabel = if (isOutgoing) {
-            when {
-                isRead -> "${formatTime(timestamp)}  ✓✓"
-                isDelivered -> "${formatTime(timestamp)}  ✓"
-                else -> "${formatTime(timestamp)}  •"
+            setPadding(14, 10, 14, 10)
+            background = GradientDrawable().apply {
+                cornerRadius = 22f
+                setColor(
+                    if (isOutgoing) {
+                        Color.rgb(35, 105, 65)
+                    } else {
+                        Color.rgb(55, 65, 80)
+                    }
+                )
             }
-        } else {
-            formatTime(timestamp)
         }
 
-        val time = createText(timeLabel, 9f, softText)
-        time.setPadding(dp(4), dp(3), dp(4), 0)
-        messageColumn.addView(time)
+        val params = LinearLayout.LayoutParams(
+            (resources.displayMetrics.widthPixels * 0.75f).toInt(),
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = 5
+            bottomMargin = 5
+            gravity = if (isOutgoing) Gravity.END else Gravity.START
+        }
 
-        row.addView(
-            messageColumn,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
-
-        container.addView(
-            row,
-            LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        )
+        privateMessagesColumn?.addView(bubble, params)
     }
 
-    private fun sendPrivateMessage() {
-        val connection = activePrivateConnection ?: return
-        val input = privateInput ?: return
-        val sendButton = privateSendButton ?: return
+    private fun sendPrivateMessage(
+        connection: ConnectionApiItem,
+        message: String
+    ) {
+        val cleanMessage = message.trim()
 
-        if (isSendingMessage) return
-
-        val message = input.text.toString().trim()
-
-        if (message.isBlank()) {
-            return
-        }
-
-        if (message.length > 4000) {
-            Toast.makeText(
-                this,
-                "Mesaj en fazla 4000 karakter olabilir.",
-                Toast.LENGTH_LONG
-            ).show()
-            return
-        }
-
-        isSendingMessage = true
-        sendButton.isEnabled = false
-        sendButton.alpha = 0.5f
-        sendButton.text = "…"
+        if (cleanMessage.isEmpty()) return
 
         Thread {
             val result = ConnectionApi.sendMessage(
                 this,
                 connection.id,
-                message,
+                cleanMessage,
                 "text"
             )
 
             runOnUiThread {
-                isSendingMessage = false
-
-                if (
-                    isFinishing ||
-                    isDestroyed ||
-                    activePrivateConnection?.id != connection.id
-                ) {
-                    return@runOnUiThread
-                }
-
-                sendButton.isEnabled = true
-                sendButton.alpha = 1f
-                sendButton.text = "➤"
+                if (isFinishing || isDestroyed) return@runOnUiThread
 
                 if (result.success) {
-                    input.setText("")
-                    privateStatusText?.text = "Mesaj gönderildi"
+                    privateInput?.text?.clear()
                     loadPrivateMessages(connection, showLoading = false)
                 } else {
-                    privateStatusText?.text = "Mesaj gönderilemedi"
                     Toast.makeText(
                         this,
-                        result.message,
+                        result.message.ifBlank {
+                            "Mesaj gönderilemedi."
+                        },
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -1113,31 +1112,22 @@ class YellowSafetyActivity : AppCompatActivity() {
         connection: ConnectionApiItem,
         messageIds: List<String>
     ) {
-        Thread {
-            messageIds.forEach { messageId ->
-                ConnectionApi.markMessageRead(
-                    this,
-                    messageId
-                )
-            }
+        val newIds = messageIds.filter {
+            attemptedReadMessageIds.add(it)
+        }
 
-            runOnUiThread {
-                if (
-                    !isFinishing &&
-                    !isDestroyed &&
-                    isChatOpen &&
-                    activePrivateConnection?.id == connection.id
-                ) {
-                    loadPrivateMessages(
-                        connection,
-                        showLoading = false
-                    )
-                }
+        if (newIds.isEmpty()) return
+
+        Thread {
+            newIds.forEach { messageId ->
+                ConnectionApi.markMessageRead(this, messageId)
             }
         }.start()
     }
 
     private fun showBotChat() {
+        stopPrivateChatAutoRefresh()
+
         isChatOpen = true
         activePrivateConnection = null
         panelContainer.removeAllViews()
@@ -1780,8 +1770,8 @@ class YellowSafetyActivity : AppCompatActivity() {
         messagesColumn.addView(
             row,
             LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
             )
         )
 
@@ -1819,6 +1809,8 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        stopPrivateChatAutoRefresh()
+
         if (::historyDatabase.isInitialized) {
             historyDatabase.close()
         }
