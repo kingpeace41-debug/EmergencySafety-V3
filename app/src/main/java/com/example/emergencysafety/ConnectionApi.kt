@@ -17,6 +17,17 @@ internal data class ConnectionApiItem(
     val createdAt: String
 )
 
+internal data class MessageApiItem(
+    val id: String,
+    val senderUsername: String,
+    val recipientUsername: String,
+    val body: String,
+    val messageType: String,
+    val createdAt: String,
+    val deliveredAt: String?,
+    val readAt: String?
+)
+
 internal data class ConnectionApiResult<T>(
     val success: Boolean,
     val message: String,
@@ -201,6 +212,169 @@ internal object ConnectionApi {
         )
     }
 
+    fun sendMessage(
+        context: Context,
+        connectionId: String,
+        message: String,
+        messageType: String = "text"
+    ): ConnectionApiResult<MessageApiItem> {
+
+        if (connectionId.isBlank()) {
+            return ConnectionApiResult(
+                false,
+                "Bağlantı bilgisi bulunamadı."
+            )
+        }
+
+        val cleanMessage = message.trim()
+
+        if (cleanMessage.isEmpty() || cleanMessage.length > 4000) {
+            return ConnectionApiResult(
+                false,
+                "Mesaj 1-4000 karakter arasında olmalı."
+            )
+        }
+
+        if (messageType !in listOf("text", "emergency", "location")) {
+            return ConnectionApiResult(
+                false,
+                "Geçersiz mesaj türü."
+            )
+        }
+
+        val body = JSONObject()
+            .put("connectionId", connectionId)
+            .put("body", cleanMessage)
+            .put("messageType", messageType)
+
+        val response = request(
+            context = context,
+            path = "/messages",
+            method = "POST",
+            body = body
+        )
+
+        if (!response.optBoolean("success", false)) {
+            return failure(response)
+        }
+
+        val messageObject = response.optJSONObject("message")
+            ?: return ConnectionApiResult(
+                false,
+                "Sunucu mesaj bilgilerini döndürmedi."
+            )
+
+        val item = parseMessage(
+            messageObject,
+            response.optString("recipientUsername", "")
+        )
+
+        return ConnectionApiResult(
+            success = true,
+            message = response.optString(
+                "message",
+                "Mesaj gönderildi."
+            ),
+            data = item
+        )
+    }
+
+    fun getInbox(
+        context: Context,
+        limit: Int = 50
+    ): ConnectionApiResult<List<MessageApiItem>> {
+
+        val safeLimit = limit.coerceIn(1, 50)
+
+        val response = request(
+            context = context,
+            path = "/messages/inbox?limit=$safeLimit",
+            method = "GET"
+        )
+
+        if (!response.optBoolean("success", false)) {
+            return failure(response)
+        }
+
+        val array = response.optJSONArray("messages")
+            ?: JSONArray()
+
+        val items = mutableListOf<MessageApiItem>()
+
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+
+            items.add(
+                parseMessage(item, "")
+            )
+        }
+
+        return ConnectionApiResult(
+            success = true,
+            message = response.optString(
+                "message",
+                "Mesajlar alındı."
+            ),
+            data = items
+        )
+    }
+
+    fun markMessageRead(
+        context: Context,
+        messageId: String
+    ): ConnectionApiResult<Boolean> {
+
+        if (messageId.isBlank()) {
+            return ConnectionApiResult(
+                false,
+                "Mesaj kimliği bulunamadı."
+            )
+        }
+
+        val response = request(
+            context = context,
+            path = "/messages/$messageId/read",
+            method = "PATCH"
+        )
+
+        return ConnectionApiResult(
+            success = response.optBoolean("success", false),
+            message = response.optString(
+                "message",
+                "Okundu bilgisi güncellenemedi."
+            ),
+            data = response.optBoolean("success", false)
+        )
+    }
+
+    private fun parseMessage(
+        item: JSONObject,
+        recipientUsername: String
+    ): MessageApiItem {
+
+        return MessageApiItem(
+            id = item.optString("id", ""),
+            senderUsername = item.optString("senderUsername", ""),
+            recipientUsername = recipientUsername,
+            body = item.optString("body", ""),
+            messageType = item.optString("messageType", "text"),
+            createdAt = item.optString("createdAt", ""),
+            deliveredAt = nullableString(item, "deliveredAt"),
+            readAt = nullableString(item, "readAt")
+        )
+    }
+
+    private fun nullableString(
+        item: JSONObject,
+        key: String
+    ): String? {
+        return if (item.isNull(key)) {
+            null
+        } else {
+            item.optString(key, "").takeIf { it.isNotBlank() }
+        }
+    }
+
     private fun parseItem(
         item: JSONObject,
         emailField: String
@@ -290,8 +464,6 @@ internal object ConnectionApi {
                 val currentAccessToken =
                     SecureSessionStore.getAccessToken(context)
 
-                // Başka bir istek oturumu zaten yenilediyse
-                // aynı refresh token ile ikinci kez işlem yapma.
                 if (
                     !currentAccessToken.isNullOrBlank() &&
                     currentAccessToken != rejectedAccessToken
