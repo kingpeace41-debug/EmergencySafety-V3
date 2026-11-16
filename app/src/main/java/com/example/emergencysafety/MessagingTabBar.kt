@@ -1,6 +1,9 @@
 
 package com.example.emergencysafety
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -9,9 +12,11 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
 
 class MessagingTabBar @JvmOverloads constructor(
-    context: android.content.Context,
+    context: Context,
     attrs: android.util.AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : LinearLayout(context, attrs, defStyleAttr) {
@@ -25,6 +30,8 @@ class MessagingTabBar @JvmOverloads constructor(
 
     private var activeTab = "chats"
     private var isBound = false
+
+    private var backCallback: OnBackPressedCallback? = null
 
     private val gold = Color.rgb(232, 184, 55)
     private val dark = Color.rgb(36, 37, 41)
@@ -73,11 +80,57 @@ class MessagingTabBar @JvmOverloads constructor(
 
         isBound = true
         updateTabAppearance()
+        registerBackHandler()
+    }
+
+    private fun registerBackHandler() {
+        val activity = findActivity(context) as? AppCompatActivity
+            ?: return
+
+        val callback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (returnToChats()) {
+                    return
+                }
+
+                isEnabled = false
+
+                try {
+                    activity.onBackPressedDispatcher.onBackPressed()
+                } finally {
+                    isEnabled = true
+                }
+            }
+        }
+
+        activity.onBackPressedDispatcher.addCallback(
+            activity,
+            callback
+        )
+
+        backCallback = callback
+    }
+
+    private fun findActivity(context: Context): Activity? {
+        var current: Context = context
+
+        while (true) {
+            if (current is Activity) {
+                return current
+            }
+
+            if (current !is ContextWrapper) {
+                return null
+            }
+
+            current = current.baseContext
+        }
     }
 
     /**
-     * Android geri tuşu için:
-     * Kişiler veya İstekler sekmesindeysek Sohbetler'e döner.
+     * Kişiler veya İstekler sekmesindeysek
+     * Sohbetler sekmesine döner.
+     *
      * Zaten Sohbetler sekmesindeysek false döndürür.
      */
     fun returnToChats(): Boolean {
