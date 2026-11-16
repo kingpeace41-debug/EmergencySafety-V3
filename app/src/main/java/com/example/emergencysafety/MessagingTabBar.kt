@@ -451,7 +451,7 @@ class MessagingTabBar @JvmOverloads constructor(
         attachPage(screen.first)
     }
 
-    private fun createPage(): Pair<LinearLayout, LinearLayout> {
+    private fun createPage(): Pair<ScrollView, LinearLayout> {
         val page = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(14), dp(14), dp(14))
@@ -472,7 +472,7 @@ class MessagingTabBar @JvmOverloads constructor(
             )
         }
 
-        return Pair(scrollView as LinearLayout, page)
+        return Pair(scrollView, page)
     }
 
     private fun attachPage(view: View) {
