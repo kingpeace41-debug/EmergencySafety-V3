@@ -19,16 +19,21 @@ class SosLocationService : Service() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private lateinit var locationCallback: LocationCallback
-    private val CHANNEL_ID = "SosServiceChannel"
 
-    // Gerçek sunucu API adresi hazır olduğunda güncellenecek.
+    // Yeni düşük öncelikli kanal.
+    // Eski yüksek öncelikli kanal ayarından etkilenmemesi için adı değiştirildi.
+    private val CHANNEL_ID = "SosServiceChannelSilent"
+
+    // Mevcut sunucu adresi ayarı korunmuştur.
     private val SERVER_URL =
         "http://SUNUCU_IP_ADRESINIZ:3000/update-location"
 
     override fun onCreate() {
         super.onCreate()
+
         fusedLocationClient =
             LocationServices.getFusedLocationProviderClient(this)
+
         createNotificationChannel()
     }
 
@@ -40,13 +45,18 @@ class SosLocationService : Service() {
 
         val notification: Notification =
             NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("SOS Acil Durum Modu Aktif")
-                .setContentText("Canlı konum servisi çalışıyor.")
+                .setContentTitle("SOS konum hizmeti")
+                .setContentText("Acil durum konum takibi çalışıyor.")
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .setOngoing(true)
+                .setSilent(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .setVisibility(NotificationCompat.VISIBILITY_SECRET)
                 .build()
 
         startForeground(1, notification)
+
         startLocationUpdates()
 
         return START_STICKY
@@ -63,6 +73,7 @@ class SosLocationService : Service() {
                 .build()
 
         locationCallback = object : LocationCallback() {
+
             override fun onLocationResult(
                 locationResult: LocationResult
             ) {
@@ -93,12 +104,14 @@ class SosLocationService : Service() {
         thread {
             try {
                 val url = URL("$SERVER_URL?lat=$lat&lng=$lng")
+
                 val connection =
                     url.openConnection() as HttpURLConnection
 
                 connection.requestMethod = "POST"
                 connection.connectTimeout = 5000
                 connection.readTimeout = 5000
+
                 connection.responseCode
                 connection.disconnect()
 
@@ -111,11 +124,17 @@ class SosLocationService : Service() {
     private fun createNotificationChannel() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+
             val serviceChannel = NotificationChannel(
                 CHANNEL_ID,
-                "SOS Konum Servisi",
-                NotificationManager.IMPORTANCE_HIGH
-            )
+                "SOS Konum Hizmeti",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Acil durum konum hizmeti"
+                setShowBadge(false)
+                enableVibration(false)
+                setSound(null, null)
+            }
 
             val manager =
                 getSystemService(NotificationManager::class.java)
@@ -125,6 +144,7 @@ class SosLocationService : Service() {
     }
 
     override fun onDestroy() {
+
         if (::locationCallback.isInitialized) {
             fusedLocationClient.removeLocationUpdates(
                 locationCallback
