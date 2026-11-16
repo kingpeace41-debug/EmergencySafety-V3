@@ -14,12 +14,98 @@
         android:alpha="0.22"
         android:contentDescription="Sarı kurt arka planı" />
 
-    <!-- YENİ MESAJLAŞMA PANELİ -->
+    <!-- MESAJLAŞMA SEKME ÇUBUĞU -->
+    <LinearLayout
+        android:id="@+id/messagingTabBar"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_gravity="top"
+        android:layout_marginTop="60dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:padding="3dp"
+        android:background="#191A1D">
+
+        <!-- SOHBETLER -->
+        <FrameLayout
+            android:id="@+id/tabChats"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="#342B17">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="SOHBETLER"
+                android:textColor="#E8B837"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </FrameLayout>
+
+        <!-- KİŞİLER -->
+        <FrameLayout
+            android:id="@+id/tabContacts"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_marginStart="3dp"
+            android:background="#242529">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="KİŞİLER"
+                android:textColor="#C5C5C5"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </FrameLayout>
+
+        <!-- İSTEKLER -->
+        <FrameLayout
+            android:id="@+id/tabRequests"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_marginStart="3dp"
+            android:background="#242529">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="İSTEKLER"
+                android:textColor="#C5C5C5"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <!-- GERÇEK İSTEK SAYISI SONRA BAĞLANACAK -->
+            <TextView
+                android:id="@+id/requestBadge"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="top|end"
+                android:gravity="center"
+                android:background="#D62839"
+                android:text="0"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+        </FrameLayout>
+
+    </LinearLayout>
+
+    <!-- MESAJLAŞMA PANELİ -->
     <FrameLayout
         android:id="@+id/messagePanelContainer"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginTop="60dp"
+        android:layout_marginTop="104dp"
         android:layout_marginBottom="60dp"
         android:padding="12dp" />
 
