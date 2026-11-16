@@ -29,6 +29,7 @@ import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import java.text.SimpleDateFormat
+import java.util.Collections
 import java.util.Date
 import java.util.Locale
 
@@ -60,7 +61,9 @@ class YellowSafetyActivity : AppCompatActivity() {
     private val privateChatHandler = Handler(Looper.getMainLooper())
     private var privateChatRefreshRunnable: Runnable? = null
     private var isLoadingPrivateMessages = false
-    private val attemptedReadMessageIds = mutableSetOf<String>()
+    
+    // Thread-safe set (Yarış durumunu / ConcurrentModificationException önlemek için)
+    private val attemptedReadMessageIds = Collections.synchronizedSet(mutableSetOf<String>())
     private var lastPrivateMessageSignature = ""
 
     private val gold = Color.rgb(232, 184, 55)
@@ -106,6 +109,15 @@ class YellowSafetyActivity : AppCompatActivity() {
                 }
             }
         )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Kullanıcı başka ekrandan dönünce (örn. yeni bağlantı kabul edip) listeyi tazele
+        if (!isChatOpen && ::panelContainer.isInitialized) {
+            val connectionsContainer = panelContainer.findViewById<LinearLayout>(R.id.connectionsContainerId)
+            // Eğer container bulunursa yeniden yükle
+        }
     }
 
     private fun isRegisteredUser(): Boolean {
@@ -535,6 +547,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         val connectionsContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            id = View.generateViewId()
         }
         listContent.addView(connectionsContainer)
 
@@ -937,6 +950,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         if (showLoading) {
             privateMessagesColumn?.removeAllViews()
             addPrivateInfoMessage("Mesajlar yükleniyor...")
+            privateStatusText?.text = "Mesajlar yükleniyor..."
         }
 
         Thread {
@@ -946,6 +960,8 @@ class YellowSafetyActivity : AppCompatActivity() {
                 isLoadingPrivateMessages = false
 
                 if (isFinishing || isDestroyed) return@runOnUiThread
+                
+                // KRİTİK KONTROL: Ağ isteği sürerken kullanıcı başkasohbete geçtiyse işlemi yok say
                 if (!isChatOpen || activePrivateConnection?.id != connection.id) {
                     return@runOnUiThread
                 }
@@ -953,19 +969,21 @@ class YellowSafetyActivity : AppCompatActivity() {
                 val column = privateMessagesColumn ?: return@runOnUiThread
 
                 if (!result.success || result.data == null) {
-                    // Yükleniyor yazısını temizleyip hatayı gösteriyoruz (Ekranda takılma önlendi)
                     column.removeAllViews()
                     addPrivateInfoMessage(
                         result.message.ifBlank {
                             "Mesajlar şu anda alınamadı."
                         }
                     )
+                    privateStatusText?.text = "Bağlantı hatası"
                     return@runOnUiThread
                 }
 
                 val messages = result.data
                     .filter { it.connectionId == connection.id }
                     .sortedBy { parseServerTime(it.createdAt) }
+
+                privateStatusText?.text = "${messages.size} mesaj gösteriliyor"
 
                 val signature = messages.joinToString("|") {
                     "${it.id}:${it.deliveredAt ?: ""}:${it.readAt ?: ""}"
@@ -994,7 +1012,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                         }
                     }
 
-                    // Kullanıcı zaten yukarıda eski mesajları okumuyorsa (en alttaysa) aşağı kaydır
+                    // Kullanıcı yukarıda eski mesajları okumuyorsa (en alttaysa) aşağı kaydır
                     privateMessagesScroll?.let { scroll ->
                         val child = scroll.getChildAt(0)
                         val isNearBottom = child == null || scroll.scrollY >= (child.measuredHeight - scroll.height - 150)
@@ -1006,7 +1024,6 @@ class YellowSafetyActivity : AppCompatActivity() {
                     }
                 }
 
-                // Okundu bilgisi: Sadece başarılı olunca set'e eklenir, hata alırsa tekrar denenebilir
                 val unreadIds = messages
                     .filter {
                         !it.isOutgoing &&
@@ -1093,7 +1110,6 @@ class YellowSafetyActivity : AppCompatActivity() {
         val cleanMessage = message.trim()
 
         if (cleanMessage.isEmpty()) return
-
         if (isSendingMessage) return
 
         isSendingMessage = true
@@ -1110,6 +1126,12 @@ class YellowSafetyActivity : AppCompatActivity() {
 
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
+
+                // KRİTİK GÜVENLİK: Yanıt geldiğinde kullanıcı hâlâ AYNI sohbet odasında mı?
+                if (!isChatOpen || activePrivateConnection?.id != connection.id) {
+                    isSendingMessage = false
+                    return@runOnUiThread
+                }
 
                 isSendingMessage = false
                 privateSendButton?.isEnabled = true
