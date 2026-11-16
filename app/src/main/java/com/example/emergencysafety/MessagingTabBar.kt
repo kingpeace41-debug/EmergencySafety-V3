@@ -75,6 +75,20 @@ class MessagingTabBar @JvmOverloads constructor(
         updateTabAppearance()
     }
 
+    /**
+     * Android geri tuşu için:
+     * Kişiler veya İstekler sekmesindeysek Sohbetler'e döner.
+     * Zaten Sohbetler sekmesindeysek false döndürür.
+     */
+    fun returnToChats(): Boolean {
+        if (activeTab == "chats") {
+            return false
+        }
+
+        showTab("chats")
+        return true
+    }
+
     private fun showTab(tab: String) {
         val contentPanel = panel ?: return
 
