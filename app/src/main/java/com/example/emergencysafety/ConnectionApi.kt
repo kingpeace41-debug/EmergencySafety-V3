@@ -266,15 +266,12 @@ internal object ConnectionApi {
 
         val item = parseMessage(
             messageObject,
-            response.optString("recipientUsername", "")
+            messageObject.optString("recipientUsername", "")
         )
 
         return ConnectionApiResult(
             success = true,
-            message = response.optString(
-                "message",
-                "Mesaj gönderildi."
-            ),
+            message = "Mesaj gönderildi.",
             data = item
         )
     }
