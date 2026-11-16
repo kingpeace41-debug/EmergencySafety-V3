@@ -27,6 +27,13 @@ internal object ConnectionApi {
     private const val API_BASE_URL =
         "https://emergency-safety.com/api"
 
+    private val refreshLock = Any()
+
+    private data class HttpResult(
+        val statusCode: Int,
+        val json: JSONObject
+    )
+
     fun sendRequest(
         context: Context,
         email: String
@@ -96,7 +103,10 @@ internal object ConnectionApi {
 
         return ConnectionApiResult(
             success = true,
-            message = response.optString("message", "İstekler alındı."),
+            message = response.optString(
+                "message",
+                "İstekler alındı."
+            ),
             data = items
         )
     }
@@ -207,22 +217,170 @@ internal object ConnectionApi {
         body: JSONObject? = null
     ): JSONObject {
 
+        val appContext = context.applicationContext
+
+        var token = try {
+            SecureSessionStore.getAccessToken(appContext)
+        } catch (_: Exception) {
+            null
+        }
+
+        if (token.isNullOrBlank()) {
+            token = refreshAccessToken(
+                appContext,
+                ""
+            )
+        }
+
+        if (token.isNullOrBlank()) {
+            return errorResponse(
+                "Oturum yenilenemedi. Yeniden giriş yapman gerekebilir."
+            )
+        }
+
+        val firstAttempt = executeAuthorizedRequest(
+            path = path,
+            method = method,
+            body = body,
+            accessToken = token
+        )
+
+        if (firstAttempt.statusCode != 401) {
+            return firstAttempt.json
+        }
+
+        val newToken = refreshAccessToken(
+            appContext,
+            token
+        )
+
+        if (newToken.isNullOrBlank()) {
+            return errorResponse(
+                "Oturum süresi doldu. Oturum yenilenemedi."
+            )
+        }
+
+        val secondAttempt = executeAuthorizedRequest(
+            path = path,
+            method = method,
+            body = body,
+            accessToken = newToken
+        )
+
+        return secondAttempt.json
+    }
+
+    private fun refreshAccessToken(
+        context: Context,
+        rejectedAccessToken: String
+    ): String? {
+
+        synchronized(refreshLock) {
+
+            try {
+                val currentAccessToken =
+                    SecureSessionStore.getAccessToken(context)
+
+                // Başka bir istek oturumu zaten yenilediyse
+                // aynı refresh token ile ikinci kez işlem yapma.
+                if (
+                    !currentAccessToken.isNullOrBlank() &&
+                    currentAccessToken != rejectedAccessToken
+                ) {
+                    return currentAccessToken
+                }
+
+                val refreshToken =
+                    SecureSessionStore.getRefreshToken(context)
+
+                if (refreshToken.isNullOrBlank()) {
+                    return null
+                }
+
+                val body = JSONObject().put(
+                    "refreshToken",
+                    refreshToken
+                )
+
+                val result = executePublicRequest(
+                    path = "/auth/session/refresh",
+                    method = "POST",
+                    body = body
+                )
+
+                if (
+                    result.statusCode !in 200..299 ||
+                    !result.json.optBoolean("success", false)
+                ) {
+                    return null
+                }
+
+                val newAccessToken =
+                    result.json.optString("accessToken", "")
+
+                val newRefreshToken =
+                    result.json.optString("refreshToken", "")
+
+                if (
+                    newAccessToken.isBlank() ||
+                    newRefreshToken.isBlank()
+                ) {
+                    return null
+                }
+
+                SecureSessionStore.updateTokens(
+                    context,
+                    newAccessToken,
+                    newRefreshToken
+                )
+
+                return newAccessToken
+
+            } catch (_: Exception) {
+                return null
+            }
+        }
+    }
+
+    private fun executeAuthorizedRequest(
+        path: String,
+        method: String,
+        body: JSONObject?,
+        accessToken: String
+    ): HttpResult {
+
+        return executeHttpRequest(
+            path = path,
+            method = method,
+            body = body,
+            accessToken = accessToken
+        )
+    }
+
+    private fun executePublicRequest(
+        path: String,
+        method: String,
+        body: JSONObject?
+    ): HttpResult {
+
+        return executeHttpRequest(
+            path = path,
+            method = method,
+            body = body,
+            accessToken = null
+        )
+    }
+
+    private fun executeHttpRequest(
+        path: String,
+        method: String,
+        body: JSONObject?,
+        accessToken: String?
+    ): HttpResult {
+
         var connection: HttpURLConnection? = null
 
         return try {
-            val token = SecureSessionStore.getAccessToken(
-                context.applicationContext
-            )
-
-            if (token.isNullOrBlank()) {
-                return JSONObject()
-                    .put("success", false)
-                    .put(
-                        "message",
-                        "Oturum bulunamadı. Yeniden giriş yapın."
-                    )
-            }
-
             connection = (
                 URL(API_BASE_URL + path).openConnection()
                     as HttpURLConnection
@@ -238,14 +396,16 @@ internal object ConnectionApi {
                 )
 
                 setRequestProperty(
-                    "Authorization",
-                    "Bearer $token"
-                )
-
-                setRequestProperty(
                     "Cache-Control",
                     "no-store"
                 )
+
+                if (!accessToken.isNullOrBlank()) {
+                    setRequestProperty(
+                        "Authorization",
+                        "Bearer $accessToken"
+                    )
+                }
 
                 if (body != null) {
                     doOutput = true
@@ -301,20 +461,33 @@ internal object ConnectionApi {
                 }
             }
 
-            json
+            HttpResult(
+                statusCode = status,
+                json = json
+            )
 
         } catch (error: Exception) {
-            JSONObject()
-                .put("success", false)
-                .put(
-                    "message",
+
+            HttpResult(
+                statusCode = -1,
+                json = errorResponse(
                     error.localizedMessage
                         ?: "Sunucu bağlantısı kurulamadı."
                 )
+            )
 
         } finally {
             connection?.disconnect()
         }
+    }
+
+    private fun errorResponse(
+        message: String
+    ): JSONObject {
+
+        return JSONObject()
+            .put("success", false)
+            .put("message", message)
     }
 
     private fun <T> failure(
