@@ -1,3 +1,4 @@
+
 package com.example.emergencysafety
 
 import android.app.AlertDialog
@@ -497,9 +498,30 @@ class AuthActivity : AppCompatActivity() {
                             sessionAccessToken
                         )
 
+                        val authenticatedUser =
+                            authCheck.data.optJSONObject("user")
+
+                        val serverVerifiedEmail =
+                            authenticatedUser
+                                ?.optString("email", "")
+                                .orEmpty()
+                                .trim()
+
+                        val serverEmailVerified =
+                            authenticatedUser
+                                ?.optBoolean("emailVerified", false)
+                                ?: false
+
                         if (!authCheck.success) {
                             errorMessage =
                                 "Sunucu yeni oturumu doğrulayamadı. Lütfen tekrar giriş yap."
+                        } else if (
+                            !serverEmailVerified ||
+                            serverVerifiedEmail.isBlank() ||
+                            !serverVerifiedEmail.equals(verifiedEmail, ignoreCase = true)
+                        ) {
+                            errorMessage =
+                                "Sunucu doğrulanmış e-posta bilgisini onaylayamadı. Lütfen tekrar giriş yap."
                         } else {
                             try {
                                 SecureSessionStore.saveSession(
@@ -515,7 +537,7 @@ class AuthActivity : AppCompatActivity() {
                                         .remove("api_access_token")
                                         .putString("api_user_id", userId)
                                         .putString("api_username", username)
-                                        .putString("account_email", verifiedEmail)
+                                        .putString("account_email", serverVerifiedEmail)
                                         .putBoolean("onboarding_completed", true)
                                         .putBoolean("guest_mode", false)
                                         .commit()
