@@ -2,6 +2,7 @@
 package com.example.emergencysafety
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -23,6 +24,8 @@ internal data class ConnectionApiResult<T>(
 )
 
 internal object ConnectionApi {
+
+    private const val TAG = "ES_SESSION_DIAG"
 
     private const val API_BASE_URL =
         "https://emergency-safety.com/api"
@@ -226,6 +229,7 @@ internal object ConnectionApi {
         }
 
         if (token.isNullOrBlank()) {
+            Log.w(TAG, "İstek öncesi access token boş; yenileme deneniyor.")
             token = refreshAccessToken(
                 appContext,
                 ""
@@ -249,16 +253,21 @@ internal object ConnectionApi {
             return firstAttempt.json
         }
 
+        Log.w(TAG, "Korumalı istek HTTP 401 döndürdü; token yenileme deneniyor.")
+
         val newToken = refreshAccessToken(
             appContext,
             token
         )
 
         if (newToken.isNullOrBlank()) {
+            Log.e(TAG, "Token yenileme başarısız; korumalı istek tekrarlanmadı.")
             return errorResponse(
                 "Oturum süresi doldu. Oturum yenilenemedi."
             )
         }
+
+        Log.i(TAG, "Token yenilendi; korumalı istek bir kez tekrarlanıyor.")
 
         val secondAttempt = executeAuthorizedRequest(
             path = path,
@@ -294,8 +303,11 @@ internal object ConnectionApi {
                     SecureSessionStore.getRefreshToken(context)
 
                 if (refreshToken.isNullOrBlank()) {
+                    Log.e(TAG, "Refresh token cihazda bulunamadı veya çözülemedi.")
                     return null
                 }
+
+                Log.i(TAG, "Refresh token mevcut; /auth/session/refresh çağrılıyor.")
 
                 val body = JSONObject().put(
                     "refreshToken",
@@ -312,6 +324,12 @@ internal object ConnectionApi {
                     result.statusCode !in 200..299 ||
                     !result.json.optBoolean("success", false)
                 ) {
+                    Log.e(
+                        TAG,
+                        "Refresh yanıtı başarısız. HTTP=" + result.statusCode +
+                            ", success=" + result.json.optBoolean("success", false) +
+                            ", message=" + result.json.optString("message", "yok")
+                    )
                     return null
                 }
 
@@ -325,6 +343,12 @@ internal object ConnectionApi {
                     newAccessToken.isBlank() ||
                     newRefreshToken.isBlank()
                 ) {
+                    Log.e(
+                        TAG,
+                        "Refresh yanıtında token alanlarından biri eksik. access=" +
+                            newAccessToken.isNotBlank() +
+                            ", refresh=" + newRefreshToken.isNotBlank()
+                    )
                     return null
                 }
 
@@ -334,9 +358,17 @@ internal object ConnectionApi {
                     newRefreshToken
                 )
 
+                Log.i(TAG, "Yeni tokenlar güvenli alana kaydedildi.")
+
                 return newAccessToken
 
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                Log.e(
+                    TAG,
+                    "Refresh sırasında Android tarafında hata: " +
+                        error.javaClass.simpleName + ": " +
+                        (error.localizedMessage ?: "mesaj yok")
+                )
                 return null
             }
         }
