@@ -57,14 +57,44 @@ class MessagingTabBar @JvmOverloads constructor(
         contactsTab = findViewById(R.id.tabContacts)
         requestsTab = findViewById(R.id.tabRequests)
 
+        val contentPanel = panel
+
         if (
-            panel == null ||
+            contentPanel == null ||
             chatTab == null ||
             contactsTab == null ||
             requestsTab == null
         ) {
             return
         }
+
+        savedChatView = contentPanel.getChildAt(0)
+            ?.takeIf { isConversationListView(it) }
+
+        contentPanel.setOnHierarchyChangeListener(
+            object : ViewGroup.OnHierarchyChangeListener {
+
+                override fun onChildViewAdded(
+                    parent: View?,
+                    child: View?
+                ) {
+                    if (
+                        activeTab == "chats" &&
+                        child != null &&
+                        isConversationListView(child)
+                    ) {
+                        savedChatView = child
+                    }
+                }
+
+                override fun onChildViewRemoved(
+                    parent: View?,
+                    child: View?
+                ) {
+                    // Görünüm kaldırıldığında kayıt korunur.
+                }
+            }
+        )
 
         chatTab?.setOnClickListener {
             showTab("chats")
@@ -81,6 +111,37 @@ class MessagingTabBar @JvmOverloads constructor(
         isBound = true
         updateTabAppearance()
         registerBackHandler()
+    }
+
+    private fun isConversationListView(view: View): Boolean {
+        return containsText(view, "MESAJLAR") &&
+            containsText(view, "SOHBETLER")
+    }
+
+    private fun containsText(
+        view: View,
+        expectedText: String
+    ): Boolean {
+        if (view is TextView) {
+            if (view.text.toString().trim() == expectedText) {
+                return true
+            }
+        }
+
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                if (
+                    containsText(
+                        view.getChildAt(index),
+                        expectedText
+                    )
+                ) {
+                    return true
+                }
+            }
+        }
+
+        return false
     }
 
     private fun registerBackHandler() {
@@ -127,12 +188,6 @@ class MessagingTabBar @JvmOverloads constructor(
         }
     }
 
-    /**
-     * Kişiler veya İstekler sekmesindeysek
-     * Sohbetler sekmesine döner.
-     *
-     * Zaten Sohbetler sekmesindeysek false döndürür.
-     */
     fun returnToChats(): Boolean {
         if (activeTab == "chats") {
             return false
@@ -147,9 +202,9 @@ class MessagingTabBar @JvmOverloads constructor(
 
         if (tab == activeTab) return
 
-        if (savedChatView == null && contentPanel.childCount > 0) {
-            savedChatView = contentPanel.getChildAt(0)
-        }
+        // Önce aktif sekme değiştirilir.
+        // Böylece bilgi sayfaları sohbet listesi olarak kaydedilmez.
+        activeTab = tab
 
         contentPanel.removeAllViews()
 
@@ -158,7 +213,8 @@ class MessagingTabBar @JvmOverloads constructor(
                 val chatView = savedChatView
 
                 if (chatView != null) {
-                    (chatView.parent as? ViewGroup)?.removeView(chatView)
+                    (chatView.parent as? ViewGroup)
+                        ?.removeView(chatView)
 
                     contentPanel.addView(
                         chatView,
@@ -199,7 +255,6 @@ class MessagingTabBar @JvmOverloads constructor(
             }
         }
 
-        activeTab = tab
         updateTabAppearance()
     }
 
