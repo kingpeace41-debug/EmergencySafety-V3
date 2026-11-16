@@ -273,7 +273,7 @@ class MessagingTabBar @JvmOverloads constructor(
             inputType =
                 InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-            singleLine = true
+            setSingleLine(true)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = roundedBackground(dark, gold)
         }
@@ -465,7 +465,7 @@ class MessagingTabBar @JvmOverloads constructor(
             isFillViewport = true
             addView(
                 page,
-                ScrollView.LayoutParams(
+                FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 )
