@@ -5,13 +5,18 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 
@@ -27,6 +32,7 @@ class MessagingTabBar @JvmOverloads constructor(
     private var chatTab: FrameLayout? = null
     private var contactsTab: FrameLayout? = null
     private var requestsTab: FrameLayout? = null
+    private var requestBadge: TextView? = null
 
     private var activeTab = "chats"
     private var isBound = false
@@ -37,6 +43,9 @@ class MessagingTabBar @JvmOverloads constructor(
     private val dark = Color.rgb(36, 37, 41)
     private val selectedDark = Color.rgb(52, 43, 23)
     private val softText = Color.rgb(197, 197, 197)
+    private val pageBackground = Color.rgb(19, 19, 18)
+    private val green = Color.rgb(45, 130, 82)
+    private val red = Color.rgb(170, 48, 58)
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -56,6 +65,7 @@ class MessagingTabBar @JvmOverloads constructor(
         chatTab = findViewById(R.id.tabChats)
         contactsTab = findViewById(R.id.tabContacts)
         requestsTab = findViewById(R.id.tabRequests)
+        requestBadge = findViewById(R.id.requestBadge)
 
         val contentPanel = panel
 
@@ -91,7 +101,7 @@ class MessagingTabBar @JvmOverloads constructor(
                     parent: View?,
                     child: View?
                 ) {
-                    // Görünüm kaldırıldığında kayıt korunur.
+                    // Sohbet listesi referansı korunur.
                 }
             }
         )
@@ -111,6 +121,7 @@ class MessagingTabBar @JvmOverloads constructor(
         isBound = true
         updateTabAppearance()
         registerBackHandler()
+        refreshRequestBadge()
     }
 
     private fun isConversationListView(view: View): Boolean {
@@ -202,10 +213,7 @@ class MessagingTabBar @JvmOverloads constructor(
 
         if (tab == activeTab) return
 
-        // Önce aktif sekme değiştirilir.
-        // Böylece bilgi sayfaları sohbet listesi olarak kaydedilmez.
         activeTab = tab
-
         contentPanel.removeAllViews()
 
         when (tab) {
@@ -226,100 +234,641 @@ class MessagingTabBar @JvmOverloads constructor(
                 }
             }
 
-            "contacts" -> {
-                contentPanel.addView(
-                    createInformationPage(
-                        "KİŞİLER",
-                        "Bağlantı kurduğun kişiler burada görünecek.",
-                        "Kişi bulma ve bağlantı sistemi henüz sunucuya bağlanmadı."
-                    ),
-                    FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                )
-            }
+            "contacts" -> showContactsPage()
 
-            "requests" -> {
-                contentPanel.addView(
-                    createInformationPage(
-                        "GELEN İSTEKLER",
-                        "Bağlantı isteklerin burada görünecek.",
-                        "İstekleri sunucudan alma ve onaylama sistemi henüz bağlanmadı."
-                    ),
-                    FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                )
-            }
+            "requests" -> showRequestsPage()
         }
 
         updateTabAppearance()
     }
 
-    private fun createInformationPage(
-        title: String,
-        message: String,
-        detail: String
-    ): LinearLayout {
+    private fun showContactsPage() {
+        val screen = createPage()
+        val content = screen.second
 
-        return LinearLayout(context).apply {
+        content.addView(
+            createText(
+                "YENİ BAĞLANTI",
+                16f,
+                gold,
+                true
+            )
+        )
+
+        content.addView(
+            createText(
+                "EmergencySafety kullanan kişinin kayıtlı e-posta adresini gir.",
+                13f,
+                softText
+            ).apply {
+                setPadding(0, dp(7), 0, dp(12))
+            }
+        )
+
+        val emailInput = EditText(context).apply {
+            hint = "E-posta adresi"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            inputType =
+                InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            singleLine = true
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = roundedBackground(dark, gold)
+        }
+
+        content.addView(
+            emailInput,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(48)
+            ).apply {
+                topMargin = dp(8)
+            }
+        )
+
+        val sendButton = createButton(
+            "BAĞLANTI İSTEĞİ GÖNDER",
+            green
+        )
+
+        content.addView(
+            sendButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(46)
+            ).apply {
+                topMargin = dp(9)
+            }
+        )
+
+        val divider = createDivider()
+        content.addView(
+            divider,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(1)
+            ).apply {
+                topMargin = dp(18)
+                bottomMargin = dp(16)
+            }
+        )
+
+        content.addView(
+            createText(
+                "BAĞLANTILARIM",
+                16f,
+                gold,
+                true
+            )
+        )
+
+        val refreshButton = createButton(
+            "LİSTEYİ YENİLE",
+            dark
+        )
+
+        content.addView(
+            refreshButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(40)
+            ).apply {
+                topMargin = dp(9)
+            }
+        )
+
+        val listContainer = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(20), dp(20), dp(20), dp(20))
+        }
 
+        content.addView(
+            listContainer,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(12)
+            }
+        )
+
+        sendButton.setOnClickListener {
+            val email = emailInput.text.toString().trim()
+
+            if (email.isBlank()) {
+                showToast("E-posta adresini gir.")
+                return@setOnClickListener
+            }
+
+            sendButton.isEnabled = false
+            sendButton.text = "GÖNDERİLİYOR..."
+
+            Thread {
+                val result = ConnectionApi.sendRequest(
+                    context,
+                    email
+                )
+
+                post {
+                    sendButton.isEnabled = true
+                    sendButton.text = "BAĞLANTI İSTEĞİ GÖNDER"
+
+                    showToast(result.message)
+
+                    if (result.success) {
+                        emailInput.text.clear()
+                        loadConnections(listContainer)
+                        refreshRequestBadge()
+                    }
+                }
+            }.start()
+        }
+
+        refreshButton.setOnClickListener {
+            loadConnections(listContainer)
+        }
+
+        loadConnections(listContainer)
+        attachPage(screen.first)
+    }
+
+    private fun showRequestsPage() {
+        val screen = createPage()
+        val content = screen.second
+
+        content.addView(
+            createText(
+                "GELEN BAĞLANTI İSTEKLERİ",
+                16f,
+                gold,
+                true
+            )
+        )
+
+        content.addView(
+            createText(
+                "Bağlantıyı kabul ettiğinde karşılıklı bağlantı kurulur.",
+                13f,
+                softText
+            ).apply {
+                setPadding(0, dp(7), 0, dp(12))
+            }
+        )
+
+        val refreshButton = createButton(
+            "İSTEKLERİ YENİLE",
+            dark
+        )
+
+        content.addView(
+            refreshButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(42)
+            )
+        )
+
+        val listContainer = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        content.addView(
+            listContainer,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(12)
+            }
+        )
+
+        refreshButton.setOnClickListener {
+            loadRequests(listContainer)
+        }
+
+        loadRequests(listContainer)
+        attachPage(screen.first)
+    }
+
+    private fun createPage(): Pair<LinearLayout, LinearLayout> {
+        val page = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(14), dp(14), dp(14))
             background = roundedBackground(
-                Color.rgb(19, 19, 18),
+                pageBackground,
                 gold
             )
+        }
 
-            val titleView = TextView(context).apply {
-                text = title
-                textSize = 19f
-                setTextColor(gold)
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                gravity = Gravity.CENTER
-            }
-
-            val messageView = TextView(context).apply {
-                text = message
-                textSize = 15f
-                setTextColor(Color.WHITE)
-                gravity = Gravity.CENTER
-                setPadding(0, dp(14), 0, dp(8))
-            }
-
-            val detailView = TextView(context).apply {
-                text = detail
-                textSize = 12f
-                setTextColor(softText)
-                gravity = Gravity.CENTER
-            }
-
+        val scrollView = ScrollView(context).apply {
+            isFillViewport = true
             addView(
-                titleView,
-                LayoutParams(
-                    LayoutParams.MATCH_PARENT,
-                    LayoutParams.WRAP_CONTENT
+                page,
+                ScrollView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
                 )
             )
+        }
 
-            addView(
-                messageView,
-                LayoutParams(
-                    LayoutParams.MATCH_PARENT,
-                    LayoutParams.WRAP_CONTENT
+        return Pair(scrollView as LinearLayout, page)
+    }
+
+    private fun attachPage(view: View) {
+        val contentPanel = panel ?: return
+
+        contentPanel.removeAllViews()
+
+        contentPanel.addView(
+            view,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+    }
+
+    private fun loadConnections(
+        container: LinearLayout
+    ) {
+        container.removeAllViews()
+        addStatus(container, "Bağlantılar yükleniyor...")
+
+        Thread {
+            val result = ConnectionApi.getConnections(context)
+
+            post {
+                if (activeTab != "contacts") return@post
+
+                container.removeAllViews()
+
+                if (!result.success) {
+                    addStatus(container, result.message)
+                    return@post
+                }
+
+                val items = result.data.orEmpty()
+
+                if (items.isEmpty()) {
+                    addStatus(
+                        container,
+                        "Henüz bağlantı kurduğun bir kişi yok."
+                    )
+                    return@post
+                }
+
+                items.forEach { item ->
+                    addConnectionRow(container, item)
+                }
+            }
+        }.start()
+    }
+
+    private fun loadRequests(
+        container: LinearLayout
+    ) {
+        container.removeAllViews()
+        addStatus(container, "Gelen istekler yükleniyor...")
+
+        Thread {
+            val result = ConnectionApi.getRequests(context)
+
+            post {
+                if (activeTab != "requests") return@post
+
+                container.removeAllViews()
+
+                if (!result.success) {
+                    addStatus(container, result.message)
+                    refreshRequestBadge()
+                    return@post
+                }
+
+                val items = result.data.orEmpty()
+
+                updateRequestBadge(items.size)
+
+                if (items.isEmpty()) {
+                    addStatus(
+                        container,
+                        "Bekleyen bağlantı isteğin yok."
+                    )
+                    return@post
+                }
+
+                items.forEach { item ->
+                    addRequestRow(container, item)
+                }
+            }
+        }.start()
+    }
+
+    private fun addConnectionRow(
+        container: LinearLayout,
+        item: ConnectionApiItem
+    ) {
+        val row = createRow()
+
+        val email = createText(
+            item.email,
+            13f,
+            Color.WHITE,
+            true
+        )
+
+        row.addView(
+            email,
+            LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
+            )
+        )
+
+        val removeButton = createButton(
+            "KALDIR",
+            red
+        )
+
+        row.addView(
+            removeButton,
+            LinearLayout.LayoutParams(
+                dp(76),
+                dp(38)
+            ).apply {
+                marginStart = dp(8)
+            }
+        )
+
+        removeButton.setOnClickListener {
+            removeButton.isEnabled = false
+
+            Thread {
+                val result = ConnectionApi.removeConnection(
+                    context,
+                    item.id
                 )
+
+                post {
+                    showToast(result.message)
+
+                    if (result.success) {
+                        loadConnections(container)
+                    } else {
+                        removeButton.isEnabled = true
+                    }
+                }
+            }.start()
+        }
+
+        container.addView(row)
+    }
+
+    private fun addRequestRow(
+        container: LinearLayout,
+        item: ConnectionApiItem
+    ) {
+        val card = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = roundedBackground(dark, gold)
+        }
+
+        val email = createText(
+            item.email,
+            13f,
+            Color.WHITE,
+            true
+        )
+
+        card.addView(email)
+
+        val actions = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+
+        val acceptButton = createButton(
+            "KABUL",
+            green
+        )
+
+        val rejectButton = createButton(
+            "REDDET",
+            red
+        )
+
+        val blockButton = createButton(
+            "ENGELLE",
+            dark
+        )
+
+        actions.addView(
+            acceptButton,
+            LinearLayout.LayoutParams(0, dp(38), 1f).apply {
+                marginEnd = dp(4)
+            }
+        )
+
+        actions.addView(
+            rejectButton,
+            LinearLayout.LayoutParams(0, dp(38), 1f).apply {
+                marginStart = dp(4)
+                marginEnd = dp(4)
+            }
+        )
+
+        actions.addView(
+            blockButton,
+            LinearLayout.LayoutParams(0, dp(38), 1f).apply {
+                marginStart = dp(4)
+            }
+        )
+
+        card.addView(
+            actions,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(12)
+            }
+        )
+
+        acceptButton.setOnClickListener {
+            respondToRequest(
+                item,
+                "accept",
+                container,
+                acceptButton,
+                rejectButton,
+                blockButton
+            )
+        }
+
+        rejectButton.setOnClickListener {
+            respondToRequest(
+                item,
+                "reject",
+                container,
+                acceptButton,
+                rejectButton,
+                blockButton
+            )
+        }
+
+        blockButton.setOnClickListener {
+            respondToRequest(
+                item,
+                "block",
+                container,
+                acceptButton,
+                rejectButton,
+                blockButton
+            )
+        }
+
+        container.addView(
+            card,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(10)
+            }
+        )
+    }
+
+    private fun respondToRequest(
+        item: ConnectionApiItem,
+        action: String,
+        container: LinearLayout,
+        vararg buttons: TextView
+    ) {
+        buttons.forEach { it.isEnabled = false }
+
+        Thread {
+            val result = ConnectionApi.respond(
+                context,
+                item.id,
+                action
             )
 
-            addView(
-                detailView,
-                LayoutParams(
-                    LayoutParams.MATCH_PARENT,
-                    LayoutParams.WRAP_CONTENT
-                )
-            )
+            post {
+                showToast(result.message)
+
+                if (result.success) {
+                    loadRequests(container)
+                    refreshRequestBadge()
+                } else {
+                    buttons.forEach { it.isEnabled = true }
+                }
+            }
+        }.start()
+    }
+
+    private fun refreshRequestBadge() {
+        Thread {
+            val result = ConnectionApi.getRequests(context)
+
+            post {
+                if (result.success) {
+                    updateRequestBadge(
+                        result.data?.size ?: 0
+                    )
+                }
+            }
+        }.start()
+    }
+
+    private fun updateRequestBadge(count: Int) {
+        requestBadge?.apply {
+            text = if (count > 99) "99+" else count.toString()
+            visibility = if (count > 0) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+        }
+    }
+
+    private fun addStatus(
+        container: LinearLayout,
+        message: String
+    ) {
+        container.addView(
+            createText(
+                message,
+                13f,
+                softText
+            ).apply {
+                gravity = Gravity.CENTER
+                setPadding(dp(8), dp(18), dp(8), dp(18))
+            }
+        )
+    }
+
+    private fun createRow(): LinearLayout {
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = roundedBackground(dark, gold)
+        }
+    }
+
+    private fun createText(
+        value: String,
+        size: Float,
+        color: Int,
+        bold: Boolean = false
+    ): TextView {
+        return TextView(context).apply {
+            text = value
+            textSize = size
+            setTextColor(color)
+
+            if (bold) {
+                setTypeface(null, Typeface.BOLD)
+            }
+        }
+    }
+
+    private fun createButton(
+        value: String,
+        color: Int
+    ): TextView {
+        return TextView(context).apply {
+            text = value
+            textSize = 10f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            isClickable = true
+            isFocusable = true
+            background = roundedBackground(color, gold)
+            setPadding(dp(5), dp(7), dp(5), dp(7))
+        }
+    }
+
+    private fun createDivider(): View {
+        return View(context).apply {
+            setBackgroundColor(Color.rgb(91, 75, 37))
+        }
+    }
+
+    private fun roundedBackground(
+        color: Int,
+        strokeColor: Int
+    ): GradientDrawable {
+        return GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(9).toFloat()
+
+            if (strokeColor != Color.TRANSPARENT) {
+                setStroke(dp(1), strokeColor)
+            }
         }
     }
 
@@ -346,18 +895,12 @@ class MessagingTabBar @JvmOverloads constructor(
         )
     }
 
-    private fun roundedBackground(
-        color: Int,
-        strokeColor: Int
-    ): GradientDrawable {
-        return GradientDrawable().apply {
-            setColor(color)
-            cornerRadius = dp(8).toFloat()
-
-            if (strokeColor != Color.TRANSPARENT) {
-                setStroke(dp(1), strokeColor)
-            }
-        }
+    private fun showToast(message: String) {
+        Toast.makeText(
+            context,
+            message,
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun dp(value: Int): Int {
