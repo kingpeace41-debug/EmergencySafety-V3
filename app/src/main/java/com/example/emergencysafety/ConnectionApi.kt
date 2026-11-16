@@ -25,7 +25,9 @@ internal data class MessageApiItem(
     val messageType: String,
     val createdAt: String,
     val deliveredAt: String?,
-    val readAt: String?
+    val readAt: String?,
+    val connectionId: String = "",
+    val isOutgoing: Boolean = false
 )
 
 internal data class ConnectionApiResult<T>(
@@ -265,8 +267,13 @@ internal object ConnectionApi {
             )
 
         val item = parseMessage(
-            messageObject,
-            messageObject.optString("recipientUsername", "")
+            item = messageObject,
+            recipientUsername = messageObject.optString(
+                "recipientUsername",
+                ""
+            ),
+            connectionId = connectionId,
+            isOutgoing = true
         )
 
         return ConnectionApiResult(
@@ -302,7 +309,21 @@ internal object ConnectionApi {
             val item = array.optJSONObject(index) ?: continue
 
             items.add(
-                parseMessage(item, "")
+                parseMessage(
+                    item = item,
+                    recipientUsername = item.optString(
+                        "recipientUsername",
+                        ""
+                    ),
+                    connectionId = item.optString(
+                        "connectionId",
+                        ""
+                    ),
+                    isOutgoing = item.optBoolean(
+                        "isOutgoing",
+                        false
+                    )
+                )
             )
         }
 
@@ -346,7 +367,9 @@ internal object ConnectionApi {
 
     private fun parseMessage(
         item: JSONObject,
-        recipientUsername: String
+        recipientUsername: String,
+        connectionId: String = "",
+        isOutgoing: Boolean = false
     ): MessageApiItem {
 
         return MessageApiItem(
@@ -357,7 +380,9 @@ internal object ConnectionApi {
             messageType = item.optString("messageType", "text"),
             createdAt = item.optString("createdAt", ""),
             deliveredAt = nullableString(item, "deliveredAt"),
-            readAt = nullableString(item, "readAt")
+            readAt = nullableString(item, "readAt"),
+            connectionId = connectionId,
+            isOutgoing = isOutgoing
         )
     }
 
