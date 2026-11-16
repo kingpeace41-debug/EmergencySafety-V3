@@ -14,8 +14,8 @@
         android:alpha="0.22"
         android:contentDescription="Sarı kurt arka planı" />
 
-    <!-- MESAJLAŞMA SEKME ÇUBUĞU -->
-    <LinearLayout
+    <!-- ÇALIŞAN MESAJLAŞMA SEKME ÇUBUĞU -->
+    <com.example.emergencysafety.MessagingTabBar
         android:id="@+id/messagingTabBar"
         android:layout_width="match_parent"
         android:layout_height="44dp"
@@ -83,7 +83,6 @@
                 android:textSize="10sp"
                 android:textStyle="bold" />
 
-            <!-- GERÇEK İSTEK SAYISI SONRA BAĞLANACAK -->
             <TextView
                 android:id="@+id/requestBadge"
                 android:layout_width="18dp"
@@ -98,7 +97,7 @@
                 android:visibility="gone" />
         </FrameLayout>
 
-    </LinearLayout>
+    </com.example.emergencysafety.MessagingTabBar>
 
     <!-- MESAJLAŞMA PANELİ -->
     <FrameLayout
