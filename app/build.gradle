@@ -1,6 +1,8 @@
+
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services'
 }
 
 android {
@@ -46,6 +48,10 @@ dependencies {
 
     // Google Fused Location Provider
     implementation 'com.google.android.gms:play-services-location:21.3.0'
+
+    // Firebase Cloud Messaging
+    implementation platform('com.google.firebase:firebase-bom:35.2.0')
+    implementation 'com.google.firebase:firebase-messaging'
 
     // Trixnity sürümlerini birlikte yöneten BOM
     implementation platform('de.connect2x.trixnity:trixnity-bom:5.10.1')
