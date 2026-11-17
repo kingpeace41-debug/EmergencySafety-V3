@@ -19,6 +19,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 class MessagingTabBar @JvmOverloads constructor(
     context: Context,
@@ -32,10 +34,13 @@ class MessagingTabBar @JvmOverloads constructor(
     private var chatTab: FrameLayout? = null
     private var contactsTab: FrameLayout? = null
     private var requestsTab: FrameLayout? = null
+    private var chatBadge: TextView? = null
     private var requestBadge: TextView? = null
 
     private var activeTab = "chats"
     private var isBound = false
+    private var isRefreshingBadges = false
+    private var shouldRefreshBadgesAgain = false
 
     private var backCallback: OnBackPressedCallback? = null
 
@@ -65,6 +70,7 @@ class MessagingTabBar @JvmOverloads constructor(
         chatTab = findViewById(R.id.tabChats)
         contactsTab = findViewById(R.id.tabContacts)
         requestsTab = findViewById(R.id.tabRequests)
+        chatBadge = findViewById(R.id.chatBadge)
         requestBadge = findViewById(R.id.requestBadge)
 
         val contentPanel = panel
@@ -94,6 +100,7 @@ class MessagingTabBar @JvmOverloads constructor(
                         isConversationListView(child)
                     ) {
                         savedChatView = child
+                        refreshBadges()
                     }
                 }
 
@@ -121,7 +128,7 @@ class MessagingTabBar @JvmOverloads constructor(
         isBound = true
         updateTabAppearance()
         registerBackHandler()
-        refreshRequestBadge()
+        registerLifecycleObserver()
     }
 
     private fun isConversationListView(view: View): Boolean {
@@ -153,6 +160,19 @@ class MessagingTabBar @JvmOverloads constructor(
         }
 
         return false
+    }
+
+    private fun registerLifecycleObserver() {
+        val activity = findActivity(context) as? AppCompatActivity
+            ?: return
+
+        activity.lifecycle.addObserver(
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    refreshBadges()
+                }
+            }
+        )
     }
 
     private fun registerBackHandler() {
@@ -211,7 +231,10 @@ class MessagingTabBar @JvmOverloads constructor(
     private fun showTab(tab: String) {
         val contentPanel = panel ?: return
 
-        if (tab == activeTab) return
+        if (tab == activeTab) {
+            refreshBadges()
+            return
+        }
 
         activeTab = tab
         contentPanel.removeAllViews()
@@ -240,6 +263,7 @@ class MessagingTabBar @JvmOverloads constructor(
         }
 
         updateTabAppearance()
+        refreshBadges()
     }
 
     private fun showContactsPage() {
@@ -379,7 +403,7 @@ class MessagingTabBar @JvmOverloads constructor(
                     if (result.success) {
                         emailInput.text.clear()
                         loadConnections(listContainer)
-                        refreshRequestBadge()
+                        refreshBadges()
                     }
                 }
             }.start()
@@ -541,13 +565,12 @@ class MessagingTabBar @JvmOverloads constructor(
 
                 if (!result.success) {
                     addStatus(container, result.message)
-                    refreshRequestBadge()
+                    refreshBadges()
                     return@post
                 }
 
                 val items = result.data.orEmpty()
-
-                updateRequestBadge(items.size)
+                refreshBadges()
 
                 if (items.isEmpty()) {
                     addStatus(
@@ -760,7 +783,6 @@ class MessagingTabBar @JvmOverloads constructor(
 
                 if (result.success) {
                     loadRequests(container)
-                    refreshRequestBadge()
                 } else {
                     buttons.forEach { it.isEnabled = true }
                 }
@@ -768,18 +790,46 @@ class MessagingTabBar @JvmOverloads constructor(
         }.start()
     }
 
-    private fun refreshRequestBadge() {
+    private fun refreshBadges() {
+        if (isRefreshingBadges) {
+            shouldRefreshBadgesAgain = true
+            return
+        }
+
+        isRefreshingBadges = true
+
         Thread {
-            val result = ConnectionApi.getRequests(context)
+            val result = ConnectionApi.getMessageSummary(context)
 
             post {
+                isRefreshingBadges = false
+
                 if (result.success) {
-                    updateRequestBadge(
-                        result.data?.size ?: 0
-                    )
+                    val summary = result.data
+
+                    if (summary != null) {
+                        updateChatBadge(summary.unreadTotal)
+                        updateRequestBadge(summary.pendingInvitations)
+                    }
+                }
+
+                if (shouldRefreshBadgesAgain) {
+                    shouldRefreshBadgesAgain = false
+                    refreshBadges()
                 }
             }
         }.start()
+    }
+
+    private fun updateChatBadge(count: Int) {
+        chatBadge?.apply {
+            text = if (count > 99) "99+" else count.toString()
+            visibility = if (count > 0) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+        }
     }
 
     private fun updateRequestBadge(count: Int) {
