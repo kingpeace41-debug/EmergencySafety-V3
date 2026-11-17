@@ -4,7 +4,6 @@
     android:layout_height="match_parent"
     android:background="#101114">
 
-    <!-- SARI KURT ARKA PLANI -->
     <ImageView
         android:id="@+id/yellowPageBackground"
         android:layout_width="match_parent"
@@ -14,7 +13,6 @@
         android:alpha="0.22"
         android:contentDescription="Sarı kurt arka planı" />
 
-    <!-- ÇALIŞAN MESAJLAŞMA SEKME ÇUBUĞU -->
     <com.example.emergencysafety.MessagingTabBar
         android:id="@+id/messagingTabBar"
         android:layout_width="match_parent"
@@ -44,6 +42,19 @@
                 android:textColor="#E8B837"
                 android:textSize="10sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/chatBadge"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="top|end"
+                android:gravity="center"
+                android:background="#D62839"
+                android:text="0"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
         </FrameLayout>
 
         <!-- KİŞİLER -->
@@ -65,7 +76,7 @@
                 android:textStyle="bold" />
         </FrameLayout>
 
-        <!-- İSTEKLER -->
+        <!-- DAVETLER -->
         <FrameLayout
             android:id="@+id/tabRequests"
             android:layout_width="0dp"
@@ -78,7 +89,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:gravity="center"
-                android:text="İSTEKLER"
+                android:text="DAVETLER"
                 android:textColor="#C5C5C5"
                 android:textSize="10sp"
                 android:textStyle="bold" />
@@ -99,7 +110,6 @@
 
     </com.example.emergencysafety.MessagingTabBar>
 
-    <!-- MESAJLAŞMA PANELİ -->
     <FrameLayout
         android:id="@+id/messagePanelContainer"
         android:layout_width="match_parent"
@@ -108,7 +118,6 @@
         android:layout_marginBottom="60dp"
         android:padding="12dp" />
 
-    <!-- ÜST BANNER -->
     <ImageView
         android:id="@+id/stripEmergency"
         android:layout_width="match_parent"
@@ -118,7 +127,6 @@
         android:scaleType="fitXY"
         android:contentDescription="Emergency banner" />
 
-    <!-- ALT BANNER -->
     <ImageView
         android:id="@+id/stripSafety"
         android:layout_width="match_parent"
