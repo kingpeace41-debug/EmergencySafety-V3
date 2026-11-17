@@ -30,6 +30,17 @@ internal data class MessageApiItem(
     val isOutgoing: Boolean = false
 )
 
+internal data class UnreadConnectionCount(
+    val connectionId: String,
+    val count: Int
+)
+
+internal data class MessageSummaryApiItem(
+    val unreadTotal: Int,
+    val unreadByConnection: List<UnreadConnectionCount>,
+    val pendingInvitations: Int
+)
+
 internal data class ConnectionApiResult<T>(
     val success: Boolean,
     val message: String,
@@ -334,6 +345,55 @@ internal object ConnectionApi {
                 "Mesajlar alındı."
             ),
             data = items
+        )
+    }
+
+    fun getMessageSummary(
+        context: Context
+    ): ConnectionApiResult<MessageSummaryApiItem> {
+
+        val response = request(
+            context = context,
+            path = "/messages/summary",
+            method = "GET"
+        )
+
+        if (!response.optBoolean("success", false)) {
+            return failure(response)
+        }
+
+        val unreadArray = response.optJSONArray("unreadByConnection")
+            ?: JSONArray()
+
+        val unreadByConnection = mutableListOf<UnreadConnectionCount>()
+
+        for (index in 0 until unreadArray.length()) {
+            val item = unreadArray.optJSONObject(index) ?: continue
+
+            unreadByConnection.add(
+                UnreadConnectionCount(
+                    connectionId = item.optString("connectionId", ""),
+                    count = item.optInt("count", 0).coerceAtLeast(0)
+                )
+            )
+        }
+
+        val summary = MessageSummaryApiItem(
+            unreadTotal = response.optInt(
+                "unreadTotal",
+                0
+            ).coerceAtLeast(0),
+            unreadByConnection = unreadByConnection,
+            pendingInvitations = response.optInt(
+                "pendingInvitations",
+                0
+            ).coerceAtLeast(0)
+        )
+
+        return ConnectionApiResult(
+            success = true,
+            message = "Mesaj ve davet sayıları alındı.",
+            data = summary
         )
     }
 
