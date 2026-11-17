@@ -103,6 +103,16 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
+        <!-- Firebase Cloud Messaging -->
+        <service
+            android:name=".FcmMessagingService"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>
