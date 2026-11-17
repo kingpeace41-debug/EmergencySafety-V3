@@ -93,6 +93,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // KAYITLI KULLANICININ FIREBASE BILDIRIM TOKENINI KAYDET
+        FcmTokenRegistrar.registerIfLoggedIn(this)
+
         wolfBackground = findViewById(R.id.wolfBackground)
         stripEmergency = findViewById(R.id.stripEmergency)
         stripSafety = findViewById(R.id.stripSafety)
