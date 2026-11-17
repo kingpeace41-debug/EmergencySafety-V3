@@ -51,6 +51,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     private var isChatOpen = false
     private var connectionsContainer: LinearLayout? = null
     private var shouldRefreshConnectionsOnResume = false
+    private var unreadCountsByConnection: Map<String, Int> = emptyMap()
 
     private var activePrivateConnection: ConnectionApiItem? = null
     private var privateMessagesColumn: LinearLayout? = null
@@ -605,6 +606,12 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         Thread {
             val result = ConnectionApi.getConnections(this)
+            val summaryResult = ConnectionApi.getMessageSummary(this)
+
+            val unreadCounts = summaryResult.data
+                ?.unreadByConnection
+                ?.associate { it.connectionId to it.count }
+                ?: emptyMap()
 
             runOnUiThread {
                 if (isFinishing || isDestroyed || isChatOpen) {
@@ -618,6 +625,8 @@ class YellowSafetyActivity : AppCompatActivity() {
                     return@runOnUiThread
                 }
 
+                unreadCountsByConnection = unreadCounts
+
                 val connections = result.data.orEmpty()
 
                 if (connections.isEmpty()) {
@@ -629,7 +638,11 @@ class YellowSafetyActivity : AppCompatActivity() {
                 }
 
                 connections.forEach { connection ->
-                    addPrivateConversationRow(container, connection)
+                    addPrivateConversationRow(
+                        container,
+                        connection,
+                        unreadCountsByConnection[connection.id] ?: 0
+                    )
                 }
             }
         }.start()
@@ -653,7 +666,8 @@ class YellowSafetyActivity : AppCompatActivity() {
 
     private fun addPrivateConversationRow(
         container: LinearLayout,
-        connection: ConnectionApiItem
+        connection: ConnectionApiItem,
+        unreadCount: Int
     ) {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -698,6 +712,27 @@ class YellowSafetyActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 1f
             )
+        )
+
+        val unreadBadge = TextView(this).apply {
+            text = if (unreadCount > 99) "99+" else unreadCount.toString()
+            textSize = 10f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = roundedBackground(
+                Color.rgb(214, 40, 57),
+                Color.TRANSPARENT,
+                50
+            )
+            visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
+        }
+
+        row.addView(
+            unreadBadge,
+            LinearLayout.LayoutParams(dp(25), dp(25)).apply {
+                marginEnd = dp(6)
+            }
         )
 
         val arrow = createText("›", 28f, gold, true)
