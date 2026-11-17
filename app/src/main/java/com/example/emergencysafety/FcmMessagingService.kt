@@ -21,6 +21,15 @@ class FcmMessagingService : FirebaseMessagingService() {
         private const val CHANNEL_NAME = "Emergency Safety Bildirimleri"
     }
 
+    override fun onNewToken(token: String) {
+        super.onNewToken(token)
+
+        FcmTokenRegistrar.registerNewToken(
+            applicationContext,
+            token
+        )
+    }
+
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
