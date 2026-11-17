@@ -789,6 +789,9 @@ class MessagingTabBar @JvmOverloads constructor(
             }
         }.start()
     }
+       fun refreshBadgesNow() {
+        refreshBadges()
+    }
 
     private fun refreshBadges() {
         if (isRefreshingBadges) {
