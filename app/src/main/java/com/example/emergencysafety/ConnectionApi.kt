@@ -425,6 +425,43 @@ internal object ConnectionApi {
         )
     }
 
+    // FIREBASE BILDIRIM TOKENINI SUNUCUYA KAYDET
+    fun registerFcmToken(
+        context: Context,
+        token: String
+    ): ConnectionApiResult<Boolean> {
+
+        val cleanToken = token.trim()
+
+        if (cleanToken.isEmpty() || cleanToken.length > 4096) {
+            return ConnectionApiResult(
+                false,
+                "Geçersiz bildirim tokenı."
+            )
+        }
+
+        val body = JSONObject().put(
+            "token",
+            cleanToken
+        )
+
+        val response = request(
+            context = context,
+            path = "/notifications/register-token",
+            method = "POST",
+            body = body
+        )
+
+        return ConnectionApiResult(
+            success = response.optBoolean("success", false),
+            message = response.optString(
+                "message",
+                "Bildirim kaydedilemedi."
+            ),
+            data = response.optBoolean("success", false)
+        )
+    }
+
     private fun parseMessage(
         item: JSONObject,
         recipientUsername: String,
