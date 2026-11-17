@@ -49,6 +49,9 @@ class YellowSafetyActivity : AppCompatActivity() {
     private lateinit var historyDatabase: ESBotDatabase
 
     private var isChatOpen = false
+    private var connectionsContainer: LinearLayout? = null
+    private var shouldRefreshConnectionsOnResume = false
+
     private var activePrivateConnection: ConnectionApiItem? = null
     private var privateMessagesColumn: LinearLayout? = null
     private var privateMessagesScroll: ScrollView? = null
@@ -111,12 +114,25 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
+    override fun onPause() {
+        super.onPause()
+
+        if (!isChatOpen && ::panelContainer.isInitialized) {
+            shouldRefreshConnectionsOnResume = true
+        }
+    }
+
     override fun onResume() {
         super.onResume()
-        // Kullanıcı başka ekrandan dönünce (örn. yeni bağlantı kabul edip) listeyi tazele
-        if (!isChatOpen && ::panelContainer.isInitialized) {
-            val connectionsContainer = panelContainer.findViewById<LinearLayout>(R.id.connectionsContainerId)
-            // Eğer container bulunursa yeniden yükle
+
+        // Başka bir ekrandan dönüldüğünde bağlantı listesini yenile.
+        // İlk açılışta gereksiz ikinci istek gönderilmesini önler.
+        if (shouldRefreshConnectionsOnResume && !isChatOpen) {
+            shouldRefreshConnectionsOnResume = false
+
+            connectionsContainer?.let { container ->
+                loadConversationConnections(container)
+            }
         }
     }
 
@@ -545,11 +561,13 @@ class YellowSafetyActivity : AppCompatActivity() {
         peopleTitle.setPadding(dp(5), dp(10), dp(5), dp(10))
         listContent.addView(peopleTitle)
 
-        val connectionsContainer = LinearLayout(this).apply {
+        val connectionsList = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             id = View.generateViewId()
         }
-        listContent.addView(connectionsContainer)
+
+        connectionsContainer = connectionsList
+        listContent.addView(connectionsList)
 
         scroll.addView(
             listContent,
@@ -576,7 +594,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
-        loadConversationConnections(connectionsContainer)
+        loadConversationConnections(connectionsList)
     }
 
     private fun loadConversationConnections(
@@ -961,7 +979,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 
-                // KRİTİK KONTROL: Ağ isteği sürerken kullanıcı başkasohbete geçtiyse işlemi yok say
+                // KRİTİK KONTROL: Ağ isteği sürerken kullanıcı başka sohbete geçtiyse işlemi yok say
                 if (!isChatOpen || activePrivateConnection?.id != connection.id) {
                     return@runOnUiThread
                 }
