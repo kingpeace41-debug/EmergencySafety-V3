@@ -979,7 +979,6 @@ class YellowSafetyActivity : AppCompatActivity() {
 
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 
-                // KRİTİK KONTROL: Ağ isteği sürerken kullanıcı başka sohbete geçtiyse işlemi yok say
                 if (!isChatOpen || activePrivateConnection?.id != connection.id) {
                     return@runOnUiThread
                 }
@@ -1030,15 +1029,9 @@ class YellowSafetyActivity : AppCompatActivity() {
                         }
                     }
 
-                    // DÜZELTME: Ölçüm hatasını önlemek için kaydırma ve konum kontrolü post bloğuna alındı
-                    privateMessagesScroll?.let { scroll ->
-                        scroll.post {
-                            val child = scroll.getChildAt(0)
-                            val isNearBottom = child == null || scroll.scrollY >= (child.height - scroll.height - 150)
-                            if (isNearBottom || column.childCount <= 1) {
-                                scroll.fullScroll(View.FOCUS_DOWN)
-                            }
-                        }
+                    // Basit ve kesin aşağı sabitleme yöntemi
+                    privateMessagesScroll?.post {
+                        privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
                     }
                 }
 
@@ -1145,7 +1138,6 @@ class YellowSafetyActivity : AppCompatActivity() {
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
 
-                // KRİTİK GÜVENLİK: Yanıt geldiğinde kullanıcı hâlâ AYNI sohbet odasında mı?
                 if (!isChatOpen || activePrivateConnection?.id != connection.id) {
                     isSendingMessage = false
                     return@runOnUiThread
