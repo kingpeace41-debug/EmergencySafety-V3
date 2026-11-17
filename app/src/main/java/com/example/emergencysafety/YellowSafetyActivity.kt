@@ -7,7 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -86,6 +89,137 @@ class YellowSafetyActivity : AppCompatActivity() {
         val actionLabel: String? = null,
         val destination: Class<out Activity>? = null
     )
+
+    private enum class MessageDeliveryState {
+        SENT,
+        DELIVERED,
+        READ
+    }
+
+    private inner class MessageStatusIconView(
+        context: Context,
+        private val state: MessageDeliveryState
+    ) : View(context) {
+
+        private val iconWidthDp = when (state) {
+            MessageDeliveryState.SENT -> 16
+            MessageDeliveryState.DELIVERED -> 26
+            MessageDeliveryState.READ -> 22
+        }
+
+        private val checkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = dp(2).toFloat()
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+
+        private val eyePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(70, 165, 255)
+            style = Paint.Style.STROKE
+            strokeWidth = dp(1.8f.toInt()).toFloat()
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+        }
+
+        private val pupilPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(0, 95, 210)
+            style = Paint.Style.FILL
+        }
+
+        init {
+            contentDescription = when (state) {
+                MessageDeliveryState.SENT -> "Gönderildi"
+                MessageDeliveryState.DELIVERED -> "İletildi"
+                MessageDeliveryState.READ -> "Okundu"
+            }
+        }
+
+        override fun onMeasure(
+            widthMeasureSpec: Int,
+            heightMeasureSpec: Int
+        ) {
+            setMeasuredDimension(
+                dp(iconWidthDp),
+                dp(16)
+            )
+        }
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+
+            when (state) {
+                MessageDeliveryState.SENT -> {
+                    drawCheck(canvas, 0)
+                }
+
+                MessageDeliveryState.DELIVERED -> {
+                    drawCheck(canvas, 0)
+                    drawCheck(canvas, 10)
+                }
+
+                MessageDeliveryState.READ -> {
+                    drawEye(canvas)
+                }
+            }
+        }
+
+        private fun drawCheck(
+            canvas: Canvas,
+            offsetDp: Int
+        ) {
+            val x = dp(offsetDp).toFloat()
+
+            canvas.drawLine(
+                x + dp(1),
+                dp(8).toFloat(),
+                x + dp(5),
+                dp(12).toFloat(),
+                checkPaint
+            )
+
+            canvas.drawLine(
+                x + dp(5),
+                dp(12).toFloat(),
+                x + dp(12),
+                dp(4).toFloat(),
+                checkPaint
+            )
+        }
+
+        private fun drawEye(canvas: Canvas) {
+            val eyePath = Path().apply {
+                moveTo(
+                    dp(1).toFloat(),
+                    dp(8).toFloat()
+                )
+
+                quadTo(
+                    dp(11).toFloat(),
+                    dp(0).toFloat(),
+                    dp(21).toFloat(),
+                    dp(8).toFloat()
+                )
+
+                quadTo(
+                    dp(11).toFloat(),
+                    dp(16).toFloat(),
+                    dp(1).toFloat(),
+                    dp(8).toFloat()
+                )
+            }
+
+            canvas.drawPath(eyePath, eyePaint)
+
+            canvas.drawCircle(
+                dp(11).toFloat(),
+                dp(8).toFloat(),
+                dp(3).toFloat(),
+                pupilPaint
+            )
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -1104,29 +1238,22 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun addServerMessageBubble(message: MessageApiItem) {
+
         val isOutgoing = message.isOutgoing
 
-        val bubbleText = buildString {
-            append(message.body)
+        val bubble = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
 
-            if (isOutgoing) {
-                append("\n")
+            setPadding(
+                dp(14),
+                dp(10),
+                dp(12),
+                dp(8)
+            )
 
-                when {
-                    !message.readAt.isNullOrBlank() -> append("✓✓ Okundu")
-                    !message.deliveredAt.isNullOrBlank() -> append("✓✓ İletildi")
-                    else -> append("✓ Gönderildi")
-                }
-            }
-        }
-
-        val bubble = TextView(this).apply {
-            text = bubbleText
-            textSize = 15f
-            setTextColor(Color.WHITE)
-            setPadding(14, 10, 14, 10)
             background = GradientDrawable().apply {
-                cornerRadius = 22f
+                cornerRadius = dp(22).toFloat()
+
                 setColor(
                     if (isOutgoing) {
                         Color.rgb(35, 105, 65)
@@ -1137,13 +1264,98 @@ class YellowSafetyActivity : AppCompatActivity() {
             }
         }
 
+        val messageText = TextView(this).apply {
+            text = message.body
+            textSize = 15f
+            setTextColor(Color.WHITE)
+        }
+
+        bubble.addView(
+            messageText,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        val statusRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+        }
+
+        // Mesajın saati korunur.
+        val timeText = TextView(this).apply {
+            text = formatTime(
+                parseServerTime(message.createdAt)
+            )
+
+            textSize = 10f
+            setTextColor(Color.rgb(210, 210, 210))
+        }
+
+        statusRow.addView(
+            timeText,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        // Durum simgeleri yalnızca gönderilen mesajlarda görünür.
+        if (isOutgoing) {
+
+            val deliveryState = when {
+                !message.readAt.isNullOrBlank() -> {
+                    MessageDeliveryState.READ
+                }
+
+                !message.deliveredAt.isNullOrBlank() -> {
+                    MessageDeliveryState.DELIVERED
+                }
+
+                else -> {
+                    MessageDeliveryState.SENT
+                }
+            }
+
+            val statusIcon = MessageStatusIconView(
+                this,
+                deliveryState
+            )
+
+            statusRow.addView(
+                statusIcon,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    dp(16)
+                ).apply {
+                    marginStart = dp(4)
+                }
+            )
+        }
+
+        bubble.addView(
+            statusRow,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(3)
+            }
+        )
+
         val params = LinearLayout.LayoutParams(
             (resources.displayMetrics.widthPixels * 0.75f).toInt(),
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply {
-            topMargin = 5
-            bottomMargin = 5
-            gravity = if (isOutgoing) Gravity.END else Gravity.START
+            topMargin = dp(5)
+            bottomMargin = dp(5)
+
+            gravity = if (isOutgoing) {
+                Gravity.END
+            } else {
+                Gravity.START
+            }
         }
 
         privateMessagesColumn?.addView(bubble, params)
