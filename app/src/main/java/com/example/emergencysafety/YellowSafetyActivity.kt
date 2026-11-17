@@ -1030,12 +1030,12 @@ class YellowSafetyActivity : AppCompatActivity() {
                         }
                     }
 
-                    // Kullanıcı yukarıda eski mesajları okumuyorsa (en alttaysa) aşağı kaydır
+                    // DÜZELTME: Ölçüm hatasını önlemek için kaydırma ve konum kontrolü post bloğuna alındı
                     privateMessagesScroll?.let { scroll ->
-                        val child = scroll.getChildAt(0)
-                        val isNearBottom = child == null || scroll.scrollY >= (child.measuredHeight - scroll.height - 150)
-                        if (isNearBottom || column.childCount <= 1) {
-                            scroll.post {
+                        scroll.post {
+                            val child = scroll.getChildAt(0)
+                            val isNearBottom = child == null || scroll.scrollY >= (child.height - scroll.height - 150)
+                            if (isNearBottom || column.childCount <= 1) {
                                 scroll.fullScroll(View.FOCUS_DOWN)
                             }
                         }
