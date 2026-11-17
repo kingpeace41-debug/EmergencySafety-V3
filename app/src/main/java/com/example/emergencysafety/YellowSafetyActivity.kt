@@ -1415,10 +1415,25 @@ class YellowSafetyActivity : AppCompatActivity() {
         messageIds: List<String>
     ) {
         Thread {
+            var anyMessageMarkedRead = false
+
             messageIds.forEach { messageId ->
                 val res = ConnectionApi.markMessageRead(this, messageId)
+
                 if (res.success) {
                     attemptedReadMessageIds.add(messageId)
+                    anyMessageMarkedRead = true
+                }
+            }
+
+            // Okundu işlemi başarılıysa sohbet sayacını hemen yenile.
+            if (anyMessageMarkedRead) {
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) {
+                        findViewById<MessagingTabBar>(
+                            R.id.messagingTabBar
+                        )?.refreshBadgesNow()
+                    }
                 }
             }
         }.start()
