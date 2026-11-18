@@ -190,34 +190,16 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
 
         private fun drawEye(canvas: Canvas) {
-            val eyePath = Path().apply {
-                moveTo(
-                    dp(1).toFloat(),
-                    dp(8).toFloat()
-                )
-
-                quadTo(
-                    dp(11).toFloat(),
-                    dp(0).toFloat(),
-                    dp(21).toFloat(),
-                    dp(8).toFloat()
-                )
-
-                quadTo(
-                    dp(11).toFloat(),
-                    dp(16).toFloat(),
-                    dp(1).toFloat(),
-                    dp(8).toFloat()
-                )
+            val emojiPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                textSize = dp(15).toFloat()
+                textAlign = Paint.Align.LEFT
             }
 
-            canvas.drawPath(eyePath, eyePaint)
-
-            canvas.drawCircle(
-                dp(11).toFloat(),
-                dp(8).toFloat(),
-                dp(3).toFloat(),
-                pupilPaint
+            canvas.drawText(
+                "👁️",
+                0f,
+                dp(13).toFloat(),
+                emojiPaint
             )
         }
     }
