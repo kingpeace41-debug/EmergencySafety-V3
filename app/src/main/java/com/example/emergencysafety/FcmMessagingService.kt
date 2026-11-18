@@ -39,15 +39,20 @@ class FcmMessagingService : FirebaseMessagingService() {
         val messagePreview =
             message.data["messagePreview"].orEmpty().trim()
 
+        val connectionId =
+            message.data["connectionId"].orEmpty().trim()
+
         showPrivateNotification(
             senderUsername,
-            messagePreview
+            messagePreview,
+            connectionId
         )
     }
 
     private fun showPrivateNotification(
         senderUsername: String,
-        messagePreview: String
+        messagePreview: String,
+        connectionId: String
     ) {
 
         if (
@@ -64,15 +69,24 @@ class FcmMessagingService : FirebaseMessagingService() {
 
         val openAppIntent = Intent(
             this,
-            PermissionGateActivity::class.java
+            YellowSafetyActivity::class.java
         ).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                 Intent.FLAG_ACTIVITY_CLEAR_TOP
+
+            putExtra("connectionId", connectionId)
         }
+
+        // Her bağlantının bildirimi birbirinden ayrı tutulur.
+        val notificationKey = connectionId.ifBlank {
+            System.currentTimeMillis().toString()
+        }
+
+        val notificationId = notificationKey.hashCode()
 
         val pendingIntent = PendingIntent.getActivity(
             this,
-            1001,
+            notificationId,
             openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or
                 PendingIntent.FLAG_IMMUTABLE
@@ -113,7 +127,7 @@ class FcmMessagingService : FirebaseMessagingService() {
 
         try {
             NotificationManagerCompat.from(this).notify(
-                System.currentTimeMillis().toInt(),
+                notificationId,
                 notification
             )
         } catch (_: SecurityException) {
