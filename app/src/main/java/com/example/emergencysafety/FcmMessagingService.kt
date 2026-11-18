@@ -33,10 +33,22 @@ class FcmMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
-        showPrivateNotification()
+        val senderUsername =
+            message.data["senderUsername"].orEmpty().trim()
+
+        val messagePreview =
+            message.data["messagePreview"].orEmpty().trim()
+
+        showPrivateNotification(
+            senderUsername,
+            messagePreview
+        )
     }
 
-    private fun showPrivateNotification() {
+    private fun showPrivateNotification(
+        senderUsername: String,
+        messagePreview: String
+    ) {
 
         if (
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -66,13 +78,29 @@ class FcmMessagingService : FirebaseMessagingService() {
                 PendingIntent.FLAG_IMMUTABLE
         )
 
+        val title = if (senderUsername.isNotBlank()) {
+            "Emergency Safety · $senderUsername"
+        } else {
+            "Emergency Safety"
+        }
+
+        val preview = if (messagePreview.isNotBlank()) {
+            messagePreview
+        } else {
+            "Yeni mesajınız var."
+        }
+
         val notification = NotificationCompat.Builder(
             this,
             CHANNEL_ID
         )
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Emergency Safety")
-            .setContentText("Yeni mesajınız var.")
+            .setContentTitle(title)
+            .setContentText(preview)
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .bigText(preview)
+            )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setAutoCancel(true)
