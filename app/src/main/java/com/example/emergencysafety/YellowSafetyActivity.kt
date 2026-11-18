@@ -52,6 +52,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     private lateinit var historyDatabase: ESBotDatabase
 
     private var isChatOpen = false
+    private var pendingNotificationConnectionId: String = ""
     private var connectionsContainer: LinearLayout? = null
     private var shouldRefreshConnectionsOnResume = false
     private var unreadCountsByConnection: Map<String, Int> = emptyMap()
