@@ -11,6 +11,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
@@ -912,6 +913,10 @@ class YellowSafetyActivity : AppCompatActivity() {
         isLoadingPrivateMessages = false
         attemptedReadMessageIds.clear()
 
+        findViewById<MessagingTabBar>(
+            R.id.messagingTabBar
+        )?.refreshBadgesNow()
+
         panelContainer.removeAllViews()
 
         val screen = LinearLayout(this).apply {
@@ -1014,6 +1019,10 @@ class YellowSafetyActivity : AppCompatActivity() {
             isFillViewport = true
             clipToPadding = false
             setPadding(dp(3), dp(8), dp(3), dp(8))
+
+            setOnScrollChangeListener { _, _, _, _, _ ->
+                markVisiblePrivateMessagesRead(connection)
+            }
         }
 
         privateMessagesColumn = LinearLayout(this).apply {
@@ -1216,16 +1225,8 @@ class YellowSafetyActivity : AppCompatActivity() {
                     }
                 }
 
-                val unreadIds = messages
-                    .filter {
-                        !it.isOutgoing &&
-                        it.readAt.isNullOrBlank() &&
-                        !attemptedReadMessageIds.contains(it.id)
-                    }
-                    .map { it.id }
-
-                if (unreadIds.isNotEmpty()) {
-                    markPrivateMessagesRead(connection, unreadIds)
+                privateMessagesScroll?.post {
+                    markVisiblePrivateMessagesRead(connection)
                 }
             }
         }.start()
@@ -1254,6 +1255,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         val isOutgoing = message.isOutgoing
 
         val bubble = LinearLayout(this).apply {
+            tag = message
             orientation = LinearLayout.VERTICAL
 
             setPadding(
@@ -1422,6 +1424,45 @@ class YellowSafetyActivity : AppCompatActivity() {
         }.start()
     }
 
+    private fun markVisiblePrivateMessagesRead(
+        connection: ConnectionApiItem
+    ) {
+        if (!isChatOpen) return
+        if (activePrivateConnection?.id != connection.id) return
+
+        val scroll = privateMessagesScroll ?: return
+        val column = privateMessagesColumn ?: return
+
+        val scrollRect = Rect()
+
+        if (!scroll.getGlobalVisibleRect(scrollRect)) return
+
+        val visibleUnreadIds = mutableListOf<String>()
+
+        for (index in 0 until column.childCount) {
+            val bubble = column.getChildAt(index)
+            val message = bubble.tag as? MessageApiItem ?: continue
+
+            if (message.isOutgoing) continue
+            if (!message.readAt.isNullOrBlank()) continue
+
+            val bubbleRect = Rect()
+
+            if (
+                bubble.getGlobalVisibleRect(bubbleRect) &&
+                Rect.intersects(scrollRect, bubbleRect)
+            ) {
+                if (attemptedReadMessageIds.add(message.id)) {
+                    visibleUnreadIds.add(message.id)
+                }
+            }
+        }
+
+        if (visibleUnreadIds.isNotEmpty()) {
+            markPrivateMessagesRead(connection, visibleUnreadIds)
+        }
+    }
+
     private fun markPrivateMessagesRead(
         connection: ConnectionApiItem,
         messageIds: List<String>
@@ -1430,18 +1471,27 @@ class YellowSafetyActivity : AppCompatActivity() {
             var anyMessageMarkedRead = false
 
             messageIds.forEach { messageId ->
-                val res = ConnectionApi.markMessageRead(this, messageId)
+                val result = try {
+                    ConnectionApi.markMessageRead(this, messageId)
+                } catch (_: Exception) {
+                    null
+                }
 
-                if (res.success) {
-                    attemptedReadMessageIds.add(messageId)
+                if (result?.success == true) {
                     anyMessageMarkedRead = true
+                } else {
+                    attemptedReadMessageIds.remove(messageId)
                 }
             }
 
-            // Okundu işlemi başarılıysa sohbet sayacını hemen yenile.
             if (anyMessageMarkedRead) {
                 runOnUiThread {
-                    if (!isFinishing && !isDestroyed) {
+                    if (
+                        !isFinishing &&
+                        !isDestroyed &&
+                        isChatOpen &&
+                        activePrivateConnection?.id == connection.id
+                    ) {
                         findViewById<MessagingTabBar>(
                             R.id.messagingTabBar
                         )?.refreshBadgesNow()
@@ -2097,7 +2147,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             row,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+                ViewGroup.LayoutParams.WRAP_CONTENT
             )
         )
 
