@@ -233,6 +233,9 @@ class YellowSafetyActivity : AppCompatActivity() {
         historyDatabase = ESBotDatabase(this)
         setContentView(R.layout.activity_yellow_safety)
 
+        pendingNotificationConnectionId =
+            intent.getStringExtra("connectionId")?.trim().orEmpty()
+
         panelContainer = findViewById(R.id.messagePanelContainer)
         showConversationList()
 
@@ -765,11 +768,37 @@ class YellowSafetyActivity : AppCompatActivity() {
                 val connections = result.data.orEmpty()
 
                 if (connections.isEmpty()) {
+                    pendingNotificationConnectionId = ""
+
                     addListStatus(
                         container,
                         "Henüz kabul edilmiş bağlantın yok. Kişiler sekmesinden bağlantı kurabilirsin."
                     )
                     return@runOnUiThread
+                }
+
+                // Bildirimden gelen bağlantıyı bul ve doğrudan sohbeti aç.
+                val notificationConnectionId =
+                    pendingNotificationConnectionId
+
+                if (notificationConnectionId.isNotBlank()) {
+
+                    val targetConnection = connections.firstOrNull {
+                        it.id == notificationConnectionId
+                    }
+
+                    pendingNotificationConnectionId = ""
+
+                    if (targetConnection != null) {
+                        showPrivateChat(targetConnection)
+                        return@runOnUiThread
+                    } else {
+                        Toast.makeText(
+                            this,
+                            "Bildirimin geldiği sohbet bağlantılarında bulunamadı.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
 
                 connections.forEach { connection ->
