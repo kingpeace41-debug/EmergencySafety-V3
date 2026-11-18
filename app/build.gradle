@@ -62,6 +62,9 @@ dependencies {
     // Matrix uçtan uca şifreleme - Vodozemac
     implementation 'de.connect2x.trixnity:trixnity-client-cryptodriver-vodozemac'
 
-    // Ktor CIO ağ motoru - Trixnity ile aynı sürüm çizgisi
+    // Ktor CIO ağ motoru
     implementation 'io.ktor:ktor-client-cio:3.5.2'
+
+    // Ktor WebSocket desteği
+    implementation 'io.ktor:ktor-client-websockets:3.5.2'
 }
