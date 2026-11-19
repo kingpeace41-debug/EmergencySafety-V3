@@ -2,6 +2,7 @@
 package com.example.emergencysafety
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Color
@@ -54,17 +55,13 @@ class MessagingTabBar @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-
-        post {
-            bindTabs()
-        }
+        post { bindTabs() }
     }
 
     private fun bindTabs() {
         if (isBound) return
 
         val root = rootView
-
         panel = root.findViewById(R.id.messagePanelContainer)
 
         chatTab = findViewById(R.id.tabChats)
@@ -89,7 +86,6 @@ class MessagingTabBar @JvmOverloads constructor(
 
         contentPanel.setOnHierarchyChangeListener(
             object : ViewGroup.OnHierarchyChangeListener {
-
                 override fun onChildViewAdded(
                     parent: View?,
                     child: View?
@@ -258,7 +254,6 @@ class MessagingTabBar @JvmOverloads constructor(
             }
 
             "contacts" -> showContactsPage()
-
             "requests" -> showRequestsPage()
         }
 
@@ -289,7 +284,6 @@ class MessagingTabBar @JvmOverloads constructor(
             }
         )
 
-        // Kişiye verilecek özel isim.
         val nameInput = EditText(context).apply {
             hint = "Kişinin Adı (ör. Ahmet)"
             textSize = 14f
@@ -352,6 +346,7 @@ class MessagingTabBar @JvmOverloads constructor(
         )
 
         val divider = createDivider()
+
         content.addView(
             divider,
             LinearLayout.LayoutParams(
@@ -431,8 +426,6 @@ class MessagingTabBar @JvmOverloads constructor(
                     showToast(result.message)
 
                     if (result.success) {
-                        // Bağlantı isteği başarılı olunca
-                        // kişiye verilen ismi kaydet.
                         ContactNames.saveName(
                             context,
                             email,
@@ -633,20 +626,60 @@ class MessagingTabBar @JvmOverloads constructor(
     ) {
         val row = createRow()
 
-        val email = createText(
-            item.email,
-            13f,
+        // Kişi adı ve e-posta birlikte gösterilir.
+        val identityColumn = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        val displayName = ContactNames.getDisplayName(
+            context,
+            item.email
+        )
+
+        val nameText = createText(
+            displayName,
+            14f,
             Color.WHITE,
             true
         )
 
+        identityColumn.addView(nameText)
+
+        // İsim tanımlanmışsa e-postayı altına ekle.
+        if (ContactNames.hasName(context, item.email)) {
+            identityColumn.addView(
+                createText(
+                    item.email,
+                    11f,
+                    softText
+                ).apply {
+                    setPadding(0, dp(4), 0, 0)
+                }
+            )
+        }
+
         row.addView(
-            email,
+            identityColumn,
             LinearLayout.LayoutParams(
                 0,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 1f
             )
+        )
+
+        val editButton = createButton(
+            "DÜZENLE",
+            selectedDark
+        )
+
+        row.addView(
+            editButton,
+            LinearLayout.LayoutParams(
+                dp(76),
+                dp(38)
+            ).apply {
+                marginStart = dp(6)
+            }
         )
 
         val removeButton = createButton(
@@ -657,12 +690,19 @@ class MessagingTabBar @JvmOverloads constructor(
         row.addView(
             removeButton,
             LinearLayout.LayoutParams(
-                dp(76),
+                dp(68),
                 dp(38)
             ).apply {
-                marginStart = dp(8)
+                marginStart = dp(6)
             }
         )
+
+        editButton.setOnClickListener {
+            showEditContactNameDialog(
+                item,
+                container
+            )
+        }
 
         removeButton.setOnClickListener {
             removeButton.isEnabled = false
@@ -685,7 +725,100 @@ class MessagingTabBar @JvmOverloads constructor(
             }.start()
         }
 
-        container.addView(row)
+        container.addView(
+            row,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(8)
+            }
+        )
+    }
+
+    /**
+     * Mevcut bağlantıya isim verme veya ismi değiştirme.
+     * Bu işlem bağlantıyı ve sunucu hesabını değiştirmez.
+     */
+    private fun showEditContactNameDialog(
+        item: ConnectionApiItem,
+        container: LinearLayout
+    ) {
+        val input = EditText(context).apply {
+            hint = "Kişinin adı"
+            textSize = 16f
+            setSingleLine(true)
+            inputType =
+                InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_CAP_WORDS
+
+            setText(
+                if (ContactNames.hasName(context, item.email)) {
+                    ContactNames.getDisplayName(
+                        context,
+                        item.email
+                    )
+                } else {
+                    ""
+                }
+            )
+
+            setSelectAllOnFocus(true)
+        }
+
+        val dialogContent = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(10), dp(20), dp(4))
+        }
+
+        dialogContent.addView(
+            TextView(context).apply {
+                text = item.email
+                textSize = 13f
+                setTextColor(Color.DKGRAY)
+                setPadding(0, 0, 0, dp(12))
+            }
+        )
+
+        dialogContent.addView(
+            input,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        val dialog = AlertDialog.Builder(context)
+            .setTitle("Kişi Adını Düzenle")
+            .setView(dialogContent)
+            .setPositiveButton("KAYDET", null)
+            .setNegativeButton("VAZGEÇ", null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(
+                AlertDialog.BUTTON_POSITIVE
+            ).setOnClickListener {
+                val newName = input.text.toString().trim()
+
+                if (newName.isBlank()) {
+                    input.error = "Kişinin adını gir."
+                    return@setOnClickListener
+                }
+
+                ContactNames.saveName(
+                    context,
+                    item.email,
+                    newName
+                )
+
+                dialog.dismiss()
+                showToast("Kişinin adı kaydedildi.")
+                loadConnections(container)
+            }
+        }
+
+        dialog.show()
     }
 
     private fun addRequestRow(
