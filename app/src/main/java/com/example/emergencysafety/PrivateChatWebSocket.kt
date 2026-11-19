@@ -109,10 +109,13 @@ internal class PrivateChatWebSocket(
                         listener.onError(
                             "Oturum tokenı alınamadı."
                         )
+
                         delay(retryDelay)
+
                         retryDelay = (
                             retryDelay * 2
                         ).coerceAtMost(MAX_RETRY_DELAY)
+
                         continue
                     }
 
@@ -120,8 +123,8 @@ internal class PrivateChatWebSocket(
                         urlString = SOCKET_URL,
                         request = {
                             header(
-                                HttpHeaders.Authorization,
-                                "Bearer $token"
+                                HttpHeaders.SecWebSocketProtocol,
+                                "emergencysafety, $token"
                             )
                         }
                     ) {
@@ -158,6 +161,7 @@ internal class PrivateChatWebSocket(
 
                     if (!stopped) {
                         listener.onDisconnected()
+
                         listener.onError(
                             error.localizedMessage
                                 ?: "WebSocket bağlantısı kurulamadı."
@@ -201,7 +205,7 @@ internal class PrivateChatWebSocket(
                 session.send(
                     Frame.Text(event.toString())
                 )
-            } catch (error: Exception) {
+            } catch (_: Exception) {
                 listener.onError(
                     "Gerçek zamanlı olay gönderilemedi."
                 )
@@ -227,6 +231,7 @@ internal class PrivateChatWebSocket(
      */
     fun close() {
         stop()
+
         scope.launch {
             client.close()
         }
