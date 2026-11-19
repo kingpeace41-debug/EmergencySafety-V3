@@ -560,6 +560,8 @@ class YellowSafetyActivity : AppCompatActivity() {
     private fun showConversationList() {
         stopPrivateChatAutoRefresh()
 
+        ActiveChatTracker.clearVisibleChat()
+
         isChatOpen = false
         activePrivateConnection = null
         privateMessagesColumn = null
@@ -928,6 +930,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         activePrivateConnection = connection
         isChatOpen = true
+        ActiveChatTracker.setVisibleChat(connection.id)
         isSendingMessage = false
         isLoadingPrivateMessages = false
         attemptedReadMessageIds.clear()
@@ -1527,6 +1530,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         isChatOpen = true
         activePrivateConnection = null
+        ActiveChatTracker.clearVisibleChat()
         panelContainer.removeAllViews()
 
         val screen = LinearLayout(this).apply {
