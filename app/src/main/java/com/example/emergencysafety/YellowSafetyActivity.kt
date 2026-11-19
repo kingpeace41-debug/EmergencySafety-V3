@@ -18,6 +18,8 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -36,6 +38,12 @@ import java.text.SimpleDateFormat
 import java.util.Collections
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 internal data class ESBotMessage(
     val id: Long,
@@ -65,6 +73,132 @@ class YellowSafetyActivity : AppCompatActivity() {
     private var privateInput: EditText? = null
     private var privateSendButton: TextView? = null
     private var isSendingMessage = false
+
+    private val typingScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main
+    )
+
+    private var privateSocket: PrivateChatWebSocket? = null
+    private var typingIndicator: TextView? = null
+    private var typingConnectionId: String? = null
+    private var localTyping = false
+
+    private val typingStopRunnable = Runnable {
+        sendLocalTyping(false)
+    }
+
+    private val remoteTypingTimeout = Runnable {
+        typingIndicator?.visibility = View.GONE
+    }
+
+    private fun sendLocalTyping(isTyping: Boolean) {
+        if (!isChatOpen || activePrivateConnection == null) return
+        if (localTyping == isTyping) return
+
+        localTyping = isTyping
+
+        typingScope.launch {
+            privateSocket?.sendTyping(isTyping)
+        }
+    }
+
+    private fun stopPrivateSocket() {
+        privateChatHandler.removeCallbacks(typingStopRunnable)
+        privateChatHandler.removeCallbacks(remoteTypingTimeout)
+
+        localTyping = false
+        typingConnectionId = null
+        typingIndicator = null
+
+        privateSocket?.close()
+        privateSocket = null
+    }
+
+    private fun startPrivateSocket(connection: ConnectionApiItem) {
+        stopPrivateSocket()
+
+        typingConnectionId = connection.id
+
+        val socket = PrivateChatWebSocket(
+            accessTokenProvider = {
+                SecureSessionStore.getAccessToken(applicationContext)
+            },
+            listener = object : PrivateChatWebSocket.Listener {
+                override fun onConnected() {}
+
+                override fun onDisconnected() {
+                    runOnUiThread {
+                        if (typingConnectionId == connection.id) {
+                            typingIndicator?.visibility = View.GONE
+                        }
+                    }
+                }
+
+                override fun onError(message: String) {}
+
+                override fun onEvent(event: JSONObject) {
+                    runOnUiThread {
+                        if (
+                            !isChatOpen ||
+                            activePrivateConnection?.id != connection.id ||
+                            typingConnectionId != connection.id
+                        ) {
+                            return@runOnUiThread
+                        }
+
+                        when (event.optString("type")) {
+                            "typing" -> {
+                                if (
+                                    event.optString("connectionId") != connection.id
+                                ) {
+                                    return@runOnUiThread
+                                }
+
+                                privateChatHandler.removeCallbacks(
+                                    remoteTypingTimeout
+                                )
+
+                                val isTyping = event.optBoolean(
+                                    "isTyping",
+                                    false
+                                )
+
+                                typingIndicator?.visibility =
+                                    if (isTyping) View.VISIBLE else View.GONE
+
+                                if (isTyping) {
+                                    privateChatHandler.postDelayed(
+                                        remoteTypingTimeout,
+                                        4500L
+                                    )
+                                }
+                            }
+
+                            "new_message",
+                            "message_delivered",
+                            "message_read" -> {
+                                val eventConnection =
+                                    event.optString("connectionId")
+
+                                if (
+                                    eventConnection.isBlank() ||
+                                    eventConnection == connection.id
+                                ) {
+                                    loadPrivateMessages(
+                                        connection,
+                                        showLoading = false
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+
+        privateSocket = socket
+        socket.start(connection.id)
+    }
 
     // Özel sohbetin otomatik yenilenmesi için (Polling)
     private val privateChatHandler = Handler(Looper.getMainLooper())
@@ -237,6 +371,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        stopPrivateSocket()
         super.onPause()
 
         // Uygulama arka plana geçtiğinde aktif sohbet
@@ -256,6 +391,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         if (isChatOpen) {
             activePrivateConnection?.let { connection ->
                 ActiveChatTracker.setVisibleChat(connection.id)
+                startPrivateSocket(connection)
 
                 loadPrivateMessages(
                     connection,
@@ -558,6 +694,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun showConversationList() {
+        stopPrivateSocket()
         stopPrivateChatAutoRefresh()
 
         ActiveChatTracker.clearVisibleChat()
@@ -926,6 +1063,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun showPrivateChat(connection: ConnectionApiItem) {
+        stopPrivateSocket()
         stopPrivateChatAutoRefresh()
 
         activePrivateConnection = connection
@@ -1037,6 +1175,22 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         screen.addView(privateStatusText)
 
+        typingIndicator = createText(
+            "Yazıyor... ✍️",
+            11f,
+            gold
+        ).apply {
+            visibility = View.GONE
+            setPadding(
+                dp(10),
+                dp(3),
+                dp(10),
+                dp(5)
+            )
+        }
+
+        screen.addView(typingIndicator)
+
         privateMessagesScroll = ScrollView(this).apply {
             isFillViewport = true
             clipToPadding = false
@@ -1090,6 +1244,43 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         }
 
+        privateInput?.addTextChangedListener(
+            object : TextWatcher {
+                override fun beforeTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    count: Int,
+                    after: Int
+                ) {}
+
+                override fun onTextChanged(
+                    s: CharSequence?,
+                    start: Int,
+                    before: Int,
+                    count: Int
+                ) {
+                    privateChatHandler.removeCallbacks(
+                        typingStopRunnable
+                    )
+
+                    if (s.isNullOrBlank()) {
+                        sendLocalTyping(false)
+                    } else {
+                        sendLocalTyping(true)
+
+                        privateChatHandler.postDelayed(
+                            typingStopRunnable,
+                            1800L
+                        )
+                    }
+                }
+
+                override fun afterTextChanged(
+                    s: Editable?
+                ) {}
+            }
+        )
+
         composer.addView(
             privateInput,
             LinearLayout.LayoutParams(0, dp(48), 1f)
@@ -1139,6 +1330,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         loadPrivateMessages(connection, showLoading = true)
         startPrivateChatAutoRefresh(connection)
+        startPrivateSocket(connection)
     }
 
     private fun startPrivateChatAutoRefresh(connection: ConnectionApiItem) {
@@ -1408,6 +1600,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         if (cleanMessage.isEmpty()) return
         if (isSendingMessage) return
 
+        sendLocalTyping(false)
         isSendingMessage = true
         privateSendButton?.isEnabled = false
         privateSendButton?.alpha = 0.5f
@@ -1526,6 +1719,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun showBotChat() {
+        stopPrivateSocket()
         stopPrivateChatAutoRefresh()
 
         isChatOpen = true
@@ -2210,6 +2404,8 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        stopPrivateSocket()
+        typingScope.cancel()
         stopPrivateChatAutoRefresh()
 
         if (::historyDatabase.isInitialized) {
