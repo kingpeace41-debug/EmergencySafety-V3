@@ -247,9 +247,20 @@ class YellowSafetyActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
 
-        // Başka bir ekrandan dönüldüğünde bağlantı listesini yenile.
-        // İlk açılışta gereksiz ikinci istek gönderilmesini önler.
-        if (shouldRefreshConnectionsOnResume && !isChatOpen) {
+        // Sohbet açıksa uygulamaya dönüldüğünde
+        // mesajları sunucudan yeniden yükle.
+        if (isChatOpen) {
+            activePrivateConnection?.let { connection ->
+                loadPrivateMessages(
+                    connection,
+                    showLoading = false
+                )
+            }
+            return
+        }
+
+        // Sohbet açık değilse bağlantı listesini yenile.
+        if (shouldRefreshConnectionsOnResume) {
             shouldRefreshConnectionsOnResume = false
 
             connectionsContainer?.let { container ->
@@ -1176,13 +1187,15 @@ class YellowSafetyActivity : AppCompatActivity() {
                 val column = privateMessagesColumn ?: return@runOnUiThread
 
                 if (!result.success || result.data == null) {
-                    column.removeAllViews()
-                    addPrivateInfoMessage(
-                        result.message.ifBlank {
-                            "Mesajlar şu anda alınamadı."
-                        }
-                    )
-                    privateStatusText?.text = "Bağlantı hatası"
+                    privateStatusText?.text =
+                        "Bağlantı kesildi · Yeniden deneniyor..."
+
+                    if (column.childCount == 0) {
+                        addPrivateInfoMessage(
+                            "Mesajlar şu anda alınamadı. Bağlantı bekleniyor..."
+                        )
+                    }
+
                     return@runOnUiThread
                 }
 
