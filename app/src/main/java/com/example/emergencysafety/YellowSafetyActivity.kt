@@ -239,6 +239,10 @@ class YellowSafetyActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
 
+        // Uygulama arka plana geçtiğinde aktif sohbet
+        // artık görünür kabul edilmez.
+        ActiveChatTracker.clearVisibleChat()
+
         if (!isChatOpen && ::panelContainer.isInitialized) {
             shouldRefreshConnectionsOnResume = true
         }
@@ -247,10 +251,12 @@ class YellowSafetyActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
 
-        // Sohbet açıksa uygulamaya dönüldüğünde
-        // mesajları sunucudan yeniden yükle.
+        // Özel sohbet açıksa aktif sohbeti kaydet
+        // ve mesajları otomatik yenile.
         if (isChatOpen) {
             activePrivateConnection?.let { connection ->
+                ActiveChatTracker.setVisibleChat(connection.id)
+
                 loadPrivateMessages(
                     connection,
                     showLoading = false
@@ -259,7 +265,9 @@ class YellowSafetyActivity : AppCompatActivity() {
             return
         }
 
-        // Sohbet açık değilse bağlantı listesini yenile.
+        // Sohbet açık değilse aktif sohbet bilgisini temizle.
+        ActiveChatTracker.clearVisibleChat()
+
         if (shouldRefreshConnectionsOnResume) {
             shouldRefreshConnectionsOnResume = false
 
