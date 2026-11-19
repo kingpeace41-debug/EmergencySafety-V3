@@ -18,7 +18,8 @@ class FcmMessagingService : FirebaseMessagingService() {
 
     companion object {
         private const val CHANNEL_ID = "emergency_safety_messages"
-        private const val CHANNEL_NAME = "Emergency Safety Bildirimleri"
+        private const val CHANNEL_NAME =
+            "Emergency Safety Bildirimleri"
     }
 
     override fun onNewToken(token: String) {
@@ -42,6 +43,12 @@ class FcmMessagingService : FirebaseMessagingService() {
         val connectionId =
             message.data["connectionId"].orEmpty().trim()
 
+        // Kullanıcı zaten bu sohbeti görüntülüyorsa
+        // gereksiz üst bildirim oluşturma.
+        if (ActiveChatTracker.isChatVisible(connectionId)) {
+            return
+        }
+
         showPrivateNotification(
             senderUsername,
             messagePreview,
@@ -56,7 +63,8 @@ class FcmMessagingService : FirebaseMessagingService() {
     ) {
 
         if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.POST_NOTIFICATIONS
@@ -77,7 +85,7 @@ class FcmMessagingService : FirebaseMessagingService() {
             putExtra("connectionId", connectionId)
         }
 
-        // Her bağlantının bildirimi birbirinden ayrı tutulur.
+        // Her bağlantının bildirimi ayrı tutulur.
         val notificationKey = connectionId.ifBlank {
             System.currentTimeMillis().toString()
         }
@@ -108,15 +116,21 @@ class FcmMessagingService : FirebaseMessagingService() {
             this,
             CHANNEL_ID
         )
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(
+                android.R.drawable.ic_dialog_info
+            )
             .setContentTitle(title)
             .setContentText(preview)
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .bigText(preview)
             )
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(
+                NotificationCompat.PRIORITY_HIGH
+            )
+            .setCategory(
+                NotificationCompat.CATEGORY_MESSAGE
+            )
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setDefaults(
@@ -137,14 +151,18 @@ class FcmMessagingService : FirebaseMessagingService() {
 
     private fun createNotificationChannel() {
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.O
+        ) {
 
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Yeni özel mesaj bildirimleri"
+                description =
+                    "Yeni özel mesaj bildirimleri"
+
                 enableVibration(true)
             }
 
