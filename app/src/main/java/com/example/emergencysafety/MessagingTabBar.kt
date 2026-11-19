@@ -281,11 +281,35 @@ class MessagingTabBar @JvmOverloads constructor(
 
         content.addView(
             createText(
-                "EmergencySafety kullanan kişinin kayıtlı e-posta adresini gir.",
+                "Kişiye bir isim ver ve EmergencySafety hesabının e-posta adresini gir.",
                 13f,
                 softText
             ).apply {
                 setPadding(0, dp(7), 0, dp(12))
+            }
+        )
+
+        // Kişiye verilecek özel isim.
+        val nameInput = EditText(context).apply {
+            hint = "Kişinin Adı (ör. Ahmet)"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.GRAY)
+            inputType =
+                InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            setSingleLine(true)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = roundedBackground(dark, gold)
+        }
+
+        content.addView(
+            nameInput,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(48)
+            ).apply {
+                topMargin = dp(8)
             }
         )
 
@@ -378,7 +402,13 @@ class MessagingTabBar @JvmOverloads constructor(
         )
 
         sendButton.setOnClickListener {
+            val name = nameInput.text.toString().trim()
             val email = emailInput.text.toString().trim()
+
+            if (name.isBlank()) {
+                showToast("Kişinin adını gir.")
+                return@setOnClickListener
+            }
 
             if (email.isBlank()) {
                 showToast("E-posta adresini gir.")
@@ -401,7 +431,17 @@ class MessagingTabBar @JvmOverloads constructor(
                     showToast(result.message)
 
                     if (result.success) {
+                        // Bağlantı isteği başarılı olunca
+                        // kişiye verilen ismi kaydet.
+                        ContactNames.saveName(
+                            context,
+                            email,
+                            name
+                        )
+
+                        nameInput.text.clear()
                         emailInput.text.clear()
+
                         loadConnections(listContainer)
                         refreshBadges()
                     }
@@ -789,6 +829,7 @@ class MessagingTabBar @JvmOverloads constructor(
             }
         }.start()
     }
+
     fun refreshBadgesNow() {
         refreshBadges()
     }
