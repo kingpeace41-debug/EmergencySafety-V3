@@ -331,7 +331,7 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                     if (alreadySelected) {
 
                         Toast.makeText(
-                            this,
+                            this@ContactMessageSettingsActivity,
                             "Bu kişi zaten başka bir " +
                             "sırada seçilmiş.",
                             Toast.LENGTH_LONG
@@ -357,7 +357,7 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                         refreshSelectedContactNames()
 
                         Toast.makeText(
-                            this,
+                            this@ContactMessageSettingsActivity,
                             "Acil durum kişisi kaydedildi.",
                             Toast.LENGTH_SHORT
                         ).show()
@@ -387,7 +387,7 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                     refreshSelectedContactNames()
 
                     Toast.makeText(
-                        this,
+                        this@ContactMessageSettingsActivity,
                         "ES acil durum kişisi kaldırıldı.",
                         Toast.LENGTH_SHORT
                     ).show()
