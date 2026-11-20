@@ -2,11 +2,14 @@
 package com.example.emergencysafety
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -28,6 +31,24 @@ class FcmMessagingService : FirebaseMessagingService() {
 
         private const val EMERGENCY_CHANNEL_NAME =
             "ES Acil Durum Alarmları"
+
+        const val EMERGENCY_PREFS =
+            "EsIncomingEmergency"
+
+        const val KEY_PENDING =
+            "pending_emergency"
+
+        const val KEY_CONNECTION_ID =
+            "emergency_connection_id"
+
+        const val KEY_SENDER_NAME =
+            "emergency_sender_name"
+
+        const val KEY_PREVIEW =
+            "emergency_preview"
+
+        const val KEY_RECEIVED_AT =
+            "emergency_received_at"
     }
 
     override fun onNewToken(token: String) {
@@ -58,12 +79,23 @@ class FcmMessagingService : FirebaseMessagingService() {
             message.data["messageType"].orEmpty().trim()
 
         if (messageType == "emergency") {
-            showEmergencyNotification(
-                senderUsername = senderUsername,
-                senderEmail = senderEmail,
+            val senderName = senderDisplayName(
+                senderUsername,
+                senderEmail
+            )
+
+            saveIncomingEmergency(
+                senderName = senderName,
                 messagePreview = messagePreview,
                 connectionId = connectionId
             )
+
+            showEmergencyNotification(
+                senderName = senderName,
+                messagePreview = messagePreview,
+                connectionId = connectionId
+            )
+
             return
         }
 
@@ -79,6 +111,35 @@ class FcmMessagingService : FirebaseMessagingService() {
             messagePreview = messagePreview,
             connectionId = connectionId
         )
+    }
+
+    private fun saveIncomingEmergency(
+        senderName: String,
+        messagePreview: String,
+        connectionId: String
+    ) {
+        getSharedPreferences(
+            EMERGENCY_PREFS,
+            Context.MODE_PRIVATE
+        ).edit()
+            .putBoolean(KEY_PENDING, true)
+            .putString(
+                KEY_CONNECTION_ID,
+                connectionId
+            )
+            .putString(
+                KEY_SENDER_NAME,
+                senderName
+            )
+            .putString(
+                KEY_PREVIEW,
+                messagePreview
+            )
+            .putLong(
+                KEY_RECEIVED_AT,
+                System.currentTimeMillis()
+            )
+            .commit()
     }
 
     private fun notificationsAllowed(): Boolean {
@@ -212,19 +273,13 @@ class FcmMessagingService : FirebaseMessagingService() {
     }
 
     private fun showEmergencyNotification(
-        senderUsername: String,
-        senderEmail: String,
+        senderName: String,
         messagePreview: String,
         connectionId: String
     ) {
         if (!notificationsAllowed()) return
 
         createEmergencyNotificationChannel()
-
-        val senderName = senderDisplayName(
-            senderUsername,
-            senderEmail
-        )
 
         val title =
             "🚨 ACİL DURUM - $senderName"
@@ -284,7 +339,7 @@ class FcmMessagingService : FirebaseMessagingService() {
 
     private fun postNotification(
         notificationId: Int,
-        notification: android.app.Notification
+        notification: Notification
     ) {
         try {
             NotificationManagerCompat.from(this)
@@ -333,12 +388,8 @@ class FcmMessagingService : FirebaseMessagingService() {
                     "EmergencySafety acil durum bildirimleri"
 
                 enableVibration(true)
-
                 enableLights(true)
-
-                lightColor =
-                    android.graphics.Color.RED
-
+                lightColor = Color.RED
                 setShowBadge(true)
             }
 
