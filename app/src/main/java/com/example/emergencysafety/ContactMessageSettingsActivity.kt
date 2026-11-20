@@ -1,33 +1,45 @@
 
 package com.example.emergencysafety
 
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
-import android.provider.ContactsContract
+import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Locale
 
 class ContactMessageSettingsActivity : AppCompatActivity() {
 
     private val prefsName = "EmergencyContactSettings"
 
+    private val activityJob = SupervisorJob()
+    private val activityScope =
+        CoroutineScope(Dispatchers.Main + activityJob)
+
     private lateinit var contactNameFields: List<EditText>
     private lateinit var contactPhoneFields: List<EditText>
-
-    private var selectedContactIndex = -1
+    private lateinit var messageField: EditText
 
     companion object {
-        private const val REQUEST_SELECT_CONTACT = 1001
-
         private val DEFAULT_EMERGENCY_MESSAGE = """
             ACİL DURUM!
 
             Ben [Ad Soyad].
 
-            Acil durumdayım ve yardıma ihtiyacım var. Lütfen aşağıdaki konuma ivedilikle gelin veya gerekli yardımı yönlendirin.
+            Acil durumdayım ve yardıma ihtiyacım var.
+            Lütfen aşağıdaki konuma ivedilikle gelin
+            veya gerekli yardımı yönlendirin.
 
             Konumum: [Otomatik konum bağlantısı]
         """.trimIndent()
@@ -35,9 +47,15 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_contact_message_settings)
 
-        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+        setContentView(
+            R.layout.activity_contact_message_settings
+        )
+
+        val prefs = getSharedPreferences(
+            prefsName,
+            MODE_PRIVATE
+        )
 
         contactNameFields = listOf(
             findViewById(R.id.etContact1Name),
@@ -51,62 +69,51 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
             findViewById(R.id.etContact3Phone)
         )
 
-        val messageField =
-            findViewById<EditText>(R.id.etEmergencyMessage)
+        messageField = findViewById(
+            R.id.etEmergencyMessage
+        )
 
-        for (i in 0..2) {
-            contactNameFields[i].setText(
-                prefs.getString("contact${i + 1}_name", "")
+        // Eski WhatsApp telefon kayıtlarını silmeden
+        // yalnızca bu ekranda gizliyoruz.
+        contactPhoneFields.forEach { field ->
+            field.visibility = View.GONE
+        }
+
+        for (index in 0..2) {
+            val slot = index + 1
+            val field = contactNameFields[index]
+
+            field.setText(
+                prefs.getString(
+                    "es_contact${slot}_name",
+                    ""
+                ).orEmpty()
             )
 
-            contactPhoneFields[i].setText(
-                normalizeTurkishPhoneNumber(
-                    prefs.getString("contact${i + 1}_phone", "") ?: ""
-                )
-            )
+            field.hint =
+                "$slot. ES acil durum kişisini seç"
 
-            contactNameFields[i].apply {
-                isCursorVisible = false
-                showSoftInputOnFocus = false
-                isFocusable = false
-                isFocusableInTouchMode = false
-                isClickable = true
+            field.isFocusable = false
+            field.isFocusableInTouchMode = false
+            field.isCursorVisible = false
+            field.isClickable = true
+            field.isLongClickable = true
+
+            field.setOnClickListener {
+                openEsContactPicker(slot)
             }
 
-            contactPhoneFields[i].apply {
-                isCursorVisible = false
-                showSoftInputOnFocus = false
-                isFocusable = false
-                isFocusableInTouchMode = false
-                isClickable = true
-            }
-
-            contactNameFields[i].setOnClickListener {
-                selectedContactIndex = i
-                openContactPicker()
-            }
-
-            contactPhoneFields[i].setOnClickListener {
-                selectedContactIndex = i
-                openContactPicker()
-            }
-
-            contactNameFields[i].setOnLongClickListener {
-                selectedContactIndex = i
-                openContactPicker()
-                true
-            }
-
-            contactPhoneFields[i].setOnLongClickListener {
-                selectedContactIndex = i
-                openContactPicker()
+            field.setOnLongClickListener {
+                openEsContactPicker(slot)
                 true
             }
         }
 
-        // Kayıtlı mesajı koru; mesaj yoksa varsayılan şablonu göster.
         val savedEmergencyMessage =
-            prefs.getString("emergency_message", null)
+            prefs.getString(
+                "emergency_message",
+                null
+            )
 
         messageField.setText(
             savedEmergencyMessage
@@ -114,178 +121,260 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                 ?: DEFAULT_EMERGENCY_MESSAGE
         )
 
-        findViewById<Button>(R.id.btnSaveContacts)
-            .setOnClickListener {
-                val editor = prefs.edit()
+        findViewById<Button>(
+            R.id.btnSaveContacts
+        ).setOnClickListener {
+            saveEmergencyMessage()
+        }
 
-                for (i in 0..2) {
-                    val name =
-                        contactNameFields[i].text.toString().trim()
+        findViewById<Button>(
+            R.id.btnBackContacts
+        ).setOnClickListener {
+            finish()
+        }
 
-                    val phone = normalizeTurkishPhoneNumber(
-                        contactPhoneFields[i].text.toString()
-                    )
+        updateScreenHeading()
+    }
 
-                    contactNameFields[i].setText(name)
-                    contactPhoneFields[i].setText(phone)
+    private fun updateScreenHeading() {
+        val root = findViewById<View>(
+            android.R.id.content
+        )
 
-                    editor.putString(
-                        "contact${i + 1}_name",
-                        name
-                    )
-
-                    editor.putString(
-                        "contact${i + 1}_phone",
-                        phone
-                    )
+        fun update(view: View) {
+            if (view is TextView) {
+                if (
+                    view.text.toString() ==
+                    "REHBER VE MESAJ AYARLARI"
+                ) {
+                    view.text =
+                        "ES KİŞİ VE MESAJ AYARLARI"
                 }
-
-                editor.putString(
-                    "emergency_message",
-                    messageField.text.toString().trim()
-                )
-
-                editor.apply()
-
-                Toast.makeText(
-                    this,
-                    "Rehber ve mesaj ayarları kaydedildi",
-                    Toast.LENGTH_SHORT
-                ).show()
             }
 
-        findViewById<Button>(R.id.btnBackContacts)
-            .setOnClickListener {
-                finish()
+            if (view is ViewGroup) {
+                for (index in 0 until view.childCount) {
+                    update(view.getChildAt(index))
+                }
             }
+        }
+
+        update(root)
+    }
+
+    private fun openEsContactPicker(slot: Int) {
 
         Toast.makeText(
             this,
-            "Kişi seçmek için isim veya telefon alanına dokunun.",
-            Toast.LENGTH_LONG
+            "ES bağlantıları yükleniyor...",
+            Toast.LENGTH_SHORT
         ).show()
-    }
 
-    private fun normalizeTurkishPhoneNumber(rawNumber: String): String {
-        val raw = rawNumber.trim()
+        activityScope.launch {
 
-        if (raw.isEmpty()) {
-            return ""
-        }
-
-        val digits = raw.filter { it.isDigit() }
-        val hasLeadingPlus = raw.startsWith("+")
-
-        if (digits.isEmpty()) {
-            return ""
-        }
-
-        if (hasLeadingPlus) {
-            return "+$digits"
-        }
-
-        if (digits.startsWith("0090") && digits.length == 14) {
-            return "+${digits.drop(2)}"
-        }
-
-        if (digits.startsWith("90") && digits.length == 12) {
-            return "+$digits"
-        }
-
-        if (digits.startsWith("0") && digits.length == 11) {
-            return "+90${digits.drop(1)}"
-        }
-
-        if (digits.length == 10) {
-            return "+90$digits"
-        }
-
-        return raw
-    }
-
-    private fun openContactPicker() {
-        try {
-            val intent = Intent(Intent.ACTION_PICK).apply {
-                type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+            val result = withContext(
+                Dispatchers.IO
+            ) {
+                ConnectionApi.getConnections(
+                    applicationContext
+                )
             }
 
-            startActivityForResult(intent, REQUEST_SELECT_CONTACT)
-        } catch (e: Exception) {
-            Toast.makeText(
-                this,
-                "Rehber açılamadı",
-                Toast.LENGTH_SHORT
-            ).show()
+            if (isFinishing || isDestroyed) {
+                return@launch
+            }
+
+            if (!result.success) {
+                Toast.makeText(
+                    this@ContactMessageSettingsActivity,
+                    result.message,
+                    Toast.LENGTH_LONG
+                ).show()
+
+                return@launch
+            }
+
+            val connections = result.data
+                .orEmpty()
+                .filter {
+                    it.id.isNotBlank() &&
+                    it.email.isNotBlank()
+                }
+                .sortedBy {
+                    ContactNames.getDisplayName(
+                        this@ContactMessageSettingsActivity,
+                        it.email
+                    ).lowercase(Locale.ROOT)
+                }
+
+            if (connections.isEmpty()) {
+
+                AlertDialog.Builder(
+                    this@ContactMessageSettingsActivity
+                )
+                    .setTitle("ES ACİL DURUM KİŞİLERİ")
+                    .setMessage(
+                        "Henüz onaylanmış ES bağlantın " +
+                        "bulunmuyor.\n\n" +
+                        "Önce sarı mesajlaşma " +
+                        "konsolundan kişi ekleyip " +
+                        "karşılıklı bağlantıyı onaylayın."
+                    )
+                    .setPositiveButton(
+                        "TAMAM",
+                        null
+                    )
+                    .show()
+
+                return@launch
+            }
+
+            val names = connections.map { item ->
+                ContactNames.getDisplayName(
+                    this@ContactMessageSettingsActivity,
+                    item.email
+                )
+            }.toTypedArray()
+
+            AlertDialog.Builder(
+                this@ContactMessageSettingsActivity
+            )
+                .setTitle(
+                    "$slot. ACİL DURUM KİŞİSİNİ SEÇ"
+                )
+                .setItems(names) { _, selected ->
+
+                    val item = connections[selected]
+
+                    val prefs = getSharedPreferences(
+                        prefsName,
+                        MODE_PRIVATE
+                    )
+
+                    val alreadySelected =
+                        (1..3).any { otherSlot ->
+
+                            otherSlot != slot &&
+                            prefs.getString(
+                                "es_contact${otherSlot}_id",
+                                ""
+                            ) == item.id
+                        }
+
+                    if (alreadySelected) {
+
+                        Toast.makeText(
+                            this,
+                            "Bu kişi zaten başka bir " +
+                            "sırada seçilmiş.",
+                            Toast.LENGTH_LONG
+                        ).show()
+
+                    } else {
+
+                        prefs.edit()
+                            .putString(
+                                "es_contact${slot}_id",
+                                item.id
+                            )
+                            .putString(
+                                "es_contact${slot}_email",
+                                item.email
+                            )
+                            .putString(
+                                "es_contact${slot}_name",
+                                names[selected]
+                            )
+                            .apply()
+
+                        contactNameFields[
+                            slot - 1
+                        ].setText(
+                            names[selected]
+                        )
+
+                        Toast.makeText(
+                            this,
+                            "Acil durum kişisi kaydedildi.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+                .setNeutralButton(
+                    "KİŞİYİ KALDIR"
+                ) { _, _ ->
+
+                    val prefs = getSharedPreferences(
+                        prefsName,
+                        MODE_PRIVATE
+                    )
+
+                    prefs.edit()
+                        .remove(
+                            "es_contact${slot}_id"
+                        )
+                        .remove(
+                            "es_contact${slot}_email"
+                        )
+                        .remove(
+                            "es_contact${slot}_name"
+                        )
+                        .apply()
+
+                    contactNameFields[
+                        slot - 1
+                    ].setText("")
+
+                    Toast.makeText(
+                        this,
+                        "ES acil durum kişisi kaldırıldı.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                .setNegativeButton(
+                    "VAZGEÇ",
+                    null
+                )
+                .show()
         }
     }
 
-    @Deprecated("Deprecated in Android API; retained for compatibility")
-    override fun onActivityResult(
-        requestCode: Int,
-        resultCode: Int,
-        data: Intent?
-    ) {
-        super.onActivityResult(requestCode, resultCode, data)
+    private fun saveEmergencyMessage() {
 
-        if (
-            requestCode != REQUEST_SELECT_CONTACT ||
-            resultCode != RESULT_OK ||
-            data?.data == null
-        ) {
+        val message = messageField.text
+            .toString()
+            .trim()
+
+        if (message.isBlank()) {
+
+            Toast.makeText(
+                this,
+                "Acil durum mesajı boş olamaz.",
+                Toast.LENGTH_LONG
+            ).show()
+
             return
         }
 
-        val contactUri: Uri = data.data!!
-
-        try {
-            val projection = arrayOf(
-                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                ContactsContract.CommonDataKinds.Phone.NUMBER
+        getSharedPreferences(
+            prefsName,
+            MODE_PRIVATE
+        ).edit()
+            .putString(
+                "emergency_message",
+                message
             )
+            .apply()
 
-            contentResolver.query(
-                contactUri,
-                projection,
-                null,
-                null,
-                null
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val nameIndex = cursor.getColumnIndex(
-                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
-                    )
+        Toast.makeText(
+            this,
+            "Acil durum mesajı kaydedildi.",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
 
-                    val numberIndex = cursor.getColumnIndex(
-                        ContactsContract.CommonDataKinds.Phone.NUMBER
-                    )
-
-                    val name = if (nameIndex >= 0) {
-                        cursor.getString(nameIndex) ?: ""
-                    } else {
-                        ""
-                    }
-
-                    val number = if (numberIndex >= 0) {
-                        cursor.getString(numberIndex) ?: ""
-                    } else {
-                        ""
-                    }
-
-                    if (selectedContactIndex in 0..2) {
-                        contactNameFields[selectedContactIndex].setText(name)
-
-                        contactPhoneFields[selectedContactIndex].setText(
-                            normalizeTurkishPhoneNumber(number)
-                        )
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Toast.makeText(
-                this,
-                "Kişi bilgileri alınamadı",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
+    override fun onDestroy() {
+        activityScope.cancel()
+        super.onDestroy()
     }
 }
