@@ -66,13 +66,10 @@ class VoiceTriggerService : Service() {
 
         redCodeInProgress = true
 
-        // Mevcut konum servisi korunuyor.
         startSosLocationService()
 
-        // WhatsApp yerine ES Messenger gönderimi.
         sendEmergencyMessages()
 
-        // Mevcut siyah ekran davranışı korunuyor.
         val screenIntent = Intent(
             this,
             FakeDeadActivity::class.java
@@ -110,6 +107,28 @@ class VoiceTriggerService : Service() {
             Log.e(
                 "EmergencySafety",
                 "Konum servisi başlatılamadı.",
+                e
+            )
+        }
+    }
+
+    private fun stopSosLocationService() {
+        val serviceIntent = Intent(
+            this,
+            SosLocationService::class.java
+        )
+
+        try {
+            stopService(serviceIntent)
+
+            Log.i(
+                "EmergencySafety",
+                "SOS konum servisi durdurma istendi."
+            )
+        } catch (e: Exception) {
+            Log.e(
+                "EmergencySafety",
+                "SOS konum servisi durdurulamadı.",
                 e
             )
         }
@@ -218,6 +237,10 @@ class VoiceTriggerService : Service() {
     }
 
     private fun stopRedCode() {
+        redCodeInProgress = false
+
+        stopSosLocationService()
+
         getSharedPreferences(
             "AppSettings",
             MODE_PRIVATE
@@ -320,6 +343,11 @@ class VoiceTriggerService : Service() {
 
         if (::sirenManager.isInitialized) {
             sirenManager.stopSiren()
+        }
+
+        if (redCodeInProgress) {
+            stopSosLocationService()
+            redCodeInProgress = false
         }
 
         setSirenActive(false)
