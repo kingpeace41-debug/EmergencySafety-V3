@@ -12,7 +12,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -23,9 +22,8 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
     private val prefsName = "EmergencyContactSettings"
 
-    private val activityJob = SupervisorJob()
     private val activityScope =
-        CoroutineScope(Dispatchers.Main + activityJob)
+        CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private lateinit var contactNameFields: List<EditText>
     private lateinit var contactPhoneFields: List<EditText>
@@ -52,11 +50,6 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
             R.layout.activity_contact_message_settings
         )
 
-        val prefs = getSharedPreferences(
-            prefsName,
-            MODE_PRIVATE
-        )
-
         contactNameFields = listOf(
             findViewById(R.id.etContact1Name),
             findViewById(R.id.etContact2Name),
@@ -73,8 +66,8 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
             R.id.etEmergencyMessage
         )
 
-        // Eski WhatsApp telefon kayıtlarını silmeden
-        // yalnızca bu ekranda gizliyoruz.
+        // Eski WhatsApp kayıtlarını silmeden
+        // telefon numarası alanlarını gizle.
         contactPhoneFields.forEach { field ->
             field.visibility = View.GONE
         }
@@ -82,13 +75,6 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
         for (index in 0..2) {
             val slot = index + 1
             val field = contactNameFields[index]
-
-            field.setText(
-                prefs.getString(
-                    "es_contact${slot}_name",
-                    ""
-                ).orEmpty()
-            )
 
             field.hint =
                 "$slot. ES acil durum kişisini seç"
@@ -108,6 +94,11 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                 true
             }
         }
+
+        val prefs = getSharedPreferences(
+            prefsName,
+            MODE_PRIVATE
+        )
 
         val savedEmergencyMessage =
             prefs.getString(
@@ -134,6 +125,82 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
         }
 
         updateScreenHeading()
+        refreshSelectedContactNames()
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        if (::contactNameFields.isInitialized) {
+            refreshSelectedContactNames()
+        }
+    }
+
+    /**
+     * Kayıtlı ES kişilerinin isimlerini günceller.
+     *
+     * Bağlantı kimlikleri değiştirilmez.
+     * Messenger'da kayıtlı özel isim kullanılır.
+     * Özel isim yoksa mevcut kayıt korunur.
+     */
+    private fun refreshSelectedContactNames() {
+
+        val prefs = getSharedPreferences(
+            prefsName,
+            MODE_PRIVATE
+        )
+
+        for (slot in 1..3) {
+
+            val connectionId = prefs.getString(
+                "es_contact${slot}_id",
+                ""
+            ).orEmpty()
+
+            val email = prefs.getString(
+                "es_contact${slot}_email",
+                ""
+            ).orEmpty()
+
+            val savedName = prefs.getString(
+                "es_contact${slot}_name",
+                ""
+            ).orEmpty()
+
+            val field = contactNameFields[slot - 1]
+
+            if (connectionId.isBlank()) {
+                field.setText("")
+                continue
+            }
+
+            val currentName = if (email.isNotBlank()) {
+                ContactNames.getDisplayName(
+                    this,
+                    email
+                )
+            } else {
+                savedName
+            }
+
+            val displayName = currentName.ifBlank {
+                savedName
+            }
+
+            field.setText(displayName)
+
+            if (
+                displayName.isNotBlank() &&
+                displayName != savedName
+            ) {
+                prefs.edit()
+                    .putString(
+                        "es_contact${slot}_name",
+                        displayName
+                    )
+                    .apply()
+            }
+        }
     }
 
     private fun updateScreenHeading() {
@@ -287,11 +354,7 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                             )
                             .apply()
 
-                        contactNameFields[
-                            slot - 1
-                        ].setText(
-                            names[selected]
-                        )
+                        refreshSelectedContactNames()
 
                         Toast.makeText(
                             this,
@@ -321,9 +384,7 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                         )
                         .apply()
 
-                    contactNameFields[
-                        slot - 1
-                    ].setText("")
+                    refreshSelectedContactNames()
 
                     Toast.makeText(
                         this,
