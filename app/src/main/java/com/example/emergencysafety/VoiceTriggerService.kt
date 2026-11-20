@@ -1,3 +1,4 @@
+
 package com.example.emergencysafety
 
 import android.app.Notification
@@ -23,7 +24,9 @@ class VoiceTriggerService : Service() {
     private lateinit var voiceTriggerManager: VoiceTriggerManager
 
     private val serviceScope =
-        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        CoroutineScope(
+            SupervisorJob() + Dispatchers.Main.immediate
+        )
 
     private var redCodeInProgress = false
 
@@ -33,7 +36,6 @@ class VoiceTriggerService : Service() {
         sirenManager = SirenManager(this)
         voiceTriggerManager = VoiceTriggerManager(this)
 
-        // Servis başladığında siren durumu kapalı olarak başlar.
         setSirenActive(false)
 
         startForegroundServiceWithNotification()
@@ -61,14 +63,16 @@ class VoiceTriggerService : Service() {
 
     private fun triggerRedCode() {
         if (redCodeInProgress) return
+
         redCodeInProgress = true
 
-        // 1. Canlı konum ve sunucu aktarım servisini başlat
+        // Mevcut konum servisi korunuyor.
         startSosLocationService()
 
-        // 2. Mevcut WhatsApp mesaj gönderim akışı
+        // WhatsApp yerine ES Messenger gönderimi.
         sendEmergencyMessages()
 
+        // Mevcut siyah ekran davranışı korunuyor.
         val screenIntent = Intent(
             this,
             FakeDeadActivity::class.java
@@ -79,146 +83,103 @@ class VoiceTriggerService : Service() {
             )
         }
 
-        startActivity(screenIntent)
+        try {
+            startActivity(screenIntent)
+        } catch (e: Exception) {
+            Log.e(
+                "EmergencySafety",
+                "Siyah ekran başlatılamadı.",
+                e
+            )
+        }
     }
 
-    // Canlı konum servisini arka planda başlatan fonksiyon
     private fun startSosLocationService() {
-        val serviceIntent = Intent(this, SosLocationService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
+        val serviceIntent = Intent(
+            this,
+            SosLocationService::class.java
+        )
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } catch (e: Exception) {
+            Log.e(
+                "EmergencySafety",
+                "Konum servisi başlatılamadı.",
+                e
+            )
         }
     }
 
     private fun sendEmergencyMessages() {
         serviceScope.launch {
-            val contactsPreferences = getSharedPreferences(
-                "EmergencyContactSettings",
-                MODE_PRIVATE
-            )
-
-            val connectionPreferences = getSharedPreferences(
-                "EmergencySafetyConnection",
-                MODE_PRIVATE
-            )
-
-            val savedMessage = contactsPreferences
-                .getString("emergency_message", "")
-                .orEmpty()
-                .trim()
-
-            val apiKey = connectionPreferences
-                .getString("worker_api_key", "")
-                .orEmpty()
-                .trim()
-
-            if (savedMessage.isBlank()) {
-                reportStatus(
-                    "Acil durum mesajı kayıtlı değil."
+            try {
+                val summary = EsEmergencySender.send(
+                    applicationContext
                 )
-                return@launch
-            }
 
-            if (apiKey.isBlank()) {
-                reportStatus(
-                    "Worker API anahtarı kayıtlı değil. " +
-                        "Manuel WhatsApp testinden anahtarı kaydedin."
-                )
-                return@launch
-            }
+                val acceptedCount = summary.acceptedCount
+                val failedCount = summary.failedCount
 
-            val contacts = (1..3).mapNotNull { index ->
-                val phone = contactsPreferences
-                    .getString("contact${index}_phone", "")
-                    .orEmpty()
-                    .trim()
+                val status = when {
+                    summary.error != null -> {
+                        summary.error
+                    }
 
-                if (phone.isBlank()) {
-                    null
-                } else {
-                    val name = contactsPreferences
-                        .getString("contact${index}_name", "")
-                        .orEmpty()
-                        .trim()
+                    acceptedCount > 0 && failedCount == 0 -> {
+                        "ES acil durum mesajı gönderim isteği " +
+                            "$acceptedCount kişi için kabul edildi."
+                    }
 
-                    EmergencyProtocolContact(
-                        name = name.ifBlank { "Kişi $index" },
-                        phone = phone
-                    )
+                    acceptedCount > 0 -> {
+                        "ES acil durum mesajı: " +
+                            "$acceptedCount kabul edildi, " +
+                            "$failedCount başarısız."
+                    }
+
+                    else -> {
+                        "ES acil durum mesajı gönderilemedi. " +
+                            "Bağlantı ve kişi ayarlarını kontrol edin."
+                    }
                 }
-            }
 
-            if (contacts.isEmpty()) {
-                reportStatus(
-                    "Kayıtlı acil durum telefon numarası bulunamadı."
+                Log.i(
+                    "EmergencySafety",
+                    "Sesli acil durum: $status"
                 )
-                return@launch
-            }
 
-            // Ortak protokol mesajı ve konumu hazırlar.
-            val finalMessage = EmergencyProtocol.prepareMessage(
-                context = applicationContext,
-                originalMessage = savedMessage
-            )
+                summary.results
+                    .filter { !it.accepted }
+                    .take(3)
+                    .forEach { result ->
+                        Log.e(
+                            "EmergencySafety",
+                            "${result.contactName}: " +
+                                (
+                                    result.error
+                                        ?: "Gönderim başarısız."
+                                )
+                        )
+                    }
 
-            // Mevcut WhatsApp gönderim akışı korunmuştur.
-            val results = EmergencyProtocol.sendToContacts(
-                apiKey = apiKey,
-                message = finalMessage,
-                contacts = contacts
-            )
+                reportStatus(status)
 
-            val rejectedKey = results.any {
-                it.apiKeyRejected
-            }
-
-            if (rejectedKey) {
-                reportStatus(
-                    "Worker API anahtarı kabul edilmedi. " +
-                        "Manuel WhatsApp testinden anahtarı kontrol edin."
-                )
-                return@launch
-            }
-
-            val acceptedCount = results.count {
-                it.accepted
-            }
-
-            val errors = results.filter {
-                !it.accepted
-            }
-
-            val status = when {
-                acceptedCount == contacts.size ->
-                    "WhatsApp gönderim istekleri kabul edildi: " +
-                        "$acceptedCount kişi."
-
-                acceptedCount > 0 ->
-                    "Kabul edilen istek: " +
-                        "$acceptedCount/${contacts.size}. " +
-                        "Bazı gönderimler başarısız."
-
-                else ->
-                    "WhatsApp gönderimi başarısız. " +
-                        "Bağlantıyı ve Worker ayarlarını kontrol edin."
-            }
-
-            Log.i(
-                "EmergencySafety",
-                "$status Hata sayısı: ${errors.size}"
-            )
-
-            errors.take(3).forEach { error ->
+            } catch (e: Exception) {
                 Log.e(
                     "EmergencySafety",
-                    "${error.contactName}: " +
-                        (error.error ?: "Gönderim başarısız.")
+                    "ES acil durum gönderim hatası.",
+                    e
+                )
+
+                reportStatus(
+                    "ES acil durum mesajı gönderilemedi. " +
+                        "Lütfen bağlantıyı kontrol edin."
                 )
             }
-
-            reportStatus(status)
         }
     }
 
@@ -245,7 +206,15 @@ class VoiceTriggerService : Service() {
             .setAutoCancel(true)
             .build()
 
-        notificationManager.notify(2, notification)
+        try {
+            notificationManager.notify(2, notification)
+        } catch (e: SecurityException) {
+            Log.w(
+                "EmergencySafety",
+                "Durum bildirimi izni yok.",
+                e
+            )
+        }
     }
 
     private fun stopRedCode() {
@@ -272,10 +241,19 @@ class VoiceTriggerService : Service() {
                 Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_SINGLE_TOP
             )
+
             putExtra("EXTRA_CLOSE", true)
         }
 
-        startActivity(closeIntent)
+        try {
+            startActivity(closeIntent)
+        } catch (e: Exception) {
+            Log.e(
+                "EmergencySafety",
+                "Siyah ekran kapatılamadı.",
+                e
+            )
+        }
 
         stopSelf()
     }
@@ -347,6 +325,7 @@ class VoiceTriggerService : Service() {
         setSirenActive(false)
 
         serviceScope.cancel()
+
         super.onDestroy()
     }
 
