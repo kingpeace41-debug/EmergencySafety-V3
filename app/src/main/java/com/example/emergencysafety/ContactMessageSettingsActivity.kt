@@ -1,14 +1,19 @@
 
 package com.example.emergencysafety
 
+import android.app.Dialog
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,9 +51,7 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setContentView(
-            R.layout.activity_contact_message_settings
-        )
+        setContentView(R.layout.activity_contact_message_settings)
 
         contactNameFields = listOf(
             findViewById(R.id.etContact1Name),
@@ -62,23 +65,17 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
             findViewById(R.id.etContact3Phone)
         )
 
-        messageField = findViewById(
-            R.id.etEmergencyMessage
-        )
+        messageField = findViewById(R.id.etEmergencyMessage)
 
-        // Eski WhatsApp kayıtlarını silmeden
-        // telefon numarası alanlarını gizle.
-        contactPhoneFields.forEach { field ->
-            field.visibility = View.GONE
+        contactPhoneFields.forEach {
+            it.visibility = View.GONE
         }
 
         for (index in 0..2) {
             val slot = index + 1
             val field = contactNameFields[index]
 
-            field.hint =
-                "$slot. ES acil durum kişisini seç"
-
+            field.hint = "$slot. ES acil durum kişisini seç"
             field.isFocusable = false
             field.isFocusableInTouchMode = false
             field.isCursorVisible = false
@@ -95,34 +92,27 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
             }
         }
 
-        val prefs = getSharedPreferences(
-            prefsName,
-            MODE_PRIVATE
+        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+
+        val savedMessage = prefs.getString(
+            "emergency_message",
+            null
         )
 
-        val savedEmergencyMessage =
-            prefs.getString(
-                "emergency_message",
-                null
-            )
-
         messageField.setText(
-            savedEmergencyMessage
-                ?.takeIf { it.isNotBlank() }
+            savedMessage?.takeIf { it.isNotBlank() }
                 ?: DEFAULT_EMERGENCY_MESSAGE
         )
 
-        findViewById<Button>(
-            R.id.btnSaveContacts
-        ).setOnClickListener {
-            saveEmergencyMessage()
-        }
+        findViewById<Button>(R.id.btnSaveContacts)
+            .setOnClickListener {
+                saveEmergencyMessage()
+            }
 
-        findViewById<Button>(
-            R.id.btnBackContacts
-        ).setOnClickListener {
-            finish()
-        }
+        findViewById<Button>(R.id.btnBackContacts)
+            .setOnClickListener {
+                finish()
+            }
 
         updateScreenHeading()
         refreshSelectedContactNames()
@@ -136,35 +126,30 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Kayıtlı ES kişilerinin isimlerini günceller.
-     *
-     * Bağlantı kimlikleri değiştirilmez.
-     * Messenger'da kayıtlı özel isim kullanılır.
-     * Özel isim yoksa mevcut kayıt korunur.
-     */
-    private fun refreshSelectedContactNames() {
+    private fun displayName(email: String): String {
+        if (email.isBlank()) return ""
 
-        val prefs = getSharedPreferences(
-            prefsName,
-            MODE_PRIVATE
-        )
+        return if (ContactNames.hasName(this, email)) {
+            ContactNames.getDisplayName(this, email)
+        } else {
+            "İsimsiz ES kişisi"
+        }
+    }
+
+    private fun refreshSelectedContactNames() {
+        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
 
         for (slot in 1..3) {
-
             val connectionId = prefs.getString(
-                "es_contact${slot}_id",
-                ""
+                "es_contact${slot}_id", ""
             ).orEmpty()
 
             val email = prefs.getString(
-                "es_contact${slot}_email",
-                ""
+                "es_contact${slot}_email", ""
             ).orEmpty()
 
             val savedName = prefs.getString(
-                "es_contact${slot}_name",
-                ""
+                "es_contact${slot}_name", ""
             ).orEmpty()
 
             val field = contactNameFields[slot - 1]
@@ -174,54 +159,37 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                 continue
             }
 
-            val currentName = if (email.isNotBlank()) {
-                ContactNames.getDisplayName(
-                    this,
-                    email
-                )
+            val name = if (email.isNotBlank()) {
+                displayName(email)
             } else {
-                savedName
+                savedName.takeUnless {
+                    it.isBlank() || it.contains("@")
+                } ?: "İsimsiz ES kişisi"
             }
 
-            val displayName = currentName.ifBlank {
-                savedName
-            }
+            field.setText(name)
 
-            field.setText(displayName)
-
-            if (
-                displayName.isNotBlank() &&
-                displayName != savedName
-            ) {
+            if (name != savedName) {
                 prefs.edit()
-                    .putString(
-                        "es_contact${slot}_name",
-                        displayName
-                    )
+                    .putString("es_contact${slot}_name", name)
                     .apply()
             }
         }
     }
 
     private fun updateScreenHeading() {
-        val root = findViewById<View>(
-            android.R.id.content
-        )
+        val root = findViewById<View>(android.R.id.content)
 
         fun update(view: View) {
-            if (view is TextView) {
-                if (
-                    view.text.toString() ==
-                    "REHBER VE MESAJ AYARLARI"
-                ) {
-                    view.text =
-                        "ES KİŞİ VE MESAJ AYARLARI"
-                }
+            if (view is TextView &&
+                view.text.toString() == "REHBER VE MESAJ AYARLARI"
+            ) {
+                view.text = "ES KİŞİ VE MESAJ AYARLARI"
             }
 
             if (view is ViewGroup) {
-                for (index in 0 until view.childCount) {
-                    update(view.getChildAt(index))
+                for (i in 0 until view.childCount) {
+                    update(view.getChildAt(i))
                 }
             }
         }
@@ -230,7 +198,6 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
     }
 
     private fun openEsContactPicker(slot: Int) {
-
         Toast.makeText(
             this,
             "ES bağlantıları yükleniyor...",
@@ -238,18 +205,11 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
         ).show()
 
         activityScope.launch {
-
-            val result = withContext(
-                Dispatchers.IO
-            ) {
-                ConnectionApi.getConnections(
-                    applicationContext
-                )
+            val result = withContext(Dispatchers.IO) {
+                ConnectionApi.getConnections(applicationContext)
             }
 
-            if (isFinishing || isDestroyed) {
-                return@launch
-            }
+            if (isFinishing || isDestroyed) return@launch
 
             if (!result.success) {
                 Toast.makeText(
@@ -257,174 +217,197 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                     result.message,
                     Toast.LENGTH_LONG
                 ).show()
-
                 return@launch
             }
 
-            val connections = result.data
-                .orEmpty()
+            val connections = result.data.orEmpty()
                 .filter {
-                    it.id.isNotBlank() &&
-                    it.email.isNotBlank()
+                    it.id.isNotBlank() && it.email.isNotBlank()
                 }
                 .sortedBy {
-                    ContactNames.getDisplayName(
-                        this@ContactMessageSettingsActivity,
-                        it.email
-                    ).lowercase(Locale.ROOT)
+                    displayName(it.email).lowercase(Locale.ROOT)
                 }
 
-            if (connections.isEmpty()) {
-
-                AlertDialog.Builder(
-                    this@ContactMessageSettingsActivity
-                )
-                    .setTitle("ES ACİL DURUM KİŞİLERİ")
-                    .setMessage(
-                        "Henüz onaylanmış ES bağlantın " +
-                        "bulunmuyor.\n\n" +
-                        "Önce sarı mesajlaşma " +
-                        "konsolundan kişi ekleyip " +
-                        "karşılıklı bağlantıyı onaylayın."
-                    )
-                    .setPositiveButton(
-                        "TAMAM",
-                        null
-                    )
-                    .show()
-
-                return@launch
-            }
-
-            val names = connections.map { item ->
-                ContactNames.getDisplayName(
-                    this@ContactMessageSettingsActivity,
-                    item.email
-                )
-            }.toTypedArray()
-
-            AlertDialog.Builder(
-                this@ContactMessageSettingsActivity
-            )
-                .setTitle(
-                    "$slot. ACİL DURUM KİŞİSİNİ SEÇ"
-                )
-                .setItems(names) { _, selected ->
-
-                    val item = connections[selected]
-
-                    val prefs = getSharedPreferences(
-                        prefsName,
-                        MODE_PRIVATE
-                    )
-
-                    val alreadySelected =
-                        (1..3).any { otherSlot ->
-
-                            otherSlot != slot &&
-                            prefs.getString(
-                                "es_contact${otherSlot}_id",
-                                ""
-                            ) == item.id
-                        }
-
-                    if (alreadySelected) {
-
-                        Toast.makeText(
-                            this@ContactMessageSettingsActivity,
-                            "Bu kişi zaten başka bir " +
-                            "sırada seçilmiş.",
-                            Toast.LENGTH_LONG
-                        ).show()
-
-                    } else {
-
-                        prefs.edit()
-                            .putString(
-                                "es_contact${slot}_id",
-                                item.id
-                            )
-                            .putString(
-                                "es_contact${slot}_email",
-                                item.email
-                            )
-                            .putString(
-                                "es_contact${slot}_name",
-                                names[selected]
-                            )
-                            .apply()
-
-                        refreshSelectedContactNames()
-
-                        Toast.makeText(
-                            this@ContactMessageSettingsActivity,
-                            "Acil durum kişisi kaydedildi.",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-                .setNeutralButton(
-                    "KİŞİYİ KALDIR"
-                ) { _, _ ->
-
-                    val prefs = getSharedPreferences(
-                        prefsName,
-                        MODE_PRIVATE
-                    )
-
-                    prefs.edit()
-                        .remove(
-                            "es_contact${slot}_id"
-                        )
-                        .remove(
-                            "es_contact${slot}_email"
-                        )
-                        .remove(
-                            "es_contact${slot}_name"
-                        )
-                        .apply()
-
-                    refreshSelectedContactNames()
-
-                    Toast.makeText(
-                        this@ContactMessageSettingsActivity,
-                        "ES acil durum kişisi kaldırıldı.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                .setNegativeButton(
-                    "VAZGEÇ",
-                    null
-                )
-                .show()
+            showEsContactDialog(slot, connections)
         }
     }
 
-    private fun saveEmergencyMessage() {
+    private fun showEsContactDialog(
+        slot: Int,
+        connections: List<ConnectionApiItem>
+    ) {
+        val dialog = Dialog(this)
+        dialog.setContentView(R.layout.dialog_es_contact_picker)
 
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            setDimAmount(0.65f)
+        }
+
+        val title = dialog.findViewById<TextView>(
+            R.id.tvEsPickerTitle
+        )
+        val list = dialog.findViewById<LinearLayout>(
+            R.id.esPickerList
+        )
+        val message = dialog.findViewById<TextView>(
+            R.id.tvEsPickerMessage
+        )
+        val removeButton = dialog.findViewById<Button>(
+            R.id.btnEsRemoveContact
+        )
+        val cancelButton = dialog.findViewById<Button>(
+            R.id.btnEsPickerCancel
+        )
+
+        title.text = "$slot. ACİL DURUM KİŞİSİNİ SEÇ"
+
+        if (connections.isEmpty()) {
+            message.visibility = View.VISIBLE
+            message.text =
+                "Henüz onaylanmış ES bağlantın bulunmuyor.\n\n" +
+                "Önce sarı mesajlaşma konsolundan kişi ekleyip " +
+                "karşılıklı bağlantıyı onaylayın."
+        } else {
+            var unnamedCount = 0
+
+            connections.forEach { item ->
+                val name = if (
+                    ContactNames.hasName(this, item.email)
+                ) {
+                    displayName(item.email)
+                } else {
+                    unnamedCount++
+                    "İsimsiz ES kişisi $unnamedCount"
+                }
+
+                val row = TextView(this).apply {
+                    text = name
+                    textSize = 17f
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(
+                        dp(14), dp(15),
+                        dp(14), dp(15)
+                    )
+                    setBackgroundColor(
+                        Color.rgb(55, 14, 19)
+                    )
+                    isClickable = true
+                }
+
+                val rowParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = dp(8)
+                }
+
+                list.addView(row, rowParams)
+
+                row.setOnClickListener {
+                    selectEsContact(slot, item, name)
+                    dialog.dismiss()
+                }
+            }
+        }
+
+        removeButton.setOnClickListener {
+            val prefs = getSharedPreferences(
+                prefsName, MODE_PRIVATE
+            )
+
+            prefs.edit()
+                .remove("es_contact${slot}_id")
+                .remove("es_contact${slot}_email")
+                .remove("es_contact${slot}_name")
+                .apply()
+
+            refreshSelectedContactNames()
+            dialog.dismiss()
+
+            Toast.makeText(
+                this,
+                "ES acil durum kişisi kaldırıldı.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        cancelButton.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        dialog.show()
+
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.92f).toInt(),
+            WindowManager.LayoutParams.WRAP_CONTENT
+        )
+    }
+
+    private fun selectEsContact(
+        slot: Int,
+        item: ConnectionApiItem,
+        name: String
+    ) {
+        val prefs = getSharedPreferences(
+            prefsName, MODE_PRIVATE
+        )
+
+        val alreadySelected = (1..3).any { otherSlot ->
+            otherSlot != slot &&
+                prefs.getString(
+                    "es_contact${otherSlot}_id", ""
+                ) == item.id
+        }
+
+        if (alreadySelected) {
+            Toast.makeText(
+                this,
+                "Bu kişi zaten başka bir sırada seçilmiş.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
+        prefs.edit()
+            .putString("es_contact${slot}_id", item.id)
+            .putString("es_contact${slot}_email", item.email)
+            .putString("es_contact${slot}_name", name)
+            .apply()
+
+        refreshSelectedContactNames()
+
+        Toast.makeText(
+            this,
+            "Acil durum kişisi kaydedildi.",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
+    }
+
+    private fun saveEmergencyMessage() {
         val message = messageField.text
             .toString()
             .trim()
 
         if (message.isBlank()) {
-
             Toast.makeText(
                 this,
                 "Acil durum mesajı boş olamaz.",
                 Toast.LENGTH_LONG
             ).show()
-
             return
         }
 
         getSharedPreferences(
-            prefsName,
-            MODE_PRIVATE
+            prefsName, MODE_PRIVATE
         ).edit()
-            .putString(
-                "emergency_message",
-                message
-            )
+            .putString("emergency_message", message)
             .apply()
 
         Toast.makeText(
