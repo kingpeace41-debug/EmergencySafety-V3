@@ -9,24 +9,33 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.google.android.gms.location.*
-import java.net.HttpURLConnection
-import java.net.URL
-import kotlin.concurrent.thread
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 
 class SosLocationService : Service() {
 
-    private lateinit var fusedLocationClient: FusedLocationProviderClient
-    private lateinit var locationCallback: LocationCallback
+    companion object {
+        const val ACTION_STOP_SOS =
+            "com.example.emergencysafety.STOP_SOS_LOCATION"
 
-    // Yeni düşük öncelikli kanal.
-    // Eski yüksek öncelikli kanal ayarından etkilenmemesi için adı değiştirildi.
-    private val CHANNEL_ID = "SosServiceChannelSilent"
+        private const val CHANNEL_ID =
+            "SosServiceChannelSilent"
 
-    // Mevcut sunucu adresi ayarı korunmuştur.
-    private val SERVER_URL =
-        "http://SUNUCU_IP_ADRESINIZ:3000/update-location"
+        private const val NOTIFICATION_ID = 1
+
+        private const val TAG = "SosLocationService"
+    }
+
+    private lateinit var fusedLocationClient:
+        FusedLocationProviderClient
+
+    private var locationCallback: LocationCallback? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -43,113 +52,190 @@ class SosLocationService : Service() {
         startId: Int
     ): Int {
 
+        if (intent?.action == ACTION_STOP_SOS) {
+            stopLocationUpdates()
+            stopForegroundCompat()
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         val notification: Notification =
             NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("SOS konum hizmeti")
-                .setContentText("Acil durum konum takibi çalışıyor.")
-                .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+                .setContentText(
+                    "Acil durum konum takibi etkin."
+                )
+                .setSmallIcon(
+                    android.R.drawable.ic_menu_mylocation
+                )
                 .setOngoing(true)
                 .setSilent(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setCategory(NotificationCompat.CATEGORY_SERVICE)
-                .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+                .setPriority(
+                    NotificationCompat.PRIORITY_LOW
+                )
+                .setCategory(
+                    NotificationCompat.CATEGORY_SERVICE
+                )
+                .setVisibility(
+                    NotificationCompat.VISIBILITY_SECRET
+                )
                 .build()
 
-        startForeground(1, notification)
+        startForeground(
+            NOTIFICATION_ID,
+            notification
+        )
 
         startLocationUpdates()
 
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     private fun startLocationUpdates() {
 
+        if (locationCallback != null) {
+            return
+        }
+
         val locationRequest =
             LocationRequest.Builder(
                 Priority.PRIORITY_HIGH_ACCURACY,
-                10000
+                10000L
             )
-                .setMinUpdateIntervalMillis(5000)
+                .setMinUpdateIntervalMillis(5000L)
                 .build()
 
-        locationCallback = object : LocationCallback() {
+        val callback = object : LocationCallback() {
 
             override fun onLocationResult(
                 locationResult: LocationResult
             ) {
-                for (location in locationResult.locations) {
-                    sendLocationToServer(
-                        location.latitude,
-                        location.longitude
-                    )
-                }
+                val location =
+                    locationResult.lastLocation ?: return
+
+                // Konum cihazda alınır.
+                // Bu sürümde henüz sunucuya gönderilmez.
+                // Güvenli konum aktarımı ayrıca kurulacak.
+
+                Log.d(
+                    TAG,
+                    "SOS konum güncellemesi alındı."
+                )
             }
         }
+
+        locationCallback = callback
 
         try {
             fusedLocationClient.requestLocationUpdates(
                 locationRequest,
-                locationCallback,
+                callback,
                 Looper.getMainLooper()
-            )
+            ).addOnFailureListener { error ->
+
+                Log.e(
+                    TAG,
+                    "Konum güncellemesi başlatılamadı.",
+                    error
+                )
+
+                if (locationCallback === callback) {
+                    stopLocationUpdates()
+                    stopForegroundCompat()
+                    stopSelf()
+                }
+            }
+
         } catch (e: SecurityException) {
-            e.printStackTrace()
+
+            Log.e(
+                TAG,
+                "Konum izni bulunamadı.",
+                e
+            )
+
+            stopLocationUpdates()
+            stopForegroundCompat()
+            stopSelf()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Konum servisi hatası.",
+                e
+            )
+
+            stopLocationUpdates()
+            stopForegroundCompat()
+            stopSelf()
         }
     }
 
-    private fun sendLocationToServer(
-        lat: Double,
-        lng: Double
-    ) {
-        thread {
-            try {
-                val url = URL("$SERVER_URL?lat=$lat&lng=$lng")
+    private fun stopLocationUpdates() {
 
-                val connection =
-                    url.openConnection() as HttpURLConnection
+        val callback = locationCallback ?: return
 
-                connection.requestMethod = "POST"
-                connection.connectTimeout = 5000
-                connection.readTimeout = 5000
+        locationCallback = null
 
-                connection.responseCode
-                connection.disconnect()
+        fusedLocationClient.removeLocationUpdates(
+            callback
+        )
 
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+        Log.i(
+            TAG,
+            "SOS konum takibi durduruldu."
+        )
+    }
+
+    private fun stopForegroundCompat() {
+
+        if (Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.N
+        ) {
+            stopForeground(
+                STOP_FOREGROUND_REMOVE
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
         }
     }
 
     private fun createNotificationChannel() {
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >=
+            Build.VERSION_CODES.O
+        ) {
 
             val serviceChannel = NotificationChannel(
                 CHANNEL_ID,
                 "SOS Konum Hizmeti",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Acil durum konum hizmeti"
+
+                description =
+                    "Acil durum konum hizmeti"
+
                 setShowBadge(false)
                 enableVibration(false)
                 setSound(null, null)
             }
 
             val manager =
-                getSystemService(NotificationManager::class.java)
+                getSystemService(
+                    NotificationManager::class.java
+                )
 
-            manager?.createNotificationChannel(serviceChannel)
+            manager?.createNotificationChannel(
+                serviceChannel
+            )
         }
     }
 
     override fun onDestroy() {
 
-        if (::locationCallback.isInitialized) {
-            fusedLocationClient.removeLocationUpdates(
-                locationCallback
-            )
-        }
+        stopLocationUpdates()
 
         super.onDestroy()
     }
