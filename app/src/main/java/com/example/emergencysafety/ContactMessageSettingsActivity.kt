@@ -92,17 +92,7 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
             }
         }
 
-        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
-
-        val savedMessage = prefs.getString(
-            "emergency_message",
-            null
-        )
-
-        messageField.setText(
-            savedMessage?.takeIf { it.isNotBlank() }
-                ?: DEFAULT_EMERGENCY_MESSAGE
-        )
+        setupEmergencyMessagePreview()
 
         findViewById<Button>(R.id.btnSaveContacts)
             .setOnClickListener {
@@ -126,6 +116,127 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
         }
     }
 
+    private fun getCurrentEmergencyMessage(): String {
+        val prefs = getSharedPreferences(
+            prefsName,
+            MODE_PRIVATE
+        )
+
+        return prefs.getString(
+            "emergency_message",
+            null
+        )?.takeIf {
+            it.isNotBlank()
+        } ?: DEFAULT_EMERGENCY_MESSAGE
+    }
+
+    private fun setupEmergencyMessagePreview() {
+        messageField.setText(getCurrentEmergencyMessage())
+
+        messageField.isFocusable = false
+        messageField.isFocusableInTouchMode = false
+        messageField.isCursorVisible = false
+        messageField.isClickable = true
+        messageField.isLongClickable = true
+        messageField.isVerticalScrollBarEnabled = true
+
+        messageField.setOnClickListener {
+            openEmergencyMessageEditor()
+        }
+
+        messageField.setOnLongClickListener {
+            openEmergencyMessageEditor()
+            true
+        }
+    }
+
+    private fun openEmergencyMessageEditor() {
+        val dialog = Dialog(this)
+
+        dialog.setContentView(
+            R.layout.dialog_es_emergency_message
+        )
+
+        dialog.window?.apply {
+            setBackgroundDrawable(
+                ColorDrawable(Color.TRANSPARENT)
+            )
+
+            addFlags(
+                WindowManager.LayoutParams.FLAG_DIM_BEHIND
+            )
+
+            setDimAmount(0.65f)
+            setSoftInputMode(
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+                    WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+            )
+        }
+
+        val editor = dialog.findViewById<EditText>(
+            R.id.etEsMessageEditor
+        )
+
+        val clearButton = dialog.findViewById<Button>(
+            R.id.btnEsMessageClear
+        )
+
+        val saveButton = dialog.findViewById<Button>(
+            R.id.btnEsMessageSave
+        )
+
+        editor.setText(getCurrentEmergencyMessage())
+        editor.setSelection(editor.text.length)
+
+        clearButton.setOnClickListener {
+            editor.setText("")
+            editor.requestFocus()
+        }
+
+        saveButton.setOnClickListener {
+            val newMessage = editor.text
+                .toString()
+                .trim()
+
+            if (newMessage.isBlank()) {
+                Toast.makeText(
+                    this,
+                    "Acil durum mesajı boş olamaz.",
+                    Toast.LENGTH_LONG
+                ).show()
+
+                return@setOnClickListener
+            }
+
+            getSharedPreferences(
+                prefsName,
+                MODE_PRIVATE
+            ).edit()
+                .putString(
+                    "emergency_message",
+                    newMessage
+                )
+                .apply()
+
+            messageField.setText(newMessage)
+
+            dialog.dismiss()
+
+            Toast.makeText(
+                this,
+                "Acil durum mesajı kaydedildi.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        dialog.show()
+
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.94f).toInt(),
+            (resources.displayMetrics.heightPixels * 0.75f).toInt()
+        )
+    }
+
     private fun displayName(email: String): String {
         if (email.isBlank()) return ""
 
@@ -137,19 +248,25 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
     }
 
     private fun refreshSelectedContactNames() {
-        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+        val prefs = getSharedPreferences(
+            prefsName,
+            MODE_PRIVATE
+        )
 
         for (slot in 1..3) {
             val connectionId = prefs.getString(
-                "es_contact${slot}_id", ""
+                "es_contact${slot}_id",
+                ""
             ).orEmpty()
 
             val email = prefs.getString(
-                "es_contact${slot}_email", ""
+                "es_contact${slot}_email",
+                ""
             ).orEmpty()
 
             val savedName = prefs.getString(
-                "es_contact${slot}_name", ""
+                "es_contact${slot}_name",
+                ""
             ).orEmpty()
 
             val field = contactNameFields[slot - 1]
@@ -171,18 +288,25 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
             if (name != savedName) {
                 prefs.edit()
-                    .putString("es_contact${slot}_name", name)
+                    .putString(
+                        "es_contact${slot}_name",
+                        name
+                    )
                     .apply()
             }
         }
     }
 
     private fun updateScreenHeading() {
-        val root = findViewById<View>(android.R.id.content)
+        val root = findViewById<View>(
+            android.R.id.content
+        )
 
         fun update(view: View) {
-            if (view is TextView &&
-                view.text.toString() == "REHBER VE MESAJ AYARLARI"
+            if (
+                view is TextView &&
+                view.text.toString() ==
+                "REHBER VE MESAJ AYARLARI"
             ) {
                 view.text = "ES KİŞİ VE MESAJ AYARLARI"
             }
@@ -206,10 +330,14 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
         activityScope.launch {
             val result = withContext(Dispatchers.IO) {
-                ConnectionApi.getConnections(applicationContext)
+                ConnectionApi.getConnections(
+                    applicationContext
+                )
             }
 
-            if (isFinishing || isDestroyed) return@launch
+            if (isFinishing || isDestroyed) {
+                return@launch
+            }
 
             if (!result.success) {
                 Toast.makeText(
@@ -217,18 +345,24 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                     result.message,
                     Toast.LENGTH_LONG
                 ).show()
+
                 return@launch
             }
 
             val connections = result.data.orEmpty()
                 .filter {
-                    it.id.isNotBlank() && it.email.isNotBlank()
+                    it.id.isNotBlank() &&
+                        it.email.isNotBlank()
                 }
                 .sortedBy {
-                    displayName(it.email).lowercase(Locale.ROOT)
+                    displayName(it.email)
+                        .lowercase(Locale.ROOT)
                 }
 
-            showEsContactDialog(slot, connections)
+            showEsContactDialog(
+                slot,
+                connections
+            )
         }
     }
 
@@ -237,26 +371,39 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
         connections: List<ConnectionApiItem>
     ) {
         val dialog = Dialog(this)
-        dialog.setContentView(R.layout.dialog_es_contact_picker)
+
+        dialog.setContentView(
+            R.layout.dialog_es_contact_picker
+        )
 
         dialog.window?.apply {
-            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            setBackgroundDrawable(
+                ColorDrawable(Color.TRANSPARENT)
+            )
+
+            addFlags(
+                WindowManager.LayoutParams.FLAG_DIM_BEHIND
+            )
+
             setDimAmount(0.65f)
         }
 
         val title = dialog.findViewById<TextView>(
             R.id.tvEsPickerTitle
         )
+
         val list = dialog.findViewById<LinearLayout>(
             R.id.esPickerList
         )
+
         val message = dialog.findViewById<TextView>(
             R.id.tvEsPickerMessage
         )
+
         val removeButton = dialog.findViewById<Button>(
             R.id.btnEsRemoveContact
         )
+
         val cancelButton = dialog.findViewById<Button>(
             R.id.btnEsPickerCancel
         )
@@ -265,6 +412,7 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
         if (connections.isEmpty()) {
             message.visibility = View.VISIBLE
+
             message.text =
                 "Henüz onaylanmış ES bağlantın bulunmuyor.\n\n" +
                 "Önce sarı mesajlaşma konsolundan kişi ekleyip " +
@@ -274,7 +422,10 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
             connections.forEach { item ->
                 val name = if (
-                    ContactNames.hasName(this, item.email)
+                    ContactNames.hasName(
+                        this,
+                        item.email
+                    )
                 ) {
                     displayName(item.email)
                 } else {
@@ -287,27 +438,41 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                     textSize = 17f
                     setTextColor(Color.WHITE)
                     gravity = Gravity.CENTER_VERTICAL
+
                     setPadding(
-                        dp(14), dp(15),
-                        dp(14), dp(15)
+                        dp(14),
+                        dp(15),
+                        dp(14),
+                        dp(15)
                     )
+
                     setBackgroundColor(
                         Color.rgb(55, 14, 19)
                     )
+
                     isClickable = true
                 }
 
-                val rowParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    bottomMargin = dp(8)
-                }
+                val rowParams =
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        bottomMargin = dp(8)
+                    }
 
-                list.addView(row, rowParams)
+                list.addView(
+                    row,
+                    rowParams
+                )
 
                 row.setOnClickListener {
-                    selectEsContact(slot, item, name)
+                    selectEsContact(
+                        slot,
+                        item,
+                        name
+                    )
+
                     dialog.dismiss()
                 }
             }
@@ -315,7 +480,8 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
         removeButton.setOnClickListener {
             val prefs = getSharedPreferences(
-                prefsName, MODE_PRIVATE
+                prefsName,
+                MODE_PRIVATE
             )
 
             prefs.edit()
@@ -352,13 +518,15 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
         name: String
     ) {
         val prefs = getSharedPreferences(
-            prefsName, MODE_PRIVATE
+            prefsName,
+            MODE_PRIVATE
         )
 
         val alreadySelected = (1..3).any { otherSlot ->
             otherSlot != slot &&
                 prefs.getString(
-                    "es_contact${otherSlot}_id", ""
+                    "es_contact${otherSlot}_id",
+                    ""
                 ) == item.id
         }
 
@@ -368,13 +536,23 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
                 "Bu kişi zaten başka bir sırada seçilmiş.",
                 Toast.LENGTH_LONG
             ).show()
+
             return
         }
 
         prefs.edit()
-            .putString("es_contact${slot}_id", item.id)
-            .putString("es_contact${slot}_email", item.email)
-            .putString("es_contact${slot}_name", name)
+            .putString(
+                "es_contact${slot}_id",
+                item.id
+            )
+            .putString(
+                "es_contact${slot}_email",
+                item.email
+            )
+            .putString(
+                "es_contact${slot}_name",
+                name
+            )
             .apply()
 
         refreshSelectedContactNames()
@@ -387,32 +565,29 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int): Int {
-        return (value * resources.displayMetrics.density).toInt()
+        return (
+            value * resources.displayMetrics.density
+        ).toInt()
     }
 
     private fun saveEmergencyMessage() {
-        val message = messageField.text
-            .toString()
-            .trim()
-
-        if (message.isBlank()) {
-            Toast.makeText(
-                this,
-                "Acil durum mesajı boş olamaz.",
-                Toast.LENGTH_LONG
-            ).show()
-            return
-        }
+        val message = getCurrentEmergencyMessage()
 
         getSharedPreferences(
-            prefsName, MODE_PRIVATE
+            prefsName,
+            MODE_PRIVATE
         ).edit()
-            .putString("emergency_message", message)
+            .putString(
+                "emergency_message",
+                message
+            )
             .apply()
+
+        messageField.setText(message)
 
         Toast.makeText(
             this,
-            "Acil durum mesajı kaydedildi.",
+            "Acil durum ayarları kaydedildi.",
             Toast.LENGTH_SHORT
         ).show()
     }
