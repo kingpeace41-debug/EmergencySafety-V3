@@ -1,33 +1,42 @@
+
 package com.example.emergencysafety
 
+import android.app.Dialog
 import android.content.Intent
-import android.os.Bundle
-import android.view.View
-import android.widget.ScrollView
-import android.widget.TextView
-import android.widget.LinearLayout
-import android.widget.Toast
 import android.graphics.Color
 import android.graphics.Typeface
-import android.text.InputType
-import android.widget.EditText
-import androidx.appcompat.app.AlertDialog
+import android.graphics.drawable.GradientDrawable
+import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
 class SettingsCategoriesActivity : AppCompatActivity() {
 
-private val contactPrefsName = "EmergencyContactSettings"
-private val connectionPrefsName = "EmergencySafetyConnection"
+    private val backgroundColor = Color.rgb(24, 5, 8)
+    private val panelColor = Color.rgb(43, 10, 15)
+    private val redColor = Color.rgb(190, 32, 43)
+    private val whiteColor = Color.WHITE
+    private val mutedColor = Color.rgb(225, 194, 198)
 
-override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
-    setContentView(R.layout.activity_settings_categories)
+    private var sendingInProgress = false
 
-    findViewById<View>(R.id.btnContactMessageSettings)
-        .setOnClickListener {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        setContentView(R.layout.activity_settings_categories)
+
+        findViewById<View>(
+            R.id.btnContactMessageSettings
+        ).setOnClickListener {
             startActivity(
                 Intent(
                     this,
@@ -36,8 +45,9 @@ override fun onCreate(savedInstanceState: Bundle?) {
             )
         }
 
-    findViewById<View>(R.id.btnVoiceCommandSettings)
-        .setOnClickListener {
+        findViewById<View>(
+            R.id.btnVoiceCommandSettings
+        ).setOnClickListener {
             startActivity(
                 Intent(
                     this,
@@ -46,313 +56,343 @@ override fun onCreate(savedInstanceState: Bundle?) {
             )
         }
 
-    findViewById<View>(R.id.btnManualEmergencyProtocol)
-        .setOnClickListener {
-            showManualProtocolConfirmation()
+        findViewById<View>(
+            R.id.btnManualEmergencyProtocol
+        ).setOnClickListener {
+            showFirstConfirmation()
         }
-}
-
-private fun showManualProtocolConfirmation() {
-    val density = resources.displayMetrics.density
-    fun dp(value: Int): Int =
-        (value * density + 0.5f).toInt()
-
-    val content = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(22), dp(16), dp(22), dp(12))
     }
 
-    val message = TextView(this).apply {
-        text = """
-            ACİL DURUM PROTOKOLÜ
-
-            İkinci onaydan sonra kaydettiğiniz acil durum mesajı belirlediğiniz kişilere WhatsApp üzerinden gönderilmeye çalışılacaktır.
-
-            Mesaja mümkünse telefonun konum bağlantısı eklenecektir. Konum alınamazsa bu durum mesajda belirtilecektir.
-
-            Bu test yalnızca acil durum mesajının gönderimini dener. Fotoğraf çekmez, ses kaydı yapmaz ve ekranı karartmaz.
-
-            Gönderim; internet bağlantısına, Cloudflare Worker ve Meta ayarlarına, ayrıca WhatsApp test hesabı kısıtlamalarına bağlıdır.
-
-            Mesaj gönderme denemesini başlatmak istiyor musunuz?
-        """.trimIndent()
-
-        textSize = 16f
-        setTextColor(Color.rgb(40, 40, 40))
-        setLineSpacing(dp(4).toFloat(), 1.0f)
+    private fun dp(value: Int): Int {
+        return (
+            value * resources.displayMetrics.density + 0.5f
+        ).toInt()
     }
 
-    content.addView(message)
-
-    val scrollView = ScrollView(this).apply {
-        isFillViewport = false
-        addView(content)
+    private fun roundedBackground(
+        color: Int,
+        strokeColor: Int = redColor
+    ): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(14).toFloat()
+            setColor(color)
+            setStroke(dp(1), strokeColor)
+        }
     }
 
-    val dialog = AlertDialog.Builder(this)
-        .setTitle("ACİL DURUM ONAYI")
-        .setView(scrollView)
-        .setPositiveButton("ONAYLA VE GÖNDER", null)
-        .setNegativeButton("VAZGEÇ", null)
-        .setCancelable(true)
-        .create()
-
-    dialog.setOnShowListener {
-        dialog.getButton(
-            AlertDialog.BUTTON_POSITIVE
-        ).apply {
-            setTextColor(Color.rgb(190, 32, 43))
+    private fun createButton(
+        title: String,
+        background: Int
+    ): Button {
+        return Button(this).apply {
+            text = title
+            textSize = 14f
+            isAllCaps = false
+            setTextColor(whiteColor)
             setTypeface(null, Typeface.BOLD)
-
-            setOnClickListener {
-                dialog.dismiss()
-                beginMessageSending()
-            }
+            this.background = roundedBackground(background)
+            minHeight = dp(48)
+            minimumHeight = dp(48)
         }
-
-        dialog.getButton(
-            AlertDialog.BUTTON_NEGATIVE
-        ).setTextColor(Color.DKGRAY)
     }
 
-    dialog.show()
-}
+    private fun showEsDialog(
+        title: String,
+        message: String,
+        positiveText: String,
+        negativeText: String? = "VAZGEÇ",
+        onPositive: () -> Unit
+    ) {
+        if (isFinishing || isDestroyed) return
 
-private fun beginMessageSending() {
-    val prefs = getSharedPreferences(
-        contactPrefsName,
-        MODE_PRIVATE
-    )
+        val dialog = Dialog(this)
 
-    val message = prefs.getString("emergency_message", "")
-        ?.trim().orEmpty()
-
-    if (message.isBlank()) {
-        Toast.makeText(
-            this,
-            "Önce Kişi ve Mesaj Ayarları bölümünden acil durum mesajını kaydedin.",
-            Toast.LENGTH_LONG
-        ).show()
-        return
-    }
-
-    val contacts = (1..3).mapNotNull { index ->
-        val phone = prefs.getString(
-            "contact${index}_phone",
-            ""
-        )?.trim().orEmpty()
-
-        val name = prefs.getString(
-            "contact${index}_name",
-            ""
-        )?.trim().orEmpty()
-
-        if (phone.isNotBlank()) {
-            Pair(
-                name.ifBlank { "Kişi $index" },
-                phone
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(
+                dp(18),
+                dp(20),
+                dp(18),
+                dp(18)
             )
-        } else {
-            null
+            background = roundedBackground(backgroundColor)
         }
-    }
 
-    if (contacts.isEmpty()) {
-        Toast.makeText(
-            this,
-            "Önce en az bir acil durum kişisinin telefonunu kaydedin.",
-            Toast.LENGTH_LONG
-        ).show()
-        return
-    }
+        val titleView = TextView(this).apply {
+            text = title
+            textSize = 20f
+            setTextColor(whiteColor)
+            setTypeface(null, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(16))
+        }
 
-    val connectionPrefs = getSharedPreferences(
-        connectionPrefsName,
-        MODE_PRIVATE
-    )
+        root.addView(titleView)
 
-    val savedApiKey = connectionPrefs
-        .getString("worker_api_key", "")
-        ?.trim().orEmpty()
+        val scrollView = ScrollView(this).apply {
+            isFillViewport = false
+        }
 
-    if (savedApiKey.isBlank()) {
-        showApiKeyDialog(message, contacts)
-    } else {
-        sendMessages(savedApiKey, message, contacts)
-    }
-}
+        val messageView = TextView(this).apply {
+            text = message
+            textSize = 15f
+            setTextColor(mutedColor)
+            setLineSpacing(dp(4).toFloat(), 1f)
+            gravity = Gravity.CENTER
+            setPadding(
+                dp(6),
+                dp(8),
+                dp(6),
+                dp(12)
+            )
+        }
 
-private fun showApiKeyDialog(
-    message: String,
-    contacts: List<Pair<String, String>>
-) {
-    val input = EditText(this).apply {
-        hint = "Cloudflare APP_API_KEY"
-        inputType = InputType.TYPE_CLASS_TEXT or
-            InputType.TYPE_TEXT_VARIATION_PASSWORD
-        setSingleLine(true)
-    }
+        scrollView.addView(messageView)
 
-    val density = resources.displayMetrics.density
-    fun dp(value: Int): Int =
-        (value * density + 0.5f).toInt()
-
-    val container = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(24), dp(8), dp(24), 0)
-        addView(input)
-    }
-
-    AlertDialog.Builder(this)
-        .setTitle("Worker bağlantı anahtarı")
-        .setMessage(
-            "Cloudflare Worker'da kayıtlı APP_API_KEY değerini gir.\n\n" +
-                "Bu anahtarı sohbet mesajına yazma. Anahtar bu telefonda saklanır. " +
-                "Bu yöntem kişisel test içindir; uygulama başkalarına dağıtılacaksa " +
-                "daha güvenli bir yapı gerekir."
+        root.addView(
+            scrollView,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
         )
-        .setView(container)
-        .setPositiveButton("KAYDET VE DENE") { _, _ ->
-            val apiKey = input.text.toString().trim()
 
-            if (apiKey.isBlank()) {
-                Toast.makeText(
-                    this,
-                    "API anahtarı boş olamaz.",
-                    Toast.LENGTH_LONG
-                ).show()
-            } else {
-                getSharedPreferences(
-                    connectionPrefsName,
-                    MODE_PRIVATE
-                ).edit()
-                    .putString("worker_api_key", apiKey)
-                    .apply()
+        val buttonContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(12), 0, 0)
+        }
 
-                sendMessages(apiKey, message, contacts)
+        val positiveButton = createButton(
+            positiveText,
+            redColor
+        )
+
+        buttonContainer.addView(
+            positiveButton,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(52)
+            )
+        )
+
+        if (negativeText != null) {
+            val negativeButton = createButton(
+                negativeText,
+                panelColor
+            )
+
+            val negativeParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(48)
+            ).apply {
+                topMargin = dp(10)
+            }
+
+            buttonContainer.addView(
+                negativeButton,
+                negativeParams
+            )
+
+            negativeButton.setOnClickListener {
+                dialog.dismiss()
             }
         }
-        .setNegativeButton("İPTAL", null)
-        .show()
-}
 
-private fun sendMessages(
-    apiKey: String,
-    message: String,
-    contacts: List<Pair<String, String>>
-) {
-    Toast.makeText(
-        this,
-        "Konum hazırlanıyor, WhatsApp mesajları gönderiliyor…",
-        Toast.LENGTH_SHORT
-    ).show()
+        root.addView(buttonContainer)
 
-    CoroutineScope(Dispatchers.Main).launch {
-        try {
-            // Konumu bir kez alıp aynı hazırlanmış mesajı
-            // tüm acil durum kişilerine göndermek için hazırla.
-            val preparedMessage = EmergencyProtocol.prepareMessage(
-                applicationContext,
-                message
+        dialog.setContentView(root)
+        dialog.setCancelable(true)
+
+        positiveButton.setOnClickListener {
+            dialog.dismiss()
+            onPositive()
+        }
+
+        dialog.window?.apply {
+            setBackgroundDrawableResource(
+                android.R.color.transparent
             )
-
-            val protocolContacts = contacts.map { (name, phone) ->
-                EmergencyProtocolContact(
-                    name = name,
-                    phone = phone
-                )
-            }
-
-            val results = EmergencyProtocol.sendToContacts(
-                apiKey = apiKey,
-                message = preparedMessage,
-                contacts = protocolContacts
+            addFlags(
+                WindowManager.LayoutParams.FLAG_DIM_BEHIND
             )
+            setDimAmount(0.75f)
+        }
 
-            val apiKeyRejected = results.any {
-                it.apiKeyRejected
+        dialog.show()
+
+        val screenHeight =
+            resources.displayMetrics.heightPixels
+
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.92f)
+                .toInt(),
+            WindowManager.LayoutParams.WRAP_CONTENT
+        )
+
+        root.layoutParams?.height =
+            ViewGroup.LayoutParams.WRAP_CONTENT
+
+        scrollView.layoutParams =
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                height = ViewGroup.LayoutParams.WRAP_CONTENT
             }
 
-            if (apiKeyRejected) {
-                getSharedPreferences(
-                    connectionPrefsName,
-                    MODE_PRIVATE
-                ).edit()
-                    .remove("worker_api_key")
-                    .apply()
+        scrollView.maximumHeightCompat(
+            (screenHeight * 0.50f).toInt()
+        )
+    }
 
-                AlertDialog.Builder(
-                    this@SettingsCategoriesActivity
-                )
-                    .setTitle("API anahtarı kabul edilmedi")
-                    .setMessage(
-                        "Girilen anahtar Cloudflare'daki APP_API_KEY ile eşleşmiyor. " +
-                            "Eski anahtar bu telefondan silindi. Cloudflare'da kayıtlı " +
-                            "doğru anahtarı yeniden girmen gerekiyor."
-                    )
-                    .setPositiveButton("YENİDEN GİR") { _, _ ->
-                        showApiKeyDialog(message, contacts)
-                    }
-                    .setNegativeButton("DAHA SONRA", null)
-                    .show()
-
-                return@launch
-            }
-
-            val succeeded = results.count { it.accepted }
-            val errors = results
-                .filter { !it.accepted }
-                .map { result ->
-                    "${result.contactName}: ${
-                        result.error ?: "Gönderim başarısız."
-                    }"
+    private fun ScrollView.maximumHeightCompat(
+        maxHeight: Int
+    ) {
+        post {
+            if (height > maxHeight) {
+                layoutParams = layoutParams.apply {
+                    height = maxHeight
                 }
-
-            val summary = buildString {
-                append(
-                    "Sunucunun başarılı olarak bildirdiği gönderim: " +
-                        "$succeeded / ${contacts.size}"
-                )
-
-                if (errors.isNotEmpty()) {
-                    append("\n\n")
-                    append(errors.take(3).joinToString("\n"))
-
-                    if (errors.size > 3) {
-                        append("\nDiğer hatalar da oluştu.")
-                    }
-                }
-
-                append(
-                    "\n\nBu sonuç tek başına mesajın alıcının WhatsApp'ına " +
-                        "ulaştığını garanti etmez."
-                )
             }
-
-            AlertDialog.Builder(
-                this@SettingsCategoriesActivity
-            )
-                .setTitle(
-                    if (succeeded == contacts.size) {
-                        "Gönderim isteği kabul edildi"
-                    } else {
-                        "Gönderim sonucu"
-                    }
-                )
-                .setMessage(summary)
-                .setPositiveButton("TAMAM", null)
-                .show()
-
-        } catch (e: Exception) {
-            Toast.makeText(
-                this@SettingsCategoriesActivity,
-                "Gönderim sırasında hata oluştu: ${
-                    e.message ?: "Bilinmeyen hata"
-                }",
-                Toast.LENGTH_LONG
-            ).show()
         }
     }
-}
 
+    private fun showFirstConfirmation() {
+        if (sendingInProgress) return
+
+        showEsDialog(
+            title = "🚨 ACİL DURUM PROTOKOLÜ",
+            message = """
+                Manuel acil durum protokolünü başlatmak üzeresiniz.
+
+                Kaydettiğiniz acil durum mesajı, seçtiğiniz ES kişilerine uygulamanın kendi mesajlaşma sistemi üzerinden gönderilecektir.
+
+                Bu işlem gerçek mesaj gönderimi yapar.
+
+                Bu aşamada canlı konum paylaşımı, fotoğraf çekimi, ses kaydı ve ekran karartma başlatılmaz.
+
+                Devam etmek istiyor musunuz?
+            """.trimIndent(),
+            positiveText = "DEVAM ET",
+            negativeText = "VAZGEÇ"
+        ) {
+            showFinalConfirmation()
+        }
+    }
+
+    private fun showFinalConfirmation() {
+        if (sendingInProgress) return
+
+        showEsDialog(
+            title = "SON ONAY",
+            message = """
+                DİKKAT!
+
+                Bir sonraki butona bastığınızda acil durum mesajınız seçtiğiniz ES kişilerine gönderilmeye çalışılacaktır.
+
+                Bu bir önizleme değildir.
+
+                Gönderimi gerçekten başlatmak istiyor musunuz?
+            """.trimIndent(),
+            positiveText = "ACİL DURUMU BAŞLAT",
+            negativeText = "İPTAL ET"
+        ) {
+            beginEmergencySending()
+        }
+    }
+
+    private fun beginEmergencySending() {
+        if (sendingInProgress) return
+
+        sendingInProgress = true
+
+        val manualButton = findViewById<View>(
+            R.id.btnManualEmergencyProtocol
+        )
+
+        manualButton.isEnabled = false
+
+        lifecycleScope.launch {
+            try {
+                val summary = EsEmergencySender.send(
+                    applicationContext
+                )
+
+                if (isFinishing || isDestroyed) {
+                    return@launch
+                }
+
+                if (summary.error != null) {
+                    showEsDialog(
+                        title = "GÖNDERİM BAŞLATILAMADI",
+                        message = summary.error,
+                        positiveText = "TAMAM",
+                        negativeText = null
+                    ) {}
+                    return@launch
+                }
+
+                val resultMessage = buildString {
+                    append(
+                        "Sunucunun kabul ettiği mesaj: "
+                    )
+                    append(summary.acceptedCount)
+                    append(" / ")
+                    append(summary.results.size)
+
+                    if (summary.failedCount > 0) {
+                        append("\n\nBaşarısız gönderimler:\n")
+
+                        summary.results
+                            .filter { !it.accepted }
+                            .forEach { result ->
+                                append("\n")
+                                append(result.contactName)
+                                append(": ")
+                                append(
+                                    result.error
+                                        ?: "Gönderim başarısız."
+                                )
+                            }
+                    }
+
+                    append(
+                        "\n\nSunucunun mesajı kabul etmesi, " +
+                        "alıcının telefonuna teslim edildiği " +
+                        "veya okunduğu anlamına gelmez."
+                    )
+                }
+
+                showEsDialog(
+                    title = if (
+                        summary.failedCount == 0 &&
+                        summary.acceptedCount > 0
+                    ) {
+                        "GÖNDERİM İSTEĞİ KABUL EDİLDİ"
+                    } else {
+                        "GÖNDERİM SONUCU"
+                    },
+                    message = resultMessage,
+                    positiveText = "TAMAM",
+                    negativeText = null
+                ) {}
+
+            } catch (e: Exception) {
+                if (!isFinishing && !isDestroyed) {
+                    showEsDialog(
+                        title = "GÖNDERİM HATASI",
+                        message = e.message
+                            ?: "Beklenmeyen bir hata oluştu.",
+                        positiveText = "TAMAM",
+                        negativeText = null
+                    ) {}
+                }
+            } finally {
+                sendingInProgress = false
+                manualButton.isEnabled = true
+            }
+        }
+    }
 }
