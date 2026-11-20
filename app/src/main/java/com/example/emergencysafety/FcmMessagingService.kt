@@ -1,3 +1,4 @@
+
 package com.example.emergencysafety
 
 import android.Manifest
@@ -16,26 +17,131 @@ import com.google.firebase.messaging.RemoteMessage
 class FcmMessagingService : FirebaseMessagingService() {
 
     companion object {
-        private const val CHANNEL_ID = "emergency_safety_messages"
-        private const val CHANNEL_NAME = "Emergency Safety Bildirimleri"
+        private const val MESSAGE_CHANNEL_ID =
+            "emergency_safety_messages"
+
+        private const val MESSAGE_CHANNEL_NAME =
+            "Emergency Safety Bildirimleri"
+
+        private const val EMERGENCY_CHANNEL_ID =
+            "es_emergency_alerts_v1"
+
+        private const val EMERGENCY_CHANNEL_NAME =
+            "ES Acil Durum Alarmları"
     }
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        FcmTokenRegistrar.registerNewToken(applicationContext, token)
+
+        FcmTokenRegistrar.registerNewToken(
+            applicationContext,
+            token
+        )
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
 
-        val senderUsername = message.data["senderUsername"].orEmpty().trim()
-        val senderEmail = message.data["senderEmail"].orEmpty().trim()
-        val messagePreview = message.data["messagePreview"].orEmpty().trim()
-        val connectionId = message.data["connectionId"].orEmpty().trim()
+        val senderUsername =
+            message.data["senderUsername"].orEmpty().trim()
 
-        if (ActiveChatTracker.isChatVisible(connectionId)) return
+        val senderEmail =
+            message.data["senderEmail"].orEmpty().trim()
 
-        showPrivateNotification(senderUsername, senderEmail, messagePreview, connectionId)
+        val messagePreview =
+            message.data["messagePreview"].orEmpty().trim()
+
+        val connectionId =
+            message.data["connectionId"].orEmpty().trim()
+
+        val messageType =
+            message.data["messageType"].orEmpty().trim()
+
+        if (messageType == "emergency") {
+            showEmergencyNotification(
+                senderUsername = senderUsername,
+                senderEmail = senderEmail,
+                messagePreview = messagePreview,
+                connectionId = connectionId
+            )
+            return
+        }
+
+        if (
+            ActiveChatTracker.isChatVisible(connectionId)
+        ) {
+            return
+        }
+
+        showPrivateNotification(
+            senderUsername = senderUsername,
+            senderEmail = senderEmail,
+            messagePreview = messagePreview,
+            connectionId = connectionId
+        )
+    }
+
+    private fun notificationsAllowed(): Boolean {
+        if (
+            Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.TIRAMISU
+        ) {
+            return ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+
+        return true
+    }
+
+    private fun senderDisplayName(
+        senderUsername: String,
+        senderEmail: String
+    ): String {
+        val name = if (senderEmail.isNotBlank()) {
+            ContactNames.getDisplayName(
+                this,
+                senderEmail
+            )
+        } else {
+            senderUsername
+        }
+
+        return name.ifBlank {
+            "Emergency Safety"
+        }
+    }
+
+    private fun createChatIntent(
+        connectionId: String
+    ): Intent {
+        return Intent(
+            this,
+            YellowSafetyActivity::class.java
+        ).apply {
+            flags =
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP
+
+            putExtra(
+                "connectionId",
+                connectionId
+            )
+        }
+    }
+
+    private fun createPendingIntent(
+        connectionId: String,
+        notificationId: Int
+    ): PendingIntent {
+        return PendingIntent.getActivity(
+            this,
+            notificationId,
+            createChatIntent(connectionId),
+            PendingIntent.FLAG_UPDATE_CURRENT or
+                PendingIntent.FLAG_IMMUTABLE
+        )
     }
 
     private fun showPrivateNotification(
@@ -44,79 +150,201 @@ class FcmMessagingService : FirebaseMessagingService() {
         messagePreview: String,
         connectionId: String
     ) {
-        if (
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) != PackageManager.PERMISSION_GRANTED
-        ) return
+        if (!notificationsAllowed()) return
 
-        createNotificationChannel()
+        createMessageNotificationChannel()
 
-        val openAppIntent = Intent(this, YellowSafetyActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra("connectionId", connectionId)
-        }
+        val notificationKey =
+            connectionId.ifBlank {
+                System.currentTimeMillis().toString()
+            }
 
-        val notificationKey = connectionId.ifBlank {
-            System.currentTimeMillis().toString()
-        }
-        val notificationId = notificationKey.hashCode()
+        val notificationId =
+            notificationKey.hashCode()
 
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            notificationId,
-            openAppIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val title = senderDisplayName(
+            senderUsername,
+            senderEmail
         )
 
-        // Kayıtlı isimler e-posta adresine göre tutulur. Kullanıcı adı
-        // e-posta olmayabileceğinden onu isim anahtarı olarak kullanmayız.
-        val displayName = if (senderEmail.isNotBlank()) {
-            ContactNames.getDisplayName(this, senderEmail)
-        } else {
-            senderUsername
-        }
+        val preview =
+            messagePreview.ifBlank {
+                "Yeni mesajınız var."
+            }
 
-        val title = displayName.ifBlank { "Emergency Safety" }
-        val preview = messagePreview.ifBlank { "Yeni mesajınız var." }
-
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification_wolf)
-            .setContentTitle(title)
-            .setContentText(preview)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(preview))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
-            .setDefaults(
-                NotificationCompat.DEFAULT_SOUND or
-                    NotificationCompat.DEFAULT_VIBRATE
+        val notification =
+            NotificationCompat.Builder(
+                this,
+                MESSAGE_CHANNEL_ID
             )
-            .build()
+                .setSmallIcon(
+                    R.drawable.ic_notification_wolf
+                )
+                .setContentTitle(title)
+                .setContentText(preview)
+                .setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .bigText(preview)
+                )
+                .setPriority(
+                    NotificationCompat.PRIORITY_HIGH
+                )
+                .setCategory(
+                    NotificationCompat.CATEGORY_MESSAGE
+                )
+                .setAutoCancel(true)
+                .setContentIntent(
+                    createPendingIntent(
+                        connectionId,
+                        notificationId
+                    )
+                )
+                .setDefaults(
+                    NotificationCompat.DEFAULT_SOUND or
+                        NotificationCompat.DEFAULT_VIBRATE
+                )
+                .build()
 
+        postNotification(
+            notificationId,
+            notification
+        )
+    }
+
+    private fun showEmergencyNotification(
+        senderUsername: String,
+        senderEmail: String,
+        messagePreview: String,
+        connectionId: String
+    ) {
+        if (!notificationsAllowed()) return
+
+        createEmergencyNotificationChannel()
+
+        val senderName = senderDisplayName(
+            senderUsername,
+            senderEmail
+        )
+
+        val title =
+            "🚨 ACİL DURUM - $senderName"
+
+        val preview =
+            messagePreview.ifBlank {
+                "Acil durum mesajı alındı!"
+            }
+
+        val notificationKey =
+            "emergency_${connectionId.ifBlank {
+                System.currentTimeMillis().toString()
+            }}"
+
+        val notificationId =
+            notificationKey.hashCode()
+
+        val notification =
+            NotificationCompat.Builder(
+                this,
+                EMERGENCY_CHANNEL_ID
+            )
+                .setSmallIcon(
+                    R.drawable.ic_notification_wolf
+                )
+                .setContentTitle(title)
+                .setContentText(preview)
+                .setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .bigText(preview)
+                )
+                .setPriority(
+                    NotificationCompat.PRIORITY_MAX
+                )
+                .setCategory(
+                    NotificationCompat.CATEGORY_ALARM
+                )
+                .setAutoCancel(false)
+                .setOngoing(false)
+                .setContentIntent(
+                    createPendingIntent(
+                        connectionId,
+                        notificationId
+                    )
+                )
+                .setDefaults(
+                    NotificationCompat.DEFAULT_SOUND or
+                        NotificationCompat.DEFAULT_VIBRATE
+                )
+                .build()
+
+        postNotification(
+            notificationId,
+            notification
+        )
+    }
+
+    private fun postNotification(
+        notificationId: Int,
+        notification: android.app.Notification
+    ) {
         try {
-            NotificationManagerCompat.from(this).notify(notificationId, notification)
+            NotificationManagerCompat.from(this)
+                .notify(
+                    notificationId,
+                    notification
+                )
         } catch (_: SecurityException) {
             // Bildirim izni yoksa uygulama kapanmaz.
         }
     }
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    private fun createMessageNotificationChannel() {
+        if (
+            Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.O
+        ) {
             val channel = NotificationChannel(
-                CHANNEL_ID,
-                CHANNEL_NAME,
+                MESSAGE_CHANNEL_ID,
+                MESSAGE_CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Yeni özel mesaj bildirimleri"
+                description =
+                    "Yeni özel mesaj bildirimleri"
+
                 enableVibration(true)
             }
 
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            getSystemService(
+                NotificationManager::class.java
+            ).createNotificationChannel(channel)
+        }
+    }
+
+    private fun createEmergencyNotificationChannel() {
+        if (
+            Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.O
+        ) {
+            val channel = NotificationChannel(
+                EMERGENCY_CHANNEL_ID,
+                EMERGENCY_CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description =
+                    "EmergencySafety acil durum bildirimleri"
+
+                enableVibration(true)
+
+                enableLights(true)
+
+                lightColor =
+                    android.graphics.Color.RED
+
+                setShowBadge(true)
+            }
+
+            getSystemService(
+                NotificationManager::class.java
+            ).createNotificationChannel(channel)
         }
     }
 }
