@@ -97,11 +97,20 @@ jobs:
           fi
           echo "JKS dosya bütünlüğü doğrulandı."
 
-          if ! keytool -list -keystore "$KEYSTORE_PATH" -alias "$ES_KEY_ALIAS" \
+          # JKS deposu parolasini, alias kontrolunden ayri test et.
+          if ! keytool -list -keystore "$KEYSTORE_PATH" \
             -storepass "$ES_KEYSTORE_PASSWORD" > /dev/null 2>&1; then
-            echo "::error::Anahtar doğrulanamadı: parola, alias veya JKS içeriği uyuşmuyor."
+            echo "::error::JKS deposu parolasi dogrulanamadi. ES_KEYSTORE_PASSWORD degerini kontrol et."
             exit 1
           fi
+          echo "JKS deposu parolasi dogrulandi."
+
+          if ! keytool -list -keystore "$KEYSTORE_PATH" -alias "$ES_KEY_ALIAS" \
+            -storepass "$ES_KEYSTORE_PASSWORD" > /dev/null 2>&1; then
+            echo "::error::JKS deposu acildi ancak ES_KEY_ALIAS eslesmiyor."
+            exit 1
+          fi
+          echo "JKS alias dogrulandi."
 
           echo "ES_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
           echo "Kalıcı imzalama anahtarı hazır."
