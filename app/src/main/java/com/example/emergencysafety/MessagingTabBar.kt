@@ -252,6 +252,9 @@ class MessagingTabBar @JvmOverloads constructor(
                             ViewGroup.LayoutParams.MATCH_PARENT
                         )
                     )
+                    // Kisi/istek sekmesinden donunce eski sohbet listesini kullanma.
+                    (findActivity(context) as? YellowSafetyActivity)
+                        ?.refreshConversationConnectionsFromTabs()
                 }
             }
 
