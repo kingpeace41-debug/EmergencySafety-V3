@@ -69,6 +69,7 @@ jobs:
         env:
           ES_KEYSTORE_BASE64: ${{ secrets.ES_KEYSTORE_BASE64 }}
           ES_KEYSTORE_PASSWORD: ${{ secrets.ES_KEYSTORE_PASSWORD }}
+          ES_PASSWORD_CHECK_SHA256: ${{ secrets.ES_PASSWORD_CHECK_SHA256 }}
           ES_KEY_ALIAS: ${{ secrets.ES_KEY_ALIAS }}
         run: |
           set -euo pipefail
@@ -96,6 +97,20 @@ jobs:
             exit 1
           fi
           echo "JKS dosya bütünlüğü doğrulandı."
+
+          # Yalnizca eslesme sonucunu goster; parola ve ozeti loglanmaz.
+          if [ -z "${ES_PASSWORD_CHECK_SHA256:-}" ]; then
+            echo "::error::Parola karsilastirma secret'i eksik."
+            exit 1
+          fi
+          ACTUAL_PASSWORD_SHA256="$(printf '%s' "$ES_KEYSTORE_PASSWORD" | sha256sum | cut -d ' ' -f 1)"
+          if [ "$ACTUAL_PASSWORD_SHA256" = "$ES_PASSWORD_CHECK_SHA256" ]; then
+            echo "Parola ozeti eslesiyor."
+          else
+            echo "::error::Parola ozeti eslesmiyor: GitHub'daki parola, Termius'ta test edilen paroladan farkli."
+            exit 1
+          fi
+          unset ACTUAL_PASSWORD_SHA256
 
           # keytool hata metni stdout'a da yazilabilir; iki akisi yakala.
           KEYTOOL_OUTPUT="$RUNNER_TEMP/keytool-check.log"
