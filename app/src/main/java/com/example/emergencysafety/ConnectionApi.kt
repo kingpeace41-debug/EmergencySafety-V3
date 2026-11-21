@@ -21,7 +21,8 @@ internal data class ContactNameApiItem(
 internal data class ConnectionApiItem(
     val id: String,
     val email: String,
-    val createdAt: String
+    val createdAt: String,
+    val contactUserId: String = ""
 )
 
 internal data class MessageApiItem(
@@ -638,7 +639,8 @@ internal object ConnectionApi {
         return ConnectionApiItem(
             id = item.optString("id", ""),
             email = item.optString(emailField, ""),
-            createdAt = item.optString("createdAt", "")
+            createdAt = item.optString("createdAt", ""),
+            contactUserId = item.optString("contactUserId", "")
         )
     }
 
