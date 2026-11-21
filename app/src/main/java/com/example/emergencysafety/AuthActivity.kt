@@ -54,7 +54,6 @@ class AuthActivity : AppCompatActivity() {
     private lateinit var emailInput: EditText
     private lateinit var loginButton: Button
     private lateinit var googleButton: Button
-    private lateinit var continueWithoutAccountButton: Button
 
     private lateinit var wolfTouchArea: FrameLayout
     private lateinit var angryWolfImage: ImageView
@@ -125,7 +124,9 @@ class AuthActivity : AppCompatActivity() {
                 return
             }
 
-            openMainActivity()
+            // Onceki surumde misafir girisi yapanlar artik
+            // hesap dogrulamadan ana ekrana gecemez.
+            showAuthenticationScreen()
             return
         }
 
@@ -141,9 +142,6 @@ class AuthActivity : AppCompatActivity() {
         emailInput = findViewById(R.id.authEmail)
         loginButton = findViewById(R.id.btnAuthLogin)
         googleButton = findViewById(R.id.btnAuthGoogle)
-
-        continueWithoutAccountButton =
-            findViewById(R.id.btnAuthContinueWithoutAccount)
 
         wolfTouchArea =
             findViewById(R.id.authWolfTouchArea)
@@ -176,15 +174,6 @@ class AuthActivity : AppCompatActivity() {
 
         googleButton.setOnClickListener {
             startGoogleLogin()
-        }
-
-        continueWithoutAccountButton.setOnClickListener {
-            accountPreferences.edit()
-                .putBoolean("onboarding_completed", true)
-                .putBoolean("guest_mode", true)
-                .apply()
-
-            openMainActivity()
         }
 
         val requestInitialPermissions =
