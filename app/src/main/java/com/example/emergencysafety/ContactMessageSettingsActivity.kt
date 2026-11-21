@@ -106,7 +106,6 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
         updateScreenHeading()
         refreshSelectedContactNames()
-        loadMissingContactNamesFromServer()
     }
 
     /**
@@ -170,6 +169,7 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
         if (::contactNameFields.isInitialized) {
             refreshSelectedContactNames()
+            loadMissingContactNamesFromServer()
         }
     }
 
