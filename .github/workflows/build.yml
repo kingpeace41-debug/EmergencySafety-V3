@@ -65,7 +65,34 @@ jobs:
 
           echo "Model kontrolü başarılı."
 
+      - name: Prepare stable APK signing
+        env:
+          ES_KEYSTORE_BASE64: ${{ secrets.ES_KEYSTORE_BASE64 }}
+          ES_KEYSTORE_PASSWORD: ${{ secrets.ES_KEYSTORE_PASSWORD }}
+          ES_KEY_ALIAS: ${{ secrets.ES_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$ES_KEYSTORE_BASE64" ] || [ -z "$ES_KEYSTORE_PASSWORD" ] || [ -z "$ES_KEY_ALIAS" ]; then
+            echo "HATA: APK imzalama secret bilgileri eksik."
+            exit 1
+          fi
+
+          KEYSTORE_PATH="$RUNNER_TEMP/emergencysafety.jks"
+          printf '%s' "$ES_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          test -s "$KEYSTORE_PATH"
+
+          keytool -list -keystore "$KEYSTORE_PATH" -alias "$ES_KEY_ALIAS" \
+            -storepass "$ES_KEYSTORE_PASSWORD" > /dev/null
+
+          echo "ES_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "Kalıcı imzalama anahtarı hazır."
+
       - name: Build Android APK
+        env:
+          ES_KEYSTORE_PASSWORD: ${{ secrets.ES_KEYSTORE_PASSWORD }}
+          ES_KEY_ALIAS: ${{ secrets.ES_KEY_ALIAS }}
         run: |
           set -o pipefail
 
