@@ -90,7 +90,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private val remoteTypingTimeout = Runnable {
-        typingIndicator?.visibility = View.GONE
+        typingIndicator?.visibility = View.INVISIBLE
     }
 
     private fun sendLocalTyping(isTyping: Boolean) {
@@ -110,7 +110,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         localTyping = false
         typingConnectionId = null
-        typingIndicator?.visibility = View.GONE
+        typingIndicator?.visibility = View.INVISIBLE
 
         privateSocket?.close()
         privateSocket = null
@@ -131,7 +131,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                 override fun onDisconnected() {
                     runOnUiThread {
                         if (typingConnectionId == connection.id) {
-                            typingIndicator?.visibility = View.GONE
+                            typingIndicator?.visibility = View.INVISIBLE
                         }
                     }
                 }
@@ -166,7 +166,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                                 )
 
                                 typingIndicator?.visibility =
-                                    if (isTyping) View.VISIBLE else View.GONE
+                                    if (isTyping) View.VISIBLE else View.INVISIBLE
 
                                 if (isTyping) {
                                     privateChatHandler.postDelayed(
@@ -1284,14 +1284,15 @@ class YellowSafetyActivity : AppCompatActivity() {
             setPadding(dp(4), dp(7), dp(4), dp(7))
         }
 
-        screen.addView(privateStatusText)
+        // Yukleme durumu sohbet ustunde gosterilmez.
 
         typingIndicator = createText(
             "Yazıyor... ✍️",
             11f,
             gold
         ).apply {
-            visibility = View.GONE
+            visibility = View.INVISIBLE
+            gravity = Gravity.CENTER_VERTICAL
             setPadding(
                 dp(10),
                 dp(3),
@@ -1300,7 +1301,13 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         }
 
-        screen.addView(typingIndicator)
+        screen.addView(
+            typingIndicator,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(30)
+            )
+        )
 
         privateMessagesScroll = ScrollView(this).apply {
             isFillViewport = true
@@ -1481,9 +1488,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         isLoadingPrivateMessages = true
 
         if (showLoading) {
-            privateMessagesColumn?.removeAllViews()
-            addPrivateInfoMessage("Mesajlar yükleniyor...")
-            privateStatusText?.text = "Mesajlar yükleniyor..."
+            // Mesajlar yenilenirken mevcut balonlari koru.
         }
 
         Thread {
@@ -1524,12 +1529,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
                 val shouldRender =
                     column.childCount == 0 ||
-                    signature != lastPrivateMessageSignature ||
-                    (messages.isEmpty() &&
-                        column.childCount == 1 &&
-                        (column.getChildAt(0) as? TextView)?.text
-                            ?.toString()
-                            ?.contains("Mesajlar yükleniyor") == true)
+                    signature != lastPrivateMessageSignature
 
                 if (shouldRender) {
                     lastPrivateMessageSignature = signature
