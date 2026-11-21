@@ -532,6 +532,13 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
                     dialog.dismiss()
                 }
+
+                // Kisiye uzun basarak ozel adini degistir.
+                row.setOnLongClickListener {
+                    dialog.dismiss()
+                    showContactNameEditor(item)
+                    true
+                }
             }
         }
 
@@ -565,6 +572,113 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
         dialog.window?.setLayout(
             (resources.displayMetrics.widthPixels * 0.92f).toInt(),
+            WindowManager.LayoutParams.WRAP_CONTENT
+        )
+    }
+
+    /**
+     * Secilen baglantinin ozel adini sunucuya kaydeder.
+     * Sunucu onaylamadan telefondaki adi degistirmez.
+     */
+    private fun showContactNameEditor(item: ConnectionApiItem) {
+        val dialog = Dialog(this)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(20), dp(18), dp(18))
+            setBackgroundColor(Color.rgb(43, 10, 15))
+        }
+
+        root.addView(TextView(this).apply {
+            text = "KİŞİ ADINI DÜZENLE"
+            textSize = 18f
+            setTextColor(Color.WHITE)
+        })
+
+        val input = EditText(this).apply {
+            setSingleLine(true)
+            hint = "Kişinin adı"
+            setText(ContactNames.getSavedName(
+                this@ContactMessageSettingsActivity,
+                item.email
+            ).orEmpty())
+            setTextColor(Color.WHITE)
+            setHintTextColor(Color.LTGRAY)
+        }
+        root.addView(input)
+
+        val save = Button(this).apply { text = "KAYDET" }
+        val cancel = Button(this).apply { text = "VAZGEÇ" }
+        root.addView(save)
+        root.addView(cancel)
+        dialog.setContentView(root)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        cancel.setOnClickListener { dialog.dismiss() }
+
+        save.setOnClickListener {
+            val newName = input.text.toString().trim()
+            if (
+                newName.isBlank() ||
+                newName.codePointCount(0, newName.length) > 100 ||
+                newName.contains("@") ||
+                newName.any { it.code < 32 || it.code == 127 }
+            ) {
+                input.error = "Geçerli bir isim gir (en fazla 100 karakter)."
+                return@setOnClickListener
+            }
+
+            save.isEnabled = false
+            activityScope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    val contacts = ConnectionApi.getContactNames(
+                        applicationContext
+                    )
+                    val userId = contacts.data.orEmpty()
+                        .firstOrNull {
+                            it.email.equals(item.email, ignoreCase = true)
+                        }?.contactUserId.orEmpty()
+
+                    if (!contacts.success || userId.isBlank()) {
+                        ConnectionApiResult<Boolean>(
+                            false,
+                            "Kişi kimliği sunucudan alınamadı."
+                        )
+                    } else {
+                        ConnectionApi.updateContactName(
+                            applicationContext,
+                            userId,
+                            newName
+                        )
+                    }
+                }
+
+                if (isFinishing || isDestroyed) return@launch
+                save.isEnabled = true
+                if (result.success) {
+                    ContactNames.saveName(
+                        this@ContactMessageSettingsActivity,
+                        item.email,
+                        newName
+                    )
+                    refreshSelectedContactNames()
+                    dialog.dismiss()
+                    Toast.makeText(
+                        this@ContactMessageSettingsActivity,
+                        "Kişi adı sunucuya kaydedildi.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        this@ContactMessageSettingsActivity,
+                        result.message,
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }
+
+        dialog.show()
+        dialog.window?.setLayout(
+            (resources.displayMetrics.widthPixels * 0.90f).toInt(),
             WindowManager.LayoutParams.WRAP_CONTENT
         )
     }
