@@ -3,6 +3,10 @@ package com.example.emergencysafety
 
 import android.Manifest
 import android.app.Dialog
+import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
+import androidx.activity.result.contract.ActivityResultContracts
+import java.io.File
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -34,6 +38,34 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
+
+    private var profilePreview: ImageView? = null
+
+    private val selectProfilePhoto = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null && isRegisteredUser()) {
+            try {
+                val userId = accountPreferences.getString("api_user_id", "").orEmpty()
+                if (userId.isBlank()) return@registerForActivityResult
+                val destination = File(filesDir, "profile_photo_${userId}.jpg")
+                val temporary = File(filesDir, "profile_photo_temp")
+                contentResolver.openInputStream(uri)?.use { input ->
+                    val bytes = input.readBytes()
+                    require(bytes.size <= 5 * 1024 * 1024) { "Fotoğraf 5 MB'dan büyük olamaz." }
+                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        ?: error("Geçerli bir fotoğraf seçin.")
+                    temporary.outputStream().use { output ->
+                        require(bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, output))
+                    }
+                    require(temporary.renameTo(destination)) { "Fotoğraf kaydedilemedi." }
+                    profilePreview?.setImageBitmap(BitmapFactory.decodeFile(destination.absolutePath))
+                } ?: error("Fotoğraf açılamadı.")
+            } catch (error: Exception) {
+                Toast.makeText(this, error.message ?: "Fotoğraf seçilemedi.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     private val volumeDownHandler = Handler(Looper.getMainLooper())
     private var volumeDownRunnable: Runnable? = null
@@ -375,6 +407,42 @@ class MainActivity : AppCompatActivity() {
         }
 
         panel.addView(title)
+
+        if (isRegistered) {
+            val userId = accountPreferences.getString("api_user_id", "").orEmpty()
+            val photoFile = File(filesDir, "profile_photo_${userId}.jpg")
+            val photo = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                contentDescription = "Profil fotoğrafını seç"
+                background = GradientDrawable().apply {
+                    setColor(Color.rgb(38, 59, 80))
+                    cornerRadius = dp(42).toFloat()
+                    setStroke(dp(2), Color.rgb(197, 164, 77))
+                }
+                clipToOutline = true
+                if (photoFile.isFile) {
+                    setImageBitmap(BitmapFactory.decodeFile(photoFile.absolutePath))
+                } else {
+                    setImageResource(R.drawable.yeni_logo)
+                }
+                setOnClickListener { selectProfilePhoto.launch("image/*") }
+            }
+            profilePreview = photo
+            panel.addView(photo, LinearLayout.LayoutParams(dp(84), dp(84)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(8)
+            })
+            val choosePhoto = TextView(this).apply {
+                text = "PROFİL FOTOĞRAFI SEÇ / DEĞİŞTİR"
+                textSize = 12f
+                setTextColor(Color.rgb(230, 196, 106))
+                gravity = Gravity.CENTER
+                setPadding(0, dp(2), 0, dp(8))
+                setOnClickListener { selectProfilePhoto.launch("image/*") }
+            }
+            panel.addView(choosePhoto)
+            dialog.setOnDismissListener { profilePreview = null }
+        }
 
         val message = TextView(this).apply {
             textSize = 14f
