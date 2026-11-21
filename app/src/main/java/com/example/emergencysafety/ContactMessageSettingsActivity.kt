@@ -110,36 +110,58 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
     }
 
     /**
-     * Sunucudaki adlari indir. Telefonda zaten verilmis ozel
-     * isimleri ezme; boylece henuz gonderilmemis degisiklikler
-     * kaybolmaz.
+     * Ilk esitleme: sunucudaki isimleri indir; sunucuda henuz
+     * isim yoksa telefondaki mevcut ozel adi yukle.
+     * Iki tarafta da isim varsa sunucudaki kaydi esas al.
      */
     private fun loadMissingContactNamesFromServer() {
         activityScope.launch {
             val result = withContext(Dispatchers.IO) {
                 ConnectionApi.getContactNames(applicationContext)
             }
-            if (!result.success || isFinishing || isDestroyed) {
-                return@launch
-            }
+            if (!result.success || isFinishing || isDestroyed) return@launch
+
+            val items = result.data.orEmpty()
+            val uploads = mutableListOf<Pair<String, String>>()
             var updated = false
-            result.data.orEmpty().forEach { item ->
-                val name = item.displayName?.trim().orEmpty()
-                if (
-                    item.email.isNotBlank() &&
-                    name.isNotBlank() &&
-                    !name.contains("@") &&
-                    !ContactNames.hasName(this@ContactMessageSettingsActivity, item.email)
+
+            items.forEach { item ->
+                val serverName = item.displayName?.trim().orEmpty()
+                val localName = ContactNames.getSavedName(
+                    this@ContactMessageSettingsActivity,
+                    item.email
+                ).orEmpty()
+
+                if (serverName.isNotBlank() && !serverName.contains("@")) {
+                    if (localName != serverName) {
+                        ContactNames.saveName(
+                            this@ContactMessageSettingsActivity,
+                            item.email,
+                            serverName
+                        )
+                        updated = true
+                    }
+                } else if (
+                    localName.isNotBlank() &&
+                    !localName.contains("@") &&
+                    item.contactUserId.isNotBlank()
                 ) {
-                    ContactNames.saveName(
-                        this@ContactMessageSettingsActivity,
-                        item.email,
-                        name
-                    )
-                    updated = true
+                    uploads.add(item.contactUserId to localName)
                 }
             }
+
             if (updated) refreshSelectedContactNames()
+
+            // Ag isteklerini ana is parcacigi disinda sirayla yap.
+            withContext(Dispatchers.IO) {
+                uploads.forEach { (userId, name) ->
+                    ConnectionApi.updateContactName(
+                        applicationContext,
+                        userId,
+                        name
+                    )
+                }
+            }
         }
     }
 
