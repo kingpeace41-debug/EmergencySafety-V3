@@ -1249,18 +1249,6 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
-        val refreshButton = createText("↻", 25f, gold, true)
-        refreshButton.gravity = Gravity.CENTER
-        refreshButton.contentDescription = "Mesajları yenile"
-        refreshButton.setOnClickListener {
-            loadPrivateMessages(connection, showLoading = true)
-        }
-
-        header.addView(
-            refreshButton,
-            LinearLayout.LayoutParams(dp(40), dp(44))
-        )
-
         screen.addView(header)
 
         val divider = View(this).apply {
