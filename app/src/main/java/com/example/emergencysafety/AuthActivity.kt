@@ -549,6 +549,79 @@ class AuthActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * E-posta ile dogrulanmis mevcut EmergencySafety hesabina
+     * secilen Google hesabini baglar. Yeni kullanici olusturmaz.
+     */
+    private fun offerGoogleLink(accessToken: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Google hesabını bağla")
+            .setMessage(
+                "Google hesabını mevcut EmergencySafety hesabına bağlamak " +
+                "ister misin? Bir sonraki girişte Google ile devam edebilirsin."
+            )
+            .setPositiveButton("GOOGLE HESABINI BAĞLA") { _, _ ->
+                linkGoogleAccount(accessToken)
+            }
+            .setNegativeButton("ŞİMDİ DEĞİL") { _, _ ->
+                openMainActivity()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun linkGoogleAccount(accessToken: String) {
+        val option = GetGoogleIdOption.Builder()
+            .setServerClientId(GOOGLE_WEB_CLIENT_ID)
+            .setFilterByAuthorizedAccounts(false)
+            .setAutoSelectEnabled(false)
+            .build()
+
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(option)
+            .build()
+
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val credential = CredentialManager.create(this@AuthActivity)
+                    .getCredential(this@AuthActivity, request).credential
+
+                if (credential !is CustomCredential ||
+                    credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                ) {
+                    showMessage("Google hesabı seçilemedi.")
+                    openMainActivity()
+                    return@launch
+                }
+
+                val idToken = GoogleIdTokenCredential
+                    .createFrom(credential.data).idToken
+
+                networkExecutor.execute {
+                    val result = postJson(
+                        "/auth/google/link",
+                        JSONObject().put("idToken", idToken),
+                        accessToken
+                    )
+                    mainHandler.post {
+                        if (isFinishing || isDestroyed) return@post
+                        showMessage(
+                            if (result.success) "Google hesabın bağlandı."
+                            else result.message
+                        )
+                        openMainActivity()
+                    }
+                }
+            } catch (_: GetCredentialException) {
+                showMessage("Google bağlantısı iptal edildi.")
+                openMainActivity()
+            } catch (_: Exception) {
+                showMessage("Google hesabı bağlanamadı.")
+                openMainActivity()
+            }
+        }
+    }
+
     private fun resetGoogleButton() {
         if (::googleButton.isInitialized) {
             googleButton.isEnabled = true
@@ -843,7 +916,7 @@ class AuthActivity : AppCompatActivity() {
                             Toast.LENGTH_LONG
                         ).show()
 
-                        openMainActivity()
+                        offerGoogleLink(savedSessionAccessToken)
                     } else {
                         verifyButton.isEnabled = true
                         verifyButton.text = "OTURUMU TEKRAR DENE"
