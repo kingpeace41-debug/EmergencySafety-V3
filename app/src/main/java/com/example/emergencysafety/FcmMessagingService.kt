@@ -187,20 +187,24 @@ class FcmMessagingService : FirebaseMessagingService() {
 
     private fun senderDisplayName(
         senderUsername: String,
-        senderEmail: String
+        senderEmail: String,
+        connectionId: String
     ): String {
-        val name = if (senderEmail.isNotBlank()) {
-            ContactNames.getDisplayName(
-                this,
-                senderEmail
-            )
-        } else {
-            senderUsername
-        }
+        val cachedEmail = getSharedPreferences(
+            "EmergencySafetyConnectionEmails",
+            MODE_PRIVATE
+        ).getString(connectionId, "").orEmpty()
 
-        return name.ifBlank {
-            "Emergency Safety"
-        }
+        // Bildirim alicisinin cihazinda kayitli adi kullan.
+        // Kayit yoksa e-posta adresini bildirimde gosterme.
+        return sequenceOf(cachedEmail, senderEmail)
+            .filter { it.isNotBlank() }
+            .mapNotNull { ContactNames.getSavedName(this, it) }
+            .firstOrNull { it.isNotBlank() && !it.contains("@") }
+            ?: senderUsername.takeIf {
+                it.isNotBlank() && !it.contains("@")
+            }
+            ?: "Yeni mesaj"
     }
 
     private fun createChatIntent(
@@ -276,7 +280,8 @@ class FcmMessagingService : FirebaseMessagingService() {
 
         val title = senderDisplayName(
             senderUsername,
-            senderEmail
+            senderEmail,
+            connectionId
         )
 
         val preview =
