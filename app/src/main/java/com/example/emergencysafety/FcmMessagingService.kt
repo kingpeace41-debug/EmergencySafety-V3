@@ -205,6 +205,28 @@ class FcmMessagingService : FirebaseMessagingService() {
         )
     }
 
+    private fun createEmergencyPendingIntent(
+        notificationId: Int
+    ): PendingIntent {
+        val intent = Intent(
+            this,
+            MainActivity::class.java
+        ).apply {
+            flags =
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+
+        return PendingIntent.getActivity(
+            this,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or
+                PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     private fun showPrivateNotification(
         senderUsername: String,
         senderEmail: String,
@@ -320,8 +342,7 @@ class FcmMessagingService : FirebaseMessagingService() {
                 .setAutoCancel(false)
                 .setOngoing(false)
                 .setContentIntent(
-                    createPendingIntent(
-                        connectionId,
+                    createEmergencyPendingIntent(
                         notificationId
                     )
                 )
