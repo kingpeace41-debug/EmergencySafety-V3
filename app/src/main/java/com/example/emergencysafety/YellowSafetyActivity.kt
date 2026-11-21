@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -35,6 +36,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Collections
 import java.util.Date
@@ -1076,6 +1079,83 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
+    // Profil fotograflari yalnizca sunucunun onayladigi baglantilardan alinir.
+    // Fotograf bulunamazsa mevcut harf avatarini korur.
+    private fun createProfileAvatar(
+        connection: ConnectionApiItem,
+        fallback: TextView,
+        sizeDp: Int
+    ): FrameLayout {
+        val frame = FrameLayout(this)
+        frame.addView(
+            fallback,
+            FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp))
+        )
+
+        val userId = connection.contactUserId
+        if (userId.isBlank()) return frame
+
+        Thread {
+            try {
+                val context = applicationContext
+
+                fun fetch(token: String): Pair<Int, ByteArray?> {
+                    val url = URL(
+                        "https://emergency-safety.com/api/profile-photos/" + userId
+                    )
+                    val request = url.openConnection() as HttpURLConnection
+                    try {
+                        request.requestMethod = "GET"
+                        request.connectTimeout = 10000
+                        request.readTimeout = 10000
+                        request.setRequestProperty("Authorization", "Bearer $token")
+                        request.setRequestProperty("Accept", "image/webp")
+                        val status = request.responseCode
+                        val bytes = if (status == 200) {
+                            request.inputStream.use { input ->
+                                input.readBytes().takeIf { it.size <= 2 * 1024 * 1024 }
+                            }
+                        } else null
+                        return status to bytes
+                    } finally {
+                        request.disconnect()
+                    }
+                }
+
+                var token = SecureSessionStore.getAccessToken(context).orEmpty()
+                if (token.isBlank()) return@Thread
+                var result = fetch(token)
+                if (result.first == 401) {
+                    // Mevcut oturum yenileme akisini kullan.
+                    ConnectionApi.getConnections(context)
+                    token = SecureSessionStore.getAccessToken(context).orEmpty()
+                    if (token.isNotBlank()) result = fetch(token)
+                }
+                val bytes = result.second ?: return@Thread
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    ?: return@Thread
+
+                runOnUiThread {
+                    if (isFinishing || isDestroyed || frame.parent == null) return@runOnUiThread
+                    val photo = ImageView(this).apply {
+                        setImageBitmap(bitmap)
+                        scaleType = ImageView.ScaleType.CENTER_CROP
+                        background = roundedBackground(gold, gold, 50)
+                        clipToOutline = true
+                    }
+                    frame.addView(
+                        photo,
+                        FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp))
+                    )
+                }
+            } catch (_: Exception) {
+                // Baglanti hatasinda harf avatari gorunur kalir.
+            }
+        }.start()
+
+        return frame
+    }
+
     private fun addPrivateConversationRow(
         container: LinearLayout,
         connection: ConnectionApiItem,
@@ -1102,7 +1182,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
 
         row.addView(
-            avatar,
+            createProfileAvatar(connection, avatar, 44),
             LinearLayout.LayoutParams(dp(44), dp(44))
         )
 
@@ -1223,7 +1303,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
 
         header.addView(
-            avatar,
+            createProfileAvatar(connection, avatar, 42),
             LinearLayout.LayoutParams(dp(42), dp(42))
         )
 
