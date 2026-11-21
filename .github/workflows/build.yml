@@ -97,17 +97,17 @@ jobs:
           fi
           echo "JKS dosya bütünlüğü doğrulandı."
 
-          # Hatayi gizli degerleri gunluge yazmadan siniflandir.
-          KEYTOOL_ERROR="$RUNNER_TEMP/keytool-check.err"
+          # keytool hata metni stdout'a da yazilabilir; iki akisi yakala.
+          KEYTOOL_OUTPUT="$RUNNER_TEMP/keytool-check.log"
           if ! keytool -list -keystore "$KEYSTORE_PATH" \
-            -storepass "$ES_KEYSTORE_PASSWORD" > /dev/null 2>"$KEYTOOL_ERROR"; then
-            if grep -Eqi 'password was incorrect|keystore password was incorrect|password verification failed|tampered with' "$KEYTOOL_ERROR"; then
-              echo "::error::Java anahtar deposu parolasini kabul etmedi (parola dogrulama hatasi)."
-            elif grep -Eqi 'invalid keystore format|unrecognized keystore format|toDerInputStream|parseAlgParameters|IOException' "$KEYTOOL_ERROR"; then
-              echo "::error::Java anahtar deposu formatini okuyamadi (format veya uyumluluk hatasi)."
-            else
-              echo "::error::Keytool baska bir nedenle basarisiz oldu; Java/anahtar formati kontrol edilmeli."
-            fi
+            -storepass "$ES_KEYSTORE_PASSWORD" > "$KEYTOOL_OUTPUT" 2>&1; then
+            echo "::error::Keytool dogrulamasi basarisiz. Gercek hata mesaji:"
+            while IFS= read -r line || [ -n "$line" ]; do
+              # Secret degerini hicbir durumda loga yazma.
+              line="${line//"$ES_KEYSTORE_PASSWORD"/[GIZLI]}"
+              line="${line//"$ES_KEYSTORE_BASE64"/[GIZLI]}"
+              echo "$line"
+            done < "$KEYTOOL_OUTPUT"
             echo "Runner Java surumu:"
             java -version 2>&1 | head -n 3
             exit 1
