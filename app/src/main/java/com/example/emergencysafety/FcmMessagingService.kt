@@ -79,10 +79,13 @@ class FcmMessagingService : FirebaseMessagingService() {
             message.data["messageType"].orEmpty().trim()
 
         if (messageType == "emergency") {
-            val senderName = senderDisplayName(
-                senderUsername,
+            // Acil durumda e-posta adresini hicbir zaman gosterme.
+            // Kayitli isim yoksa guvenli ve genel bir baslik kullan.
+            val senderName = ContactNames.getSavedName(
+                this,
                 senderEmail
-            )
+            )?.takeUnless { it.contains("@") }
+                ?: "Bir kişi acil durumda"
 
             saveIncomingEmergency(
                 senderName = senderName,
