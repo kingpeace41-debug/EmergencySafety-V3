@@ -75,7 +75,9 @@ jobs:
           set -euo pipefail
 
           if [ -z "$ES_KEYSTORE_BASE64" ] || [ -z "$ES_KEYSTORE_PASSWORD" ] || [ -z "$ES_KEY_ALIAS" ]; then
-            echo "HATA: APK imzalama secret bilgileri eksik."
+            [ -n "$ES_KEYSTORE_BASE64" ] || echo "::error::ES_KEYSTORE_BASE64 bos geliyor."
+            [ -n "$ES_KEYSTORE_PASSWORD" ] || echo "::error::ES_KEYSTORE_PASSWORD bos geliyor."
+            [ -n "$ES_KEY_ALIAS" ] || echo "::error::ES_KEY_ALIAS bos geliyor."
             exit 1
           fi
 
