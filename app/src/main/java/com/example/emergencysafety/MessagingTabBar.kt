@@ -920,10 +920,54 @@ class MessagingTabBar @JvmOverloads constructor(
                 input.requestFocus()
                 return@setOnClickListener
             }
-            ContactNames.saveName(context, item.email, newName)
-            dialog.dismiss()
-            showToast("Kişinin adı kaydedildi.")
-            loadConnections(container)
+            if (
+                newName.codePointCount(0, newName.length) > 100 ||
+                newName.contains("@") ||
+                newName.any { it.code < 32 || it.code == 127 }
+            ) {
+                input.error = "Geçerli bir isim gir (en fazla 100 karakter)."
+                input.requestFocus()
+                return@setOnClickListener
+            }
+
+            saveButton.isEnabled = false
+            saveButton.text = "KAYDEDİLİYOR..."
+
+            Thread {
+                val contacts = ConnectionApi.getContactNames(context)
+                val contactUserId = contacts.data.orEmpty()
+                    .firstOrNull {
+                        it.email.equals(item.email, ignoreCase = true)
+                    }?.contactUserId.orEmpty()
+
+                val result = if (!contacts.success || contactUserId.isBlank()) {
+                    ConnectionApiResult<Boolean>(
+                        false,
+                        if (!contacts.success) contacts.message
+                        else "Kişi kimliği sunucudan alınamadı."
+                    )
+                } else {
+                    ConnectionApi.updateContactName(
+                        context,
+                        contactUserId,
+                        newName
+                    )
+                }
+
+                post {
+                    saveButton.isEnabled = true
+                    saveButton.text = "KAYDET"
+
+                    if (result.success) {
+                        ContactNames.saveName(context, item.email, newName)
+                        dialog.dismiss()
+                        showToast("Kişinin adı sunucuya kaydedildi.")
+                        loadConnections(container)
+                    } else {
+                        showToast(result.message)
+                    }
+                }
+            }.start()
         }
 
         dialog.setContentView(outer)
