@@ -11,6 +11,13 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
 
+internal data class ContactNameApiItem(
+    val contactUserId: String,
+    val email: String,
+    val displayName: String?,
+    val updatedAt: String?
+)
+
 internal data class ConnectionApiItem(
     val id: String,
     val email: String,
@@ -168,6 +175,50 @@ internal object ConnectionApi {
                 "message",
                 "Bağlantılar alındı."
             ),
+            data = items
+        )
+    }
+
+    fun getContactNames(
+        context: Context
+    ): ConnectionApiResult<List<ContactNameApiItem>> {
+
+        val response = request(
+            context = context,
+            path = "/contact-names",
+            method = "GET"
+        )
+
+        if (!response.optBoolean("success", false)) {
+            return failure(response)
+        }
+
+        val array = response.optJSONArray("contacts")
+            ?: JSONArray()
+
+        val items = mutableListOf<ContactNameApiItem>()
+
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            val contactUserId = item.optString("contactUserId", "")
+            val email = item.optString("email", "")
+            if (contactUserId.isBlank() || email.isBlank()) continue
+
+            items.add(
+                ContactNameApiItem(
+                    contactUserId = contactUserId,
+                    email = email,
+                    displayName = if (item.isNull("displayName")) null
+                        else item.optString("displayName", ""),
+                    updatedAt = if (item.isNull("updatedAt")) null
+                        else item.optString("updatedAt", "")
+                )
+            )
+        }
+
+        return ConnectionApiResult(
+            success = true,
+            message = "Kişi isimleri alındı.",
             data = items
         )
     }
