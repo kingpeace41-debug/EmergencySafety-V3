@@ -81,10 +81,32 @@ class FcmMessagingService : FirebaseMessagingService() {
         if (messageType == "emergency") {
             // Acil durumda e-posta adresini hicbir zaman gosterme.
             // Kayitli isim yoksa guvenli ve genel bir baslik kullan.
-            val senderName = ContactNames.getSavedName(
-                this,
+            val cachedEmail = getSharedPreferences(
+                "EmergencySafetyConnectionEmails",
+                MODE_PRIVATE
+            ).getString(connectionId, "").orEmpty()
+
+            // FCM e-posta alani bos olsa bile baglanti kimliginden
+            // gonderenin telefonda kayitli adini bul.
+            val redContacts = getSharedPreferences(
+                "EmergencyContactSettings",
+                MODE_PRIVATE
+            )
+            val redEmail = (1..3).firstNotNullOfOrNull { slot ->
+                if (redContacts.getString("es_contact${slot}_id", "") == connectionId) {
+                    redContacts.getString("es_contact${slot}_email", "")
+                } else {
+                    null
+                }
+            }.orEmpty()
+
+            val senderName = sequenceOf(
+                cachedEmail,
+                redEmail,
                 senderEmail
-            )?.takeUnless { it.contains("@") }
+            ).filter { it.isNotBlank() }
+                .mapNotNull { ContactNames.getSavedName(this, it) }
+                .firstOrNull { it.isNotBlank() && !it.contains("@") }
                 ?: "Bir kişi acil durumda"
 
             saveIncomingEmergency(
