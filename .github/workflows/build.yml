@@ -89,6 +89,14 @@ jobs:
             exit 1
           fi
 
+          EXPECTED_SHA256="d6dcff0b4ae78b3be4dffe9e6b9c54f5c97c2b09dfa52a541da42359a46ffb1b"
+          ACTUAL_SHA256="$(sha256sum "$KEYSTORE_PATH" | cut -d ' ' -f 1)"
+          if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+            echo "::error::GitHub'daki JKS dosyası sunucudaki orijinalle eşleşmiyor. ES_KEYSTORE_BASE64 içeriğini yeniden aktarmak gerekiyor."
+            exit 1
+          fi
+          echo "JKS dosya bütünlüğü doğrulandı."
+
           if ! keytool -list -keystore "$KEYSTORE_PATH" -alias "$ES_KEY_ALIAS" \
             -storepass "$ES_KEYSTORE_PASSWORD" > /dev/null 2>&1; then
             echo "::error::Anahtar doğrulanamadı: parola, alias veya JKS içeriği uyuşmuyor."
