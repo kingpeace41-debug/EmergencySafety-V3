@@ -1410,7 +1410,6 @@ class YellowSafetyActivity : AppCompatActivity() {
                     .filter { it.connectionId == connection.id }
                     .sortedBy { parseServerTime(it.createdAt) }
 
-                privateStatusText?.text = "${messages.size} mesaj gösteriliyor"
 
                 val signature = messages.joinToString("|") {
                     "${it.id}:${it.deliveredAt ?: ""}:${it.readAt ?: ""}"
