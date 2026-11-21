@@ -97,10 +97,19 @@ jobs:
           fi
           echo "JKS dosya bütünlüğü doğrulandı."
 
-          # JKS deposu parolasini, alias kontrolunden ayri test et.
+          # Hatayi gizli degerleri gunluge yazmadan siniflandir.
+          KEYTOOL_ERROR="$RUNNER_TEMP/keytool-check.err"
           if ! keytool -list -keystore "$KEYSTORE_PATH" \
-            -storepass "$ES_KEYSTORE_PASSWORD" > /dev/null 2>&1; then
-            echo "::error::JKS deposu parolasi dogrulanamadi. ES_KEYSTORE_PASSWORD degerini kontrol et."
+            -storepass "$ES_KEYSTORE_PASSWORD" > /dev/null 2>"$KEYTOOL_ERROR"; then
+            if grep -Eqi 'password was incorrect|keystore password was incorrect|password verification failed|tampered with' "$KEYTOOL_ERROR"; then
+              echo "::error::Java anahtar deposu parolasini kabul etmedi (parola dogrulama hatasi)."
+            elif grep -Eqi 'invalid keystore format|unrecognized keystore format|toDerInputStream|parseAlgParameters|IOException' "$KEYTOOL_ERROR"; then
+              echo "::error::Java anahtar deposu formatini okuyamadi (format veya uyumluluk hatasi)."
+            else
+              echo "::error::Keytool baska bir nedenle basarisiz oldu; Java/anahtar formati kontrol edilmeli."
+            fi
+            echo "Runner Java surumu:"
+            java -version 2>&1 | head -n 3
             exit 1
           fi
           echo "JKS deposu parolasi dogrulandi."
