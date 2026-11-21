@@ -18,6 +18,12 @@ import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.CustomCredential
+import androidx.credentials.exceptions.GetCredentialException
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -39,11 +45,15 @@ class AuthActivity : AppCompatActivity() {
         private const val API_BASE_URL =
             "https://emergency-safety.com/api"
 
+        private const val GOOGLE_WEB_CLIENT_ID =
+            "570778658948-8v7l8t4vsprfmfn4gdbh8jfu2c2q0f2d.apps.googleusercontent.com"
+
         private const val REQUEST_INITIAL_PERMISSIONS = 301
     }
 
     private lateinit var emailInput: EditText
     private lateinit var loginButton: Button
+    private lateinit var googleButton: Button
     private lateinit var continueWithoutAccountButton: Button
 
     private lateinit var wolfTouchArea: FrameLayout
@@ -130,6 +140,7 @@ class AuthActivity : AppCompatActivity() {
 
         emailInput = findViewById(R.id.authEmail)
         loginButton = findViewById(R.id.btnAuthLogin)
+        googleButton = findViewById(R.id.btnAuthGoogle)
 
         continueWithoutAccountButton =
             findViewById(R.id.btnAuthContinueWithoutAccount)
@@ -161,6 +172,10 @@ class AuthActivity : AppCompatActivity() {
 
         loginButton.setOnClickListener {
             requestEmailCode()
+        }
+
+        googleButton.setOnClickListener {
+            startGoogleLogin()
         }
 
         continueWithoutAccountButton.setOnClickListener {
@@ -401,6 +416,144 @@ class AuthActivity : AppCompatActivity() {
             .alpha(0f)
             .setDuration(200L)
             .start()
+    }
+
+    /**
+     * Google hesap secimi. Sunucu yalnizca onceden baglanmis
+     * Google hesaplariyla oturum acilmasina izin verir.
+     */
+    private fun startGoogleLogin() {
+        googleButton.isEnabled = false
+        googleButton.text = "GOOGLE HESABI AÇILIYOR..."
+
+        val googleOption = GetGoogleIdOption.Builder()
+            .setServerClientId(GOOGLE_WEB_CLIENT_ID)
+            .setFilterByAuthorizedAccounts(false)
+            .setAutoSelectEnabled(false)
+            .build()
+
+        val request = GetCredentialRequest.Builder()
+            .addCredentialOption(googleOption)
+            .build()
+
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val result = CredentialManager.create(this@AuthActivity)
+                    .getCredential(this@AuthActivity, request)
+
+                val credential = result.credential
+                if (credential !is CustomCredential ||
+                    credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                ) {
+                    showMessage("Google hesabı doğrulanamadı.")
+                    return@launch
+                }
+
+                val idToken = GoogleIdTokenCredential
+                    .createFrom(credential.data).idToken
+
+                networkExecutor.execute {
+                    val loginResult = postJson(
+                        "/auth/google/login",
+                        JSONObject().put("idToken", idToken)
+                    )
+
+                    if (!loginResult.success) {
+                        mainHandler.post {
+                            if (!isFinishing && !isDestroyed) {
+                                showMessage(loginResult.message)
+                                resetGoogleButton()
+                            }
+                        }
+                        return@execute
+                    }
+
+                    val user = loginResult.data.optJSONObject("user")
+                    val userId = user?.optString("id", "").orEmpty()
+                    val username = user?.optString("username", "").orEmpty()
+                    val email = user?.optString("email", "").orEmpty()
+                    val bootstrap = loginResult.data.optString("accessToken", "")
+
+                    if (userId.isBlank() || username.isBlank() ||
+                        email.isBlank() || bootstrap.isBlank()
+                    ) {
+                        mainHandler.post {
+                            if (!isFinishing && !isDestroyed) {
+                                showMessage("Google oturum bilgileri eksik.")
+                                resetGoogleButton()
+                            }
+                        }
+                        return@execute
+                    }
+
+                    val session = postJson(
+                        "/auth/session/start", JSONObject(), bootstrap
+                    )
+                    val sessionId = session.data.optString("sessionId", "")
+                    val accessToken = session.data.optString("accessToken", "")
+                    val refreshToken = session.data.optString("refreshToken", "")
+                    val authCheck = if (session.success && accessToken.isNotBlank()) {
+                        getJson("/auth/me", accessToken)
+                    } else null
+                    val confirmed = authCheck?.data?.optJSONObject("user")
+                    val confirmedEmail = confirmed?.optString("email", "").orEmpty()
+                    val confirmedId = confirmed?.optString("id", "").orEmpty()
+                    val verified = confirmed?.optBoolean("emailVerified", false) ?: false
+
+                    var saved = false
+                    if (session.success && sessionId.isNotBlank() &&
+                        accessToken.isNotBlank() && refreshToken.isNotBlank() &&
+                        authCheck?.success == true && verified &&
+                        confirmedId == userId &&
+                        confirmedEmail.equals(email, ignoreCase = true)
+                    ) {
+                        try {
+                            SecureSessionStore.saveSession(
+                                applicationContext, accessToken,
+                                refreshToken, sessionId, userId
+                            )
+                            saved = accountPreferences.edit()
+                                .remove("api_access_token")
+                                .putString("api_user_id", userId)
+                                .putString("api_username", username)
+                                .putString("account_email", confirmedEmail)
+                                .putBoolean("onboarding_completed", true)
+                                .putBoolean("guest_mode", false)
+                                .commit()
+                        } catch (_: Exception) {
+                            saved = false
+                        }
+                    }
+
+                    mainHandler.post {
+                        if (isFinishing || isDestroyed) return@post
+                        if (saved) {
+                            initializeMatrixInBackground(userId, accessToken)
+                            openMainActivity()
+                        } else {
+                            showMessage(
+                                if (!session.success) session.message
+                                else "Google oturumu güvenli biçimde açılamadı."
+                            )
+                            resetGoogleButton()
+                        }
+                    }
+                }
+            } catch (_: GetCredentialException) {
+                showMessage("Google hesap seçimi tamamlanamadı.")
+            } catch (_: Exception) {
+                showMessage("Google girişinde bir hata oluştu.")
+            } finally {
+                if (!isFinishing && !isDestroyed) resetGoogleButton()
+            }
+        }
+    }
+
+    private fun resetGoogleButton() {
+        if (::googleButton.isInitialized) {
+            googleButton.isEnabled = true
+            googleButton.text = "G  GOOGLE İLE DEVAM ET"
+        }
     }
 
     private fun requestEmailCode() {
