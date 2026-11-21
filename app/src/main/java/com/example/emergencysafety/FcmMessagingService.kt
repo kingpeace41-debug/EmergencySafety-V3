@@ -90,6 +90,10 @@ class FcmMessagingService : FirebaseMessagingService() {
                 connectionId = connectionId
             )
 
+            // Acil durum bildirimlerinde ozel sireni baslat.
+            // Normal sohbet mesajlari bu ses yoneticisini kullanmaz.
+            EmergencySirenPlayer.start()
+
             showEmergencyNotification(
                 senderName = senderName,
                 messagePreview = messagePreview,
