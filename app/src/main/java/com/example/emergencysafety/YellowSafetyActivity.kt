@@ -1154,11 +1154,6 @@ class YellowSafetyActivity : AppCompatActivity() {
             showPrivateChat(connection)
         }
 
-        // Kisi ismi yalnizca sari mesajlasma konsolundan duzenlenir.
-        row.setOnLongClickListener {
-            showContactNameEditor(connection)
-            true
-        }
 
         container.addView(
             row,
@@ -1168,101 +1163,6 @@ class YellowSafetyActivity : AppCompatActivity() {
             ).apply {
                 bottomMargin = dp(8)
             }
-        )
-    }
-
-    private fun showContactNameEditor(connection: ConnectionApiItem) {
-        val dialog = Dialog(this)
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(20), dp(20), dp(20))
-            background = roundedBackground(panelBackground, gold, 16)
-        }
-
-        panel.addView(createText("KİŞİ ADINI DÜZENLE", 17f, gold, true))
-
-        val input = EditText(this).apply {
-            setSingleLine(true)
-            hint = "Kişi adı"
-            setText(ContactNames.getSavedName(
-                this@YellowSafetyActivity, connection.email
-            ).orEmpty())
-            setTextColor(Color.WHITE)
-            setHintTextColor(softText)
-        }
-        panel.addView(input)
-
-        val save = createText("KAYDET", 16f, gold, true).apply {
-            gravity = Gravity.CENTER
-            setPadding(dp(12), dp(16), dp(12), dp(16))
-        }
-        val cancel = createText("VAZGEÇ", 14f, Color.WHITE).apply {
-            gravity = Gravity.CENTER
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-        }
-        panel.addView(save)
-        panel.addView(cancel)
-        dialog.setContentView(panel)
-        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        cancel.setOnClickListener { dialog.dismiss() }
-
-        save.setOnClickListener {
-            val name = input.text.toString().trim()
-            if (
-                name.isBlank() ||
-                name.codePointCount(0, name.length) > 100 ||
-                name.contains("@") ||
-                name.any { it.code < 32 || it.code == 127 }
-            ) {
-                input.error = "Geçerli bir isim gir (en fazla 100 karakter)."
-                return@setOnClickListener
-            }
-
-            save.isEnabled = false
-            typingScope.launch {
-                val result = withContext(Dispatchers.IO) {
-                    val names = ConnectionApi.getContactNames(applicationContext)
-                    val userId = names.data.orEmpty().firstOrNull {
-                        it.email.equals(connection.email, ignoreCase = true)
-                    }?.contactUserId.orEmpty()
-
-                    if (!names.success || userId.isBlank()) {
-                        ConnectionApiResult<Boolean>(
-                            false, "Kişi kimliği alınamadı."
-                        )
-                    } else {
-                        ConnectionApi.updateContactName(
-                            applicationContext, userId, name
-                        )
-                    }
-                }
-
-                if (isFinishing || isDestroyed) return@launch
-                save.isEnabled = true
-                if (result.success) {
-                    ContactNames.saveName(
-                        this@YellowSafetyActivity, connection.email, name
-                    )
-                    dialog.dismiss()
-                    showConversationList()
-                    Toast.makeText(
-                        this@YellowSafetyActivity,
-                        "İsim kaydedildi ve sunucuyla eşitlendi.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                } else {
-                    Toast.makeText(
-                        this@YellowSafetyActivity,
-                        result.message, Toast.LENGTH_LONG
-                    ).show()
-                }
-            }
-        }
-
-        dialog.show()
-        dialog.window?.setLayout(
-            (resources.displayMetrics.widthPixels * 0.90f).toInt(),
-            WindowManager.LayoutParams.WRAP_CONTENT
         )
     }
 
