@@ -8,10 +8,10 @@ import java.util.Locale
  * EmergencySafety kişi isimleri yöneticisi.
  *
  * Kullanıcının kişilere verdiği özel isimleri
- * yalnızca kendi cihazında saklar.
+ * cihazda saklar.
  *
- * E-posta adresleri hesap eşleştirmesi için
- * kullanılmaya devam eder.
+ * Kalıcı sunucu eşitlemesi için kayıtlı isimlerin
+ * topluca okunmasını da destekler.
  */
 internal object ContactNames {
 
@@ -55,6 +55,10 @@ internal object ContactNames {
     /**
      * Kişinin kayıtlı özel adını döndürür.
      * İsim bulunamazsa e-posta adresini gösterir.
+     *
+     * Acil durum ekranındaki e-posta yerine
+     * isim gösterme davranışı sonraki aşamada
+     * ortak eşitleme sistemiyle düzenlenecek.
      */
     fun getDisplayName(
         context: Context,
@@ -66,17 +70,64 @@ internal object ContactNames {
             return ""
         }
 
+        val savedName = getSavedName(
+            context,
+            normalizedEmail
+        )
+
+        return savedName ?: email.trim()
+    }
+
+    /**
+     * Yalnızca kaydedilmiş özel ismi döndürür.
+     * İsim yoksa e-posta yerine null döner.
+     */
+    fun getSavedName(
+        context: Context,
+        email: String
+    ): String? {
+        val normalizedEmail = normalizeEmail(email)
+
+        if (normalizedEmail.isBlank()) return null
+
         val preferences = context.getSharedPreferences(
             PREFS_NAME,
             Context.MODE_PRIVATE
         )
 
-        val savedName = preferences.getString(
+        return preferences.getString(
             normalizedEmail,
             null
-        )?.trim().orEmpty()
+        )?.trim()?.takeIf { it.isNotBlank() }
+    }
 
-        return savedName.ifBlank { email.trim() }
+    /**
+     * Telefonda kayıtlı bütün özel isimleri
+     * e-posta -> isim eşleştirmesi olarak döndürür.
+     *
+     * Sunucuya ilk aktarımda kullanılacaktır.
+     * Bu işlem mevcut kayıtları değiştirmez.
+     */
+    fun getAllSavedNames(
+        context: Context
+    ): Map<String, String> {
+        val preferences = context.getSharedPreferences(
+            PREFS_NAME,
+            Context.MODE_PRIVATE
+        )
+
+        val result = mutableMapOf<String, String>()
+
+        for ((key, value) in preferences.all) {
+            val email = normalizeEmail(key)
+            val name = (value as? String)?.trim().orEmpty()
+
+            if (email.isNotBlank() && name.isNotBlank()) {
+                result[email] = name
+            }
+        }
+
+        return result.toMap()
     }
 
     /**
@@ -86,19 +137,7 @@ internal object ContactNames {
         context: Context,
         email: String
     ): Boolean {
-        val normalizedEmail = normalizeEmail(email)
-
-        if (normalizedEmail.isBlank()) return false
-
-        val preferences = context.getSharedPreferences(
-            PREFS_NAME,
-            Context.MODE_PRIVATE
-        )
-
-        return !preferences.getString(
-            normalizedEmail,
-            null
-        ).isNullOrBlank()
+        return getSavedName(context, email) != null
     }
 
     /**
