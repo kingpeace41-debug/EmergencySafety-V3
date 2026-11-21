@@ -978,6 +978,12 @@ class YellowSafetyActivity : AppCompatActivity() {
         loadConversationConnections(connectionsList)
     }
 
+    // Sekmelerden sohbet listesine donuldugunde yeni kabul edilen kisileri getir.
+    fun refreshConversationConnectionsFromTabs() {
+        if (isFinishing || isDestroyed || isChatOpen) return
+        connectionsContainer?.let { loadConversationConnections(it) }
+    }
+
     private fun loadConversationConnections(
         container: LinearLayout
     ) {
