@@ -223,6 +223,48 @@ internal object ConnectionApi {
         )
     }
 
+    /**
+     * Kayitli baglantinin gorunen adini sunucuda gunceller.
+     * Bos ad, sunucudaki ozel adi kaldirmak icin gonderilir.
+     * Bu fonksiyon ana is parcacigi disinda cagrilmalidir.
+     */
+    fun updateContactName(
+        context: Context,
+        contactUserId: String,
+        displayName: String
+    ): ConnectionApiResult<Boolean> {
+
+        val id = contactUserId.trim()
+        if (!id.matches(
+                Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+            )
+        ) {
+            return ConnectionApiResult(false, "Gecersiz kisi kimligi.")
+        }
+
+        val cleanName = displayName.trim()
+        if (cleanName.length > 100) {
+            return ConnectionApiResult(false, "Kisi adi cok uzun.")
+        }
+
+        val response = request(
+            context = context,
+            path = "/contact-names/$id",
+            method = "PUT",
+            body = JSONObject().put("displayName", cleanName)
+        )
+
+        if (!response.optBoolean("success", false)) {
+            return failure(response)
+        }
+
+        return ConnectionApiResult(
+            success = true,
+            message = response.optString("message", "Kisi adi guncellendi."),
+            data = true
+        )
+    }
+
     fun respond(
         context: Context,
         connectionId: String,
