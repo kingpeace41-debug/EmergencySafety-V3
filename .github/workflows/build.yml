@@ -79,12 +79,21 @@ jobs:
           fi
 
           KEYSTORE_PATH="$RUNNER_TEMP/emergencysafety.jks"
-          printf '%s' "$ES_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          if ! printf '%s' "$ES_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH" 2>/dev/null; then
+            echo "::error::Anahtar Base64 verisi çözümlenemedi. ES_KEYSTORE_BASE64 değerini kontrol et."
+            exit 1
+          fi
           chmod 600 "$KEYSTORE_PATH"
-          test -s "$KEYSTORE_PATH"
+          if [ ! -s "$KEYSTORE_PATH" ]; then
+            echo "::error::Çözümlenen anahtar dosyası boş."
+            exit 1
+          fi
 
-          keytool -list -keystore "$KEYSTORE_PATH" -alias "$ES_KEY_ALIAS" \
-            -storepass "$ES_KEYSTORE_PASSWORD" > /dev/null
+          if ! keytool -list -keystore "$KEYSTORE_PATH" -alias "$ES_KEY_ALIAS" \
+            -storepass "$ES_KEYSTORE_PASSWORD" > /dev/null 2>&1; then
+            echo "::error::Anahtar doğrulanamadı: parola, alias veya JKS içeriği uyuşmuyor."
+            exit 1
+          fi
 
           echo "ES_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
           echo "Kalıcı imzalama anahtarı hazır."
