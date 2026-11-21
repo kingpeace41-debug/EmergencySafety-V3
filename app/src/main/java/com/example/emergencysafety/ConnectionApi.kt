@@ -169,6 +169,20 @@ internal object ConnectionApi {
             items.add(parseItem(item, "email"))
         }
 
+        // Bildirimler yalnizca baglanti kimligi tasidiginda da
+        // gonderenin kayitli adini bulabilmek icin yerel esleme tut.
+        val cache = context.getSharedPreferences(
+            "EmergencySafetyConnectionEmails",
+            Context.MODE_PRIVATE
+        )
+        val editor = cache.edit().clear()
+        items.forEach { connection ->
+            if (connection.id.isNotBlank() && connection.email.isNotBlank()) {
+                editor.putString(connection.id, connection.email)
+            }
+        }
+        editor.apply()
+
         return ConnectionApiResult(
             success = true,
             message = response.optString(
