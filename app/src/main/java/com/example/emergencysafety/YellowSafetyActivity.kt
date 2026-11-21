@@ -23,6 +23,7 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -353,7 +354,54 @@ class YellowSafetyActivity : AppCompatActivity() {
         pendingNotificationConnectionId =
             intent.getStringExtra("connectionId")?.trim().orEmpty()
 
+        // Klavye acildiginda sohbet alani yeniden boyutlandirilir.
+        window.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        )
+
         panelContainer = findViewById(R.id.messagePanelContainer)
+
+        // Klavye sohbet alanini kuculttugunde son mesaji gorunur tut.
+        // Yalnizca klavye acilirken kaydir; kullanicinin normal
+        // sohbet kaydirma hareketlerine mudahale etme.
+        panelContainer.addOnLayoutChangeListener(
+            object : View.OnLayoutChangeListener {
+                private var previousHeight = 0
+
+                override fun onLayoutChange(
+                    view: View,
+                    left: Int,
+                    top: Int,
+                    right: Int,
+                    bottom: Int,
+                    oldLeft: Int,
+                    oldTop: Int,
+                    oldRight: Int,
+                    oldBottom: Int
+                ) {
+                    val currentHeight = bottom - top
+                    val oldHeight = if (previousHeight > 0) {
+                        previousHeight
+                    } else {
+                        oldBottom - oldTop
+                    }
+                    previousHeight = currentHeight
+
+                    if (
+                        isChatOpen &&
+                        privateInput?.hasFocus() == true &&
+                        oldHeight - currentHeight > dp(100)
+                    ) {
+                        privateMessagesScroll?.post {
+                            if (isChatOpen) {
+                                privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
+                            }
+                        }
+                    }
+                }
+            }
+        )
+
         showConversationList()
 
         onBackPressedDispatcher.addCallback(
