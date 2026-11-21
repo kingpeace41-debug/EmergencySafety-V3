@@ -224,46 +224,75 @@ internal object ConnectionApi {
     }
 
     /**
-     * Kayitli baglantinin gorunen adini sunucuda gunceller.
-     * Bos ad, sunucudaki ozel adi kaldirmak icin gonderilir.
-     * Bu fonksiyon ana is parcacigi disinda cagrilmalidir.
+     * Sunucuda kayitli kisi adini olusturur veya gunceller.
+     * Yalnizca onayli baglantilar icin gecerlidir.
      */
     fun updateContactName(
         context: Context,
         contactUserId: String,
         displayName: String
     ): ConnectionApiResult<Boolean> {
-
         val id = contactUserId.trim()
-        if (!id.matches(
-                Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
-            )
-        ) {
+        if (!isValidContactUserId(id)) {
             return ConnectionApiResult(false, "Gecersiz kisi kimligi.")
         }
 
-        val cleanName = displayName.trim()
-        if (cleanName.length > 100) {
-            return ConnectionApiResult(false, "Kisi adi cok uzun.")
+        val name = displayName.trim()
+        if (
+            name.isBlank() ||
+            name.codePointCount(0, name.length) > 100 ||
+            name.any { it.code < 32 || it.code == 127 }
+        ) {
+            return ConnectionApiResult(
+                false,
+                "Isim 1-100 karakter arasinda olmali."
+            )
         }
 
         val response = request(
             context = context,
             path = "/contact-names/$id",
             method = "PUT",
-            body = JSONObject().put("displayName", cleanName)
+            body = JSONObject().put("displayName", name)
         )
 
         if (!response.optBoolean("success", false)) {
             return failure(response)
         }
 
-        return ConnectionApiResult(
-            success = true,
-            message = response.optString("message", "Kisi adi guncellendi."),
-            data = true
-        )
+        return ConnectionApiResult(true, "Kisi adi guncellendi.", true)
     }
+
+    /**
+     * Sunucudaki kisiye ozel adi siler.
+     * Baglantinin kendisini silmez.
+     */
+    fun deleteContactName(
+        context: Context,
+        contactUserId: String
+    ): ConnectionApiResult<Boolean> {
+        val id = contactUserId.trim()
+        if (!isValidContactUserId(id)) {
+            return ConnectionApiResult(false, "Gecersiz kisi kimligi.")
+        }
+
+        val response = request(
+            context = context,
+            path = "/contact-names/$id",
+            method = "DELETE"
+        )
+
+        if (!response.optBoolean("success", false)) {
+            return failure(response)
+        }
+
+        return ConnectionApiResult(true, "Kisi adi silindi.", true)
+    }
+
+    private fun isValidContactUserId(id: String): Boolean =
+        Regex(
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+        ).matches(id)
 
     fun respond(
         context: Context,
