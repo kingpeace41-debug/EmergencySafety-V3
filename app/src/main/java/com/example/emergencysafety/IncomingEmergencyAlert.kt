@@ -123,6 +123,10 @@ internal class IncomingEmergencyAlert(
             )
             .apply()
 
+        // Kullanici acil durum mesajini acmayi secti:
+        // sireni ve ekrandaki yanip sonen uyariyi durdur.
+        EmergencySirenPlayer.stop()
+
         hide()
 
         val intent = Intent(
