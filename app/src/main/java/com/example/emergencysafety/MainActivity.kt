@@ -7,6 +7,9 @@ import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import androidx.activity.result.contract.ActivityResultContracts
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.UUID
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -60,11 +63,86 @@ class MainActivity : AppCompatActivity() {
                     }
                     require(temporary.renameTo(destination)) { "Fotoğraf kaydedilemedi." }
                     profilePreview?.setImageBitmap(BitmapFactory.decodeFile(destination.absolutePath))
+                    uploadProfilePhoto(destination)
                 } ?: error("Fotoğraf açılamadı.")
             } catch (error: Exception) {
                 Toast.makeText(this, error.message ?: "Fotoğraf seçilemedi.", Toast.LENGTH_LONG).show()
             }
         }
+    }
+
+    private fun uploadProfilePhoto(photo: File) {
+        val context = applicationContext
+        Toast.makeText(this, "Profil fotoğrafı yükleniyor...", Toast.LENGTH_SHORT).show()
+
+        Thread {
+            var message = "Profil fotoğrafı sunucuya yüklenemedi."
+            try {
+                // Oturum suresi dolmussa mevcut oturum yenileme mekanizmasini kullan.
+                var token = SecureSessionStore.getAccessToken(context).orEmpty()
+                if (token.isBlank()) error("Oturum bulunamadı.")
+
+                fun send(accessToken: String): Pair<Int, String> {
+                    val boundary = "ESPhoto" + UUID.randomUUID().toString().replace("-", "")
+                    val connection = URL(
+                        "https://emergency-safety.com/api/profile-photos/me"
+                    ).openConnection() as HttpURLConnection
+
+                    try {
+                        connection.requestMethod = "POST"
+                        connection.connectTimeout = 15000
+                        connection.readTimeout = 30000
+                        connection.doOutput = true
+                        connection.setRequestProperty("Authorization", "Bearer $accessToken")
+                        connection.setRequestProperty(
+                            "Content-Type", "multipart/form-data; boundary=$boundary"
+                        )
+                        connection.outputStream.use { output ->
+                            output.write(
+                                ("--$boundary\r\n" +
+                                    "Content-Disposition: form-data; name=\"photo\"; filename=\"profile.jpg\"\r\n" +
+                                    "Content-Type: image/jpeg\r\n\r\n").toByteArray(Charsets.UTF_8)
+                            )
+                            photo.inputStream().use { it.copyTo(output) }
+                            output.write("\r\n--$boundary--\r\n".toByteArray(Charsets.UTF_8))
+                        }
+                        val status = connection.responseCode
+                        val response = (if (status in 200..299) {
+                            connection.inputStream
+                        } else {
+                            connection.errorStream
+                        })?.bufferedReader()?.use { it.readText() }.orEmpty()
+                        return status to response
+                    } finally {
+                        connection.disconnect()
+                    }
+                }
+
+                var result = send(token)
+                if (result.first == 401) {
+                    // ConnectionApi, 401 durumunda refresh token ile oturumu yeniler.
+                    ConnectionApi.getConnections(context)
+                    token = SecureSessionStore.getAccessToken(context).orEmpty()
+                    if (token.isNotBlank()) result = send(token)
+                }
+
+                if (result.first in 200..299 &&
+                    org.json.JSONObject(result.second).optBoolean("success", false)
+                ) {
+                    message = "Profil fotoğrafı hesabına yüklendi."
+                } else {
+                    message = "Fotoğraf telefonda kaydedildi, sunucuya yüklenemedi (HTTP ${result.first})."
+                }
+            } catch (error: Exception) {
+                message = "Fotoğraf telefonda kaydedildi; yükleme başarısız: " +
+                    (error.localizedMessage ?: "Bağlantı hatası")
+            }
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) {
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
     private val volumeDownHandler = Handler(Looper.getMainLooper())
