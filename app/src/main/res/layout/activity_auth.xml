@@ -108,6 +108,18 @@
 
     </LinearLayout>
 
+    <!-- GOOGLE ILE DEVAM ET: Islev sonraki adimda baglanacak -->
+    <Button
+        android:id="@+id/btnAuthGoogle"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:layout_marginTop="8dp"
+        android:backgroundTint="#345F86"
+        android:text="G  GOOGLE İLE DEVAM ET"
+        android:textAllCaps="false"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold" />
+
     <Button
         android:id="@+id/btnAuthContinueWithoutAccount"
         android:layout_width="match_parent"
