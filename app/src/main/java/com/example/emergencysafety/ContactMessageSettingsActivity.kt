@@ -106,6 +106,41 @@ class ContactMessageSettingsActivity : AppCompatActivity() {
 
         updateScreenHeading()
         refreshSelectedContactNames()
+        loadMissingContactNamesFromServer()
+    }
+
+    /**
+     * Sunucudaki adlari indir. Telefonda zaten verilmis ozel
+     * isimleri ezme; boylece henuz gonderilmemis degisiklikler
+     * kaybolmaz.
+     */
+    private fun loadMissingContactNamesFromServer() {
+        activityScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                ConnectionApi.getContactNames(applicationContext)
+            }
+            if (!result.success || isFinishing || isDestroyed) {
+                return@launch
+            }
+            var updated = false
+            result.data.orEmpty().forEach { item ->
+                val name = item.displayName?.trim().orEmpty()
+                if (
+                    item.email.isNotBlank() &&
+                    name.isNotBlank() &&
+                    !name.contains("@") &&
+                    !ContactNames.hasName(this@ContactMessageSettingsActivity, item.email)
+                ) {
+                    ContactNames.saveName(
+                        this@ContactMessageSettingsActivity,
+                        item.email,
+                        name
+                    )
+                    updated = true
+                }
+            }
+            if (updated) refreshSelectedContactNames()
+        }
     }
 
     override fun onResume() {
