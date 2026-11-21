@@ -432,8 +432,59 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
     }
 
+    private fun syncContactNamesFromServer() {
+        if (!isRegisteredUser()) return
+
+        typingScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                ConnectionApi.getContactNames(applicationContext)
+            }
+            if (!result.success || isFinishing || isDestroyed) return@launch
+
+            var changed = false
+            val uploads = mutableListOf<Pair<String, String>>()
+            result.data.orEmpty().forEach { item ->
+                val serverName = item.displayName?.trim().orEmpty()
+                val localName = ContactNames.getSavedName(
+                    this@YellowSafetyActivity, item.email
+                ).orEmpty()
+
+                if (serverName.isNotBlank() && !serverName.contains("@")) {
+                    if (serverName != localName) {
+                        ContactNames.saveName(
+                            this@YellowSafetyActivity, item.email, serverName
+                        )
+                        changed = true
+                    }
+                } else if (
+                    localName.isNotBlank() &&
+                    !localName.contains("@") &&
+                    item.contactUserId.isNotBlank()
+                ) {
+                    uploads.add(item.contactUserId to localName)
+                }
+            }
+
+            if (changed && !isChatOpen) {
+                showConversationList()
+            } else if (changed) {
+                activePrivateConnection?.let { showPrivateChat(it) }
+            }
+
+            withContext(Dispatchers.IO) {
+                uploads.forEach { (id, name) ->
+                    ConnectionApi.updateContactName(
+                        applicationContext, id, name
+                    )
+                }
+            }
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+
+        syncContactNamesFromServer()
 
         // Özel sohbet açıksa aktif sohbeti kaydet
         // ve mesajları otomatik yenile.
