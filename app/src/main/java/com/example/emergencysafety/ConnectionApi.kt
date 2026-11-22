@@ -562,6 +562,42 @@ internal object ConnectionApi {
         )
     }
 
+    fun markMessageDelivered(
+        context: Context,
+        messageId: String
+    ): ConnectionApiResult<Boolean> {
+
+        val cleanMessageId = messageId.trim()
+
+        if (cleanMessageId.isEmpty()) {
+            return ConnectionApiResult(
+                false,
+                "Mesaj kimliği bulunamadı."
+            )
+        }
+
+        val response = request(
+            context = context,
+            path = "/messages/$cleanMessageId/delivered",
+            method = "PATCH"
+        )
+
+        val success = response.optBoolean("success", false)
+
+        return ConnectionApiResult(
+            success = success,
+            message = if (success) {
+                "Teslim bilgisi güncellendi."
+            } else {
+                response.optString(
+                    "message",
+                    "Teslim bilgisi güncellenemedi."
+                )
+            },
+            data = success
+        )
+    }
+
     // FIREBASE BILDIRIM TOKENINI SUNUCUYA KAYDET
     fun registerFcmToken(
         context: Context,
