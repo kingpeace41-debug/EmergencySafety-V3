@@ -240,7 +240,10 @@ class FcmMessagingService : FirebaseMessagingService() {
                             "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
                         )
                     ) &&
-                    !it.matches(Regex("^[0-9a-fA-F]{24,}$"))
+                    !it.matches(Regex("^[0-9a-fA-F]{24,}$")) &&
+                    !it.matches(
+                        Regex("(?i)^g_[0-9a-f]{12,}$")
+                    )
             }
             ?: "Yeni mesaj"
     }
