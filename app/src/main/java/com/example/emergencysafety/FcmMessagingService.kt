@@ -202,7 +202,14 @@ class FcmMessagingService : FirebaseMessagingService() {
             .mapNotNull { ContactNames.getSavedName(this, it) }
             .firstOrNull { it.isNotBlank() && !it.contains("@") }
             ?: senderUsername.takeIf {
-                it.isNotBlank() && !it.contains("@")
+                it.isNotBlank() &&
+                    !it.contains("@") &&
+                    !it.matches(
+                        Regex(
+                            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                        )
+                    ) &&
+                    !it.matches(Regex("^[0-9a-fA-F]{24,}$"))
             }
             ?: "Yeni mesaj"
     }
