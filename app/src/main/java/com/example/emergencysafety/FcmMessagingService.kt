@@ -128,9 +128,15 @@ class FcmMessagingService : FirebaseMessagingService() {
             return
         }
 
+        // Normal mesajlarda bildirim gorunmese bile teslim onayi gonder.
+        // Acil durum alarmi bundan etkilenmez.
+        val messageId =
+            message.data["messageId"].orEmpty().trim()
+
         if (
             ActiveChatTracker.isChatVisible(connectionId)
         ) {
+            acknowledgeDelivery(messageId)
             return
         }
 
@@ -140,6 +146,31 @@ class FcmMessagingService : FirebaseMessagingService() {
             messagePreview = messagePreview,
             connectionId = connectionId
         )
+
+        acknowledgeDelivery(messageId)
+    }
+
+    private fun acknowledgeDelivery(messageId: String) {
+        if (messageId.isBlank()) return
+
+        try {
+            val result = ConnectionApi.markMessageDelivered(
+                applicationContext,
+                messageId
+            )
+            if (!result.success) {
+                android.util.Log.w(
+                    "FcmMessagingService",
+                    "Teslim onayi gonderilemedi: ${result.message}"
+                )
+            }
+        } catch (error: Exception) {
+            android.util.Log.w(
+                "FcmMessagingService",
+                "Teslim onayi hatasi",
+                error
+            )
+        }
     }
 
     private fun saveIncomingEmergency(
