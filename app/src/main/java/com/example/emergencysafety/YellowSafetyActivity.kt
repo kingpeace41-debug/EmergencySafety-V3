@@ -1686,6 +1686,33 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
+        // Konum oturumu yalnızca oturum açmış, yetkili alıcıya açılır.
+        if (message.messageType == "location") {
+            val locationId = Regex(
+                "ES_LOCATION_SESSION:([0-9a-fA-F-]{36})"
+            ).find(message.body)?.groupValues?.getOrNull(1)
+            if (locationId != null) {
+                val openMap = TextView(this).apply {
+                    text = "📍 CANLI KONUMU HARİTADA GÖR"
+                    textSize = 14f
+                    setTextColor(Color.rgb(255, 221, 113))
+                    setPadding(dp(4), dp(12), dp(4), dp(10))
+                    setOnClickListener {
+                        startActivity(
+                            Intent(
+                                this@YellowSafetyActivity,
+                                EmergencyLocationMapActivity::class.java
+                            ).putExtra(
+                                EmergencyLocationMapActivity.EXTRA_SESSION_ID,
+                                locationId
+                            )
+                        )
+                    }
+                }
+                bubble.addView(openMap)
+            }
+        }
+
         val statusRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
