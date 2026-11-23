@@ -271,7 +271,7 @@ class SettingsCategoriesActivity : AppCompatActivity() {
 
                 Bu işlem gerçek mesaj gönderimi yapar.
 
-                Bu aşamada canlı konum paylaşımı, fotoğraf çekimi, ses kaydı ve ekran karartma başlatılmaz.
+                Canlı konum paylaşımını bu protokole ekliyoruz. Ancak şu anki sürümde canlı konum henüz karşı tarafa aktarılmaz.\n\n                Bu aşamada fotoğraf çekimi, ses kaydı ve ekran karartma başlatılmaz.
 
                 Devam etmek istiyor musunuz?
             """.trimIndent(),
