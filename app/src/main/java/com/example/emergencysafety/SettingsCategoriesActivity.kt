@@ -3,6 +3,7 @@ package com.example.emergencysafety
 
 import android.app.Dialog
 import android.content.Intent
+import androidx.core.content.ContextCompat
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -271,7 +272,7 @@ class SettingsCategoriesActivity : AppCompatActivity() {
 
                 Bu işlem gerçek mesaj gönderimi yapar.
 
-                Canlı konum paylaşımını bu protokole ekliyoruz. Ancak şu anki sürümde canlı konum henüz karşı tarafa aktarılmaz.\n\n                Bu aşamada fotoğraf çekimi, ses kaydı ve ekran karartma başlatılmaz.
+                Konum izni verilmişse, seçili ES kişileriyle canlı konum paylaşımı da başlatılmaya çalışılır. Takibi SOS konum bildirimindeki DURDUR seçeneğinden kapatabilirsiniz.\n\n                Bu aşamada fotoğraf çekimi, ses kaydı ve ekran karartma başlatılmaz.
 
                 Devam etmek istiyor musunuz?
             """.trimIndent(),
@@ -334,6 +335,20 @@ class SettingsCategoriesActivity : AppCompatActivity() {
                     return@launch
                 }
 
+                var locationStatus = "Canli konum baslatilmadi."
+                if (summary.acceptedCount > 0) {
+                    try {
+                        ContextCompat.startForegroundService(
+                            this@SettingsCategoriesActivity,
+                            Intent(this@SettingsCategoriesActivity, SosLocationService::class.java)
+                        )
+                        locationStatus = "Canli konum servisi baslatiliyor. Sonucunu SOS bildiriminden takip edin."
+                    } catch (error: Exception) {
+                        locationStatus = "Canli konum servisi baslatilamadi: " +
+                            (error.localizedMessage ?: "Konum iznini kontrol edin.")
+                    }
+                }
+
                 val resultMessage = buildString {
                     append(
                         "Sunucunun kabul ettiği mesaj: "
@@ -358,6 +373,8 @@ class SettingsCategoriesActivity : AppCompatActivity() {
                             }
                     }
 
+                    append("\n\n")
+                    append(locationStatus)
                     append(
                         "\n\nSunucunun mesajı kabul etmesi, " +
                         "alıcının telefonuna teslim edildiği " +
