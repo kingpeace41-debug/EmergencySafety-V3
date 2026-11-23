@@ -4,6 +4,7 @@ package com.example.emergencysafety
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.os.Build
@@ -136,6 +137,14 @@ class SosLocationService : Service() {
             return START_NOT_STICKY
         }
 
+        val stopIntent = Intent(this, SosLocationService::class.java).apply {
+            action = ACTION_STOP_SOS
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this, 4101, stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification: Notification =
             NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("SOS konum hizmeti")
@@ -146,6 +155,11 @@ class SosLocationService : Service() {
                     android.R.drawable.ic_menu_mylocation
                 )
                 .setOngoing(true)
+                .addAction(
+                    android.R.drawable.ic_media_pause,
+                    "KONUMU DURDUR",
+                    stopPendingIntent
+                )
                 .setSilent(true)
                 .setPriority(
                     NotificationCompat.PRIORITY_LOW
