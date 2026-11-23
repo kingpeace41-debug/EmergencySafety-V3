@@ -55,6 +55,8 @@ class EmergencyLocationMapActivity : AppCompatActivity() {
                         return@launch
                     }
                     showLocation(result.data)
+                } catch (_: Exception) {
+                    if (active) status.text = "Konum baglantisi bekleniyor..."
                 } finally {
                     busy = false
                     if (active) handler.postDelayed(poll, 10000L)
@@ -126,7 +128,7 @@ class EmergencyLocationMapActivity : AppCompatActivity() {
         active = false
         handler.removeCallbacks(poll)
         scope.cancel()
-        map.destroy()
+        if (::map.isInitialized) map.destroy()
         super.onDestroy()
     }
 
