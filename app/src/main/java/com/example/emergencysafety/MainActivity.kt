@@ -385,6 +385,95 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    // Ilk ana ekran girisinde konum anahtari kapaliysa bir kez bilgilendir.
+    private fun showInitialLocationSetupIfNeeded() {
+        val prefs = getSharedPreferences("LocationOnboarding", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("initial_location_check_done", false)) return
+
+        val locationManager = getSystemService(Context.LOCATION_SERVICE)
+            as android.location.LocationManager
+        val enabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            locationManager.isLocationEnabled
+        } else {
+            locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
+                locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+        }
+
+        // Bir sonraki onResume'da veya ekran acilisinda pencereyi tekrarlama.
+        prefs.edit().putBoolean("initial_location_check_done", true).apply()
+        if (enabled || isFinishing || isDestroyed) return
+
+        val density = resources.displayMetrics.density
+        fun dp(value: Int) = (value * density + 0.5f).toInt()
+
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(22), dp(22), dp(18))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(16, 27, 48))
+                cornerRadius = dp(18).toFloat()
+                setStroke(dp(1), Color.rgb(76, 93, 121))
+            }
+        }
+        val heading = TextView(this).apply {
+            text = "KONUM HİZMETİ GEREKLİ"
+            setTextColor(Color.WHITE)
+            setTypeface(null, Typeface.BOLD)
+            textSize = 19f
+            gravity = Gravity.CENTER
+        }
+        panel.addView(heading)
+        val explanation = TextView(this).apply {
+            text = "EmergencySafety'nin acil durumlarda canlı konumunuzu " +
+                "yakınlarınıza gönderebilmesi için telefonunuzun konum hizmeti " +
+                "açık olmalıdır.\\n\\nUygulamanın tam çalışabilmesi için " +
+                "lütfen konum hizmetini açın."
+            setTextColor(Color.rgb(215, 225, 238))
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(14), 0, dp(18))
+        }
+        panel.addView(explanation)
+        val dialog = Dialog(this)
+        val openSettings = TextView(this).apply {
+            text = "KONUMU AÇ"
+            setTextColor(Color.WHITE)
+            setTypeface(null, Typeface.BOLD)
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(31, 115, 92))
+                cornerRadius = dp(10).toFloat()
+            }
+            setOnClickListener {
+                dialog.dismiss()
+                startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+            }
+        }
+        panel.addView(openSettings)
+        val later = TextView(this).apply {
+            text = "ŞİMDİ DEĞİL"
+            setTextColor(Color.rgb(192, 207, 226))
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(14), dp(12), dp(4))
+            setOnClickListener { dialog.dismiss() }
+        }
+        panel.addView(later)
+        dialog.setContentView(panel)
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setDimAmount(0.65f)
+            addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            setLayout(
+                (resources.displayMetrics.widthPixels * 0.9f).toInt(),
+                android.view.WindowManager.LayoutParams.WRAP_CONTENT
+            )
+        }
+    }
+
     private fun isRegisteredUser(): Boolean {
         val isGuest = accountPreferences.getBoolean(
             "guest_mode",
@@ -838,6 +927,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
 
         refreshReadinessPanel()
+        showInitialLocationSetupIfNeeded()
 
         if (::wolfBackground.isInitialized) {
             val isVoiceActive = getSharedPreferences(
