@@ -548,32 +548,6 @@ class MainActivity : AppCompatActivity() {
 
     // PNG'lerin seffaf kenar bosluklarini kirparak iki butonun
     // gorunen capini ayni alana oturtur.
-    private fun normalizedButtonBitmap(drawableId: Int): android.graphics.Bitmap? {
-        val bitmap = BitmapFactory.decodeResource(resources, drawableId) ?: return null
-        val width = bitmap.width
-        val height = bitmap.height
-        var left = width
-        var top = height
-        var right = -1
-        var bottom = -1
-        for (y in 0 until height) {
-            for (x in 0 until width) {
-                if (Color.alpha(bitmap.getPixel(x, y)) > 24) {
-                    if (x < left) left = x
-                    if (x > right) right = x
-                    if (y < top) top = y
-                    if (y > bottom) bottom = y
-                }
-            }
-        }
-        if (right < left || bottom < top) return bitmap
-        val cropped = android.graphics.Bitmap.createBitmap(
-            bitmap, left, top, right - left + 1, bottom - top + 1
-        )
-        if (cropped !== bitmap) bitmap.recycle()
-        return cropped
-    }
-
     private fun setupAccountButton() {
         val listeningButton =
             findViewById<androidx.cardview.widget.CardView>(
@@ -622,7 +596,7 @@ class MainActivity : AppCompatActivity() {
                     FrameLayout.LayoutParams.MATCH_PARENT
                 )
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                setImageBitmap(normalizedButtonBitmap(R.drawable.power_button))
+                setImageResource(R.drawable.power_button)
                 contentDescription = "Sesli dinleme güç butonu"
             }
 
@@ -654,7 +628,7 @@ class MainActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setImageBitmap(normalizedButtonBitmap(R.drawable.log_button))
+            setImageResource(R.drawable.log_button)
             contentDescription = "Hesabım butonu"
         }
 
