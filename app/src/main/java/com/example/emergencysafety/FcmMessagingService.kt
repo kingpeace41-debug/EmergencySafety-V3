@@ -133,6 +133,16 @@ class FcmMessagingService : FirebaseMessagingService() {
         val messageId =
             message.data["messageId"].orEmpty().trim()
 
+        // A live-location message is part of the emergency, not a second alert.
+        // Keep the message in the inbox and acknowledge delivery, but never
+        // open a chat or create a separate push notification for it.
+        if (messageType == "location" &&
+            messagePreview.contains("ES_LOCATION_SESSION:")
+        ) {
+            acknowledgeDelivery(messageId)
+            return
+        }
+
         if (
             ActiveChatTracker.isChatVisible(connectionId)
         ) {
