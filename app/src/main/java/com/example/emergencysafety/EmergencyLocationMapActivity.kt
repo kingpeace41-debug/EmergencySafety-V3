@@ -6,6 +6,9 @@ import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
+import android.webkit.ConsoleMessage
+import android.util.Log
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -50,8 +53,12 @@ class EmergencyLocationMapActivity : AppCompatActivity() {
                     }
                     if (!active) return@launch
                     if (!result.success || result.data == null) {
-                        status.text = "Konum paylaşımı sona erdi veya erişim yok."
-                        active = false
+                        status.text = "Konum sorgulanamadi: ${result.message}"
+                        // Network failures should not permanently disable tracking.
+                        if (result.message.contains("sona erdi", true) ||
+                            result.message.contains("yetki", true)) {
+                            active = false
+                        }
                         return@launch
                     }
                     showLocation(result.data)
@@ -67,7 +74,7 @@ class EmergencyLocationMapActivity : AppCompatActivity() {
 
     private fun showLocation(data: JSONObject) {
         if (data.isNull("latitude") || data.isNull("longitude")) {
-            status.text = "GPS konumu bekleniyor..."
+            status.text = "Gonderen telefonun sunucuya ilk konumu aktarmasi bekleniyor..."
             return
         }
         val lat = data.optDouble("latitude", Double.NaN)
@@ -78,7 +85,7 @@ class EmergencyLocationMapActivity : AppCompatActivity() {
         val accuracy = if (data.isNull("accuracy")) "?" else
             data.optDouble("accuracy", 0.0).toInt().toString()
         status.text = "Son konum: $updated  •  ±$accuracy m"
-        val command = "window.esUpdate($lat,$lon);"
+        val command = "window.esUpdate && window.esUpdate($lat,$lon);"
         if (ready) map.evaluateJavascript(command, null)
         else map.tag = command
         lastUpdated = updated
@@ -105,6 +112,14 @@ class EmergencyLocationMapActivity : AppCompatActivity() {
         map = WebView(this).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = false
+            webChromeClient = object : WebChromeClient() {
+                override fun onConsoleMessage(message: ConsoleMessage?): Boolean {
+                    if (message != null) {
+                        Log.d("ES_LOCATION_MAP", message.message())
+                    }
+                    return true
+                }
+            }
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     ready = true
