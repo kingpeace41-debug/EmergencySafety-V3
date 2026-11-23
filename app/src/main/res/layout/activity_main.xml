@@ -84,7 +84,7 @@
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="1"
-                    android:layout_marginEnd="3dp"
+                    android:layout_marginEnd="7dp"
                     android:clickable="true"
                     android:focusable="true"
                     android:contentDescription="Acil durum">
@@ -92,7 +92,7 @@
                     <ImageView
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:src="@drawable/button_red"
+                        android:src="@drawable/kirmizi_1"
                         android:scaleType="fitCenter"
                         android:contentDescription="Kırmızı acil durum butonu"
                         android:importantForAccessibility="no" />
@@ -104,8 +104,8 @@
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="1"
-                    android:layout_marginStart="3dp"
-                    android:layout_marginEnd="3dp"
+                    android:layout_marginStart="7dp"
+                    android:layout_marginEnd="7dp"
                     android:clickable="true"
                     android:focusable="true"
                     android:contentDescription="Uyarı">
@@ -113,7 +113,7 @@
                     <ImageView
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:src="@drawable/button_yellow"
+                        android:src="@drawable/sari_1"
                         android:scaleType="fitCenter"
                         android:contentDescription="Sarı uyarı butonu"
                         android:importantForAccessibility="no" />
@@ -125,7 +125,7 @@
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="1"
-                    android:layout_marginStart="3dp"
+                    android:layout_marginStart="7dp"
                     android:clickable="true"
                     android:focusable="true"
                     android:contentDescription="Bilgi">
@@ -133,7 +133,7 @@
                     <ImageView
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:src="@drawable/button_blue"
+                        android:src="@drawable/mavi_1"
                         android:scaleType="fitCenter"
                         android:contentDescription="Mavi bilgi butonu"
                         android:importantForAccessibility="no" />
