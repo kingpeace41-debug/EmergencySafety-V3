@@ -142,15 +142,66 @@
 
             </LinearLayout>
 
-            <TextView
+            <!-- Acil durum hazirlik paneli: durumlar MainActivity tarafindan guncellenecek. -->
+            <LinearLayout
+                android:id="@+id/emergencyReadinessPanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
                 android:layout_marginTop="12dp"
+                android:orientation="vertical"
                 android:gravity="center"
-                android:text="Küçük bir dokunuş,&#10;büyük bir fark yaratabilir."
-                android:textColor="#FFFFFF"
-                android:textSize="14sp"
-                android:textStyle="bold" />
+                android:padding="12dp"
+                android:background="#101B2B"
+                android:clickable="true"
+                android:focusable="true"
+                android:contentDescription="Acil durum hazirlik durumunu kontrol et">
+
+                <TextView
+                    android:id="@+id/readinessTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="◇  GÜVENLİK KONTROLÜ  ◇"
+                    android:textColor="#D9E5F3"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal"
+                    android:gravity="center">
+
+                    <TextView
+                        android:id="@+id/readinessMicrophone"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="18dp"
+                        android:text="● Ses"
+                        android:textColor="#AEBBCD"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/readinessLocation"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="18dp"
+                        android:text="● Konum"
+                        android:textColor="#AEBBCD"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/readinessConnection"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="● Bağlantı"
+                        android:textColor="#AEBBCD"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
 
             <androidx.cardview.widget.CardView
                 android:id="@+id/btnToggleListening"
