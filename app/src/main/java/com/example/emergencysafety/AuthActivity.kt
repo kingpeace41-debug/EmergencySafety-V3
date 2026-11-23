@@ -120,7 +120,9 @@ class AuthActivity : AppCompatActivity() {
             ).orEmpty()
 
             if (!isGuest && savedUserId.isNotBlank()) {
-                restoreRegisteredSession(savedUserId)
+                // Acil durum ana ekranini ag yanitina baglama.
+                // Korumali API istekleri gecersiz tokeni 401 uzerinden yeniler.
+                openMainActivity()
                 return
             }
 
