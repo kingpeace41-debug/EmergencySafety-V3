@@ -335,27 +335,68 @@ class MainActivity : AppCompatActivity() {
             text = if (networkReady) "● Bağlantı" else "○ Bağlantı"
             setTextColor(if (networkReady) green else red)
         }
+        findViewById<View>(R.id.readinessMicrophone)?.setOnClickListener {
+            if (microphoneReady) {
+                Toast.makeText(this, "Mikrofon izni hazır.", Toast.LENGTH_SHORT).show()
+            } else {
+                requestMicrophoneReadinessPermission()
+            }
+        }
+        findViewById<View>(R.id.readinessLocation)?.setOnClickListener {
+            when {
+                !locationPermission -> requestLocationReadinessPermission()
+                !locationEnabled -> startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                !backgroundReady -> showBackgroundLocationExplanation()
+                else -> Toast.makeText(this, "Konum izinleri hazır.", Toast.LENGTH_SHORT).show()
+            }
+        }
+        findViewById<View>(R.id.readinessConnection)?.setOnClickListener {
+            if (networkReady) {
+                Toast.makeText(this, "Ağ bağlantısı mevcut.", Toast.LENGTH_SHORT).show()
+            } else {
+                startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS))
+            }
+        }
         findViewById<View>(R.id.emergencyReadinessPanel)?.setOnClickListener {
             when {
-                !microphoneReady -> ensureMicrophonePermission()
-                !locationPermission -> requestPermissions(
-                    arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                    ), 402
-                )
-                !locationEnabled -> {
-                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
-                }
+                !microphoneReady -> requestMicrophoneReadinessPermission()
+                !locationPermission -> requestLocationReadinessPermission()
+                !locationEnabled -> startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
                 !backgroundReady -> showBackgroundLocationExplanation()
-                !networkReady -> {
-                    Toast.makeText(this, "İnternet bağlantısını açın.", Toast.LENGTH_LONG).show()
-                    startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS))
-                }
-                else -> Toast.makeText(
-                    this, "Temel izinler ve bağlantı hazır.", Toast.LENGTH_SHORT
-                ).show()
+                !networkReady -> startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS))
+                else -> Toast.makeText(this, "Temel kontroller hazır.", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun requestMicrophoneReadinessPermission() {
+        val permission = Manifest.permission.RECORD_AUDIO
+        if (AppPermissionManager.shouldOpenSettings(this, permission)) {
+            startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        } else {
+            requestPermissions(arrayOf(permission), 404)
+        }
+    }
+
+    private fun requestLocationReadinessPermission() {
+        val fine = Manifest.permission.ACCESS_FINE_LOCATION
+        val coarse = Manifest.permission.ACCESS_COARSE_LOCATION
+        if (AppPermissionManager.shouldOpenSettings(this, fine) &&
+            AppPermissionManager.shouldOpenSettings(this, coarse)
+        ) {
+            startActivity(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        } else {
+            requestPermissions(arrayOf(fine, coarse), 402)
         }
     }
 
@@ -1396,7 +1437,7 @@ class MainActivity : AppCompatActivity() {
             grantResults
         )
 
-        if (requestCode == 402 || requestCode == 403) {
+        if (requestCode == 402 || requestCode == 403 || requestCode == 404) {
             AppPermissionManager.recordPermissionResults(this, permissions, grantResults)
             refreshReadinessPanel()
         }
