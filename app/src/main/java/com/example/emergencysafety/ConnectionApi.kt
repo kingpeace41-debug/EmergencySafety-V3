@@ -598,6 +598,90 @@ internal object ConnectionApi {
         )
     }
 
+    // CANLI ACIL DURUM KONUM API
+    fun startEmergencyLocation(
+        context: Context,
+        connectionIds: List<String>
+    ): ConnectionApiResult<String> {
+        if (connectionIds.isEmpty()) {
+            return ConnectionApiResult(false, "Acil durum alicisi secilmedi.")
+        }
+
+        val recipients = JSONArray()
+        connectionIds.distinct().forEach { recipients.put(it) }
+
+        val response = request(
+            context = context,
+            path = "/emergency-location/start",
+            method = "POST",
+            body = JSONObject().put("connectionIds", recipients)
+        )
+
+        if (!response.optBoolean("success", false)) return failure(response)
+
+        val sessionId = response.optString("sessionId", "")
+        if (sessionId.isBlank()) {
+            return ConnectionApiResult(false, "Konum oturumu kimligi eksik.")
+        }
+        return ConnectionApiResult(true, "Konum paylasimi baslatildi.", sessionId)
+    }
+
+    fun updateEmergencyLocation(
+        context: Context,
+        sessionId: String,
+        latitude: Double,
+        longitude: Double,
+        accuracy: Float
+    ): ConnectionApiResult<Boolean> {
+        val body = JSONObject()
+            .put("latitude", latitude)
+            .put("longitude", longitude)
+            .put("accuracy", accuracy.toDouble().coerceAtLeast(0.0))
+
+        val response = request(
+            context = context,
+            path = "/emergency-location/$sessionId/update",
+            method = "POST",
+            body = body
+        )
+        return ConnectionApiResult(
+            response.optBoolean("success", false),
+            response.optString("message", "Konum guncellenemedi."),
+            response.optBoolean("success", false)
+        )
+    }
+
+    fun stopEmergencyLocation(
+        context: Context,
+        sessionId: String
+    ): ConnectionApiResult<Boolean> {
+        val response = request(
+            context = context,
+            path = "/emergency-location/$sessionId/stop",
+            method = "POST"
+        )
+        return ConnectionApiResult(
+            response.optBoolean("success", false),
+            response.optString("message", "Konum paylasimi durdurulamadi."),
+            response.optBoolean("success", false)
+        )
+    }
+
+    fun getEmergencyLocation(
+        context: Context,
+        sessionId: String
+    ): ConnectionApiResult<JSONObject> {
+        val response = request(
+            context = context,
+            path = "/emergency-location/$sessionId",
+            method = "GET"
+        )
+        if (!response.optBoolean("success", false)) return failure(response)
+        val session = response.optJSONObject("session")
+            ?: return ConnectionApiResult(false, "Konum verisi bulunamadi.")
+        return ConnectionApiResult(true, "Konum alindi.", session)
+    }
+
     // FIREBASE BILDIRIM TOKENINI SUNUCUYA KAYDET
     fun registerFcmToken(
         context: Context,
