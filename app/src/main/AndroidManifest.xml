@@ -56,6 +56,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".EmergencyLocationMapActivity"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+
+        <activity
             android:name=".YellowSafetyActivity"
             android:screenOrientation="portrait"
             android:exported="false" />
