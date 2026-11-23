@@ -277,6 +277,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupAccountButton()
+        // Konsolu 16dp yukari, icerigi ve dokunma alanlariyla birlikte tasi.
+        findViewById<View>(R.id.emergencyReadinessPanel)?.translationY =
+            -16f * resources.displayMetrics.density
 
         findViewById<View>(R.id.wolfTouchArea)?.setOnClickListener {
             vibrateOnClick()
@@ -545,47 +548,30 @@ class MainActivity : AppCompatActivity() {
 
     // PNG'lerin seffaf kenar bosluklarini kirparak iki butonun
     // gorunen capini ayni alana oturtur.
-    // Buyuk PNG'yi ana is parcaciginda piksel piksel taramak yerine
-    // once kucult; gorunur kisimlari esitle ve oturum boyunca onbellekle.
-    private val buttonBitmapCache = mutableMapOf<Int, android.graphics.Bitmap>()
-
     private fun normalizedButtonBitmap(drawableId: Int): android.graphics.Bitmap? {
-        buttonBitmapCache[drawableId]?.let { return it }
-        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeResource(resources, drawableId, options)
-        val longest = maxOf(options.outWidth, options.outHeight)
-        var sample = 1
-        while (longest / sample > 192) sample *= 2
-        val decoded = BitmapFactory.decodeResource(
-            resources, drawableId,
-            BitmapFactory.Options().apply { inSampleSize = sample }
-        ) ?: return null
-
-        var left = decoded.width
-        var top = decoded.height
+        val bitmap = BitmapFactory.decodeResource(resources, drawableId) ?: return null
+        val width = bitmap.width
+        val height = bitmap.height
+        var left = width
+        var top = height
         var right = -1
         var bottom = -1
-        val pixels = IntArray(decoded.width * decoded.height)
-        decoded.getPixels(pixels, 0, decoded.width, 0, 0, decoded.width, decoded.height)
-        for (y in 0 until decoded.height) {
-            for (x in 0 until decoded.width) {
-                if (Color.alpha(pixels[y * decoded.width + x]) > 24) {
-                    left = minOf(left, x)
-                    right = maxOf(right, x)
-                    top = minOf(top, y)
-                    bottom = maxOf(bottom, y)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                if (Color.alpha(bitmap.getPixel(x, y)) > 24) {
+                    if (x < left) left = x
+                    if (x > right) right = x
+                    if (y < top) top = y
+                    if (y > bottom) bottom = y
                 }
             }
         }
-        val result = if (right >= left && bottom >= top) {
-            android.graphics.Bitmap.createBitmap(
-                decoded, left, top, right - left + 1, bottom - top + 1
-            )
-        } else {
-            decoded
-        }
-        buttonBitmapCache[drawableId] = result
-        return result
+        if (right < left || bottom < top) return bitmap
+        val cropped = android.graphics.Bitmap.createBitmap(
+            bitmap, left, top, right - left + 1, bottom - top + 1
+        )
+        if (cropped !== bitmap) bitmap.recycle()
+        return cropped
     }
 
     private fun setupAccountButton() {
@@ -614,8 +600,8 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                topMargin = dp(0)
-                bottomMargin = dp(16)
+                topMargin = dp(2)
+                bottomMargin = dp(22)
             }
         }
 
@@ -680,6 +666,9 @@ class MainActivity : AppCompatActivity() {
         })
         buttonRow.addView(accountButton)
 
+        // Panel yukari tasindiktan sonra kalan gorunur boslugu azalt.
+        // Butonlar tek sira halinde, dokunma alanlariyla birlikte tasinir.
+        buttonRow.translationY = -dp(28).toFloat()
         parent.addView(buttonRow, originalIndex)
     }
 
