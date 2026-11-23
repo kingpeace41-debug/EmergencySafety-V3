@@ -30,7 +30,7 @@ object FcmTokenRegistrar {
 
         if (userId.isNullOrBlank() || accessToken.isNullOrBlank()) {
             Log.i(TAG, "Kayıtlı oturum yok; FCM token kaydı atlandı.")
-            return
+            return@execute
         }
 
         FirebaseMessaging.getInstance().token
