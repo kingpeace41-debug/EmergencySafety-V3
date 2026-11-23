@@ -77,6 +77,21 @@ class SosLocationService : Service() {
                 return@launch
             }
             sessionId = result.data
+            val activeId = result.data
+            // Notify only the explicitly selected emergency recipients.
+            scope.launch(Dispatchers.IO) {
+                ids.forEach { connectionId ->
+                    val message = ConnectionApi.sendMessage(
+                        applicationContext,
+                        connectionId,
+                        "📍 CANLI ACİL DURUM KONUMU\nES_LOCATION_SESSION:$activeId",
+                        "location"
+                    )
+                    if (!message.success) {
+                        Log.w(TAG, "SOS konum bildirimi gonderilemedi: ${message.message}")
+                    }
+                }
+            }
             startLocationUpdates()
         }
     }
