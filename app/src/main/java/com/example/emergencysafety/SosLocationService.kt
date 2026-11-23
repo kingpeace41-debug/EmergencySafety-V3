@@ -25,6 +25,7 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 
 class SosLocationService : Service() {
 
@@ -35,7 +36,7 @@ class SosLocationService : Service() {
         private const val CHANNEL_ID =
             "SosServiceChannelSilent"
 
-        private const val NOTIFICATION_ID = 1
+        private const val NOTIFICATION_ID = 4102
 
         private const val TAG = "SosLocationService"
     }
@@ -49,6 +50,7 @@ class SosLocationService : Service() {
     private var sessionId: String? = null
     private var starting = false
     private var closing = false
+    private var currentFixCancellation: CancellationTokenSource? = null
 
     private fun selectedConnections(): List<String> {
         val prefs = getSharedPreferences("EmergencyContactSettings", MODE_PRIVATE)
@@ -94,20 +96,34 @@ class SosLocationService : Service() {
                 }
             }
             startLocationUpdates()
-            // A recent cached fix can populate the map before the first new GPS callback.
+            // Fused Location combines available GPS, Wi-Fi and network sources.
+            // Request a fresh fix while continuous location callbacks are starting.
             try {
+                val cancellation = CancellationTokenSource()
+                currentFixCancellation = cancellation
+                fusedLocationClient.getCurrentLocation(
+                    Priority.PRIORITY_HIGH_ACCURACY,
+                    cancellation.token
+                ).addOnSuccessListener { location ->
+                    if (location != null && !closing && sessionId == activeId) {
+                        uploadLocation(
+                            activeId, location.latitude, location.longitude, location.accuracy
+                        )
+                    } else {
+                        Log.w(TAG, "Ilk guncel konum henuz alinamadi.")
+                    }
+                }.addOnFailureListener { error ->
+                    Log.w(TAG, "Ilk guncel konum alinamadi.", error)
+                }
                 fusedLocationClient.lastLocation.addOnSuccessListener { location ->
                     if (location != null && !closing && sessionId == activeId) {
                         uploadLocation(
-                            activeId,
-                            location.latitude,
-                            location.longitude,
-                            location.accuracy
+                            activeId, location.latitude, location.longitude, location.accuracy
                         )
                     }
                 }
             } catch (error: SecurityException) {
-                Log.w(TAG, "Son konum okunamadi: izin gerekli.", error)
+                Log.w(TAG, "Konum izni gerekli.", error)
             }
         }
     }
@@ -153,6 +169,8 @@ class SosLocationService : Service() {
     private fun finishTracking() {
         if (closing) return
         closing = true
+        currentFixCancellation?.cancel()
+        currentFixCancellation = null
         stopLocationUpdates()
         sessionId?.let { stopRemote(it) }
         sessionId = null
@@ -371,6 +389,8 @@ class SosLocationService : Service() {
     override fun onDestroy() {
         if (!closing) {
             closing = true
+            currentFixCancellation?.cancel()
+            currentFixCancellation = null
             stopLocationUpdates()
             sessionId?.let { stopRemote(it) }
             sessionId = null
