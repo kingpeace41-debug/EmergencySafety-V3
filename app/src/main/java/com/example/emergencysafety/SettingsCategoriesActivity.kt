@@ -272,7 +272,9 @@ class SettingsCategoriesActivity : AppCompatActivity() {
 
                 Bu işlem gerçek mesaj gönderimi yapar.
 
-                Konum izni verilmişse, seçili ES kişileriyle canlı konum paylaşımı da başlatılmaya çalışılır. Takibi SOS konum bildirimindeki DURDUR seçeneğinden kapatabilirsiniz.\n\n                Bu aşamada fotoğraf çekimi, ses kaydı ve ekran karartma başlatılmaz.
+                Konum izni verilmişse, seçili ES kişileriyle canlı konum paylaşımı da başlatılmaya çalışılır. Takibi SOS konum bildirimindeki DURDUR seçeneğinden kapatabilirsiniz.
+
+                Bu aşamada fotoğraf çekimi, ses kaydı ve ekran karartma başlatılmaz.
 
                 Devam etmek istiyor musunuz?
             """.trimIndent(),
