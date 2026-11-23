@@ -177,6 +177,10 @@
 
                     <TextView
                         android:id="@+id/readinessMicrophone"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginEnd="18dp"
@@ -186,6 +190,10 @@
 
                     <TextView
                         android:id="@+id/readinessLocation"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginEnd="18dp"
@@ -195,6 +203,10 @@
 
                     <TextView
                         android:id="@+id/readinessConnection"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="● Bağlantı"
