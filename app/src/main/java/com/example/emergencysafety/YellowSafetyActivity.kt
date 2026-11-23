@@ -996,6 +996,16 @@ class YellowSafetyActivity : AppCompatActivity() {
         Thread {
             val result = ConnectionApi.getConnections(this)
             val summaryResult = ConnectionApi.getMessageSummary(this)
+            // En son mesajlasilan baglantiyi listenin basina tasimak icin
+            // mevcut mesaj API'sinden son mesajlari al.
+            val recentMessages = ConnectionApi.getInbox(this, 50)
+                .data.orEmpty()
+            val lastMessageTimeByConnection = recentMessages
+                .filter { it.connectionId.isNotBlank() }
+                .groupBy { it.connectionId }
+                .mapValues { (_, messages) ->
+                    messages.maxOf { parseServerTime(it.createdAt) }
+                }
 
             val unreadCounts = summaryResult.data
                 ?.unreadByConnection
@@ -1052,7 +1062,11 @@ class YellowSafetyActivity : AppCompatActivity() {
                     }
                 }
 
-                connections.forEach { connection ->
+                connections.sortedWith(
+                    compareByDescending<ConnectionApiItem> {
+                        lastMessageTimeByConnection[it.id] ?: Long.MIN_VALUE
+                    }.thenByDescending { parseServerTime(it.createdAt) }
+                ).forEach { connection ->
                     addPrivateConversationRow(
                         container,
                         connection,
