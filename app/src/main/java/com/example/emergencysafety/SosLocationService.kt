@@ -10,6 +10,13 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -36,6 +43,63 @@ class SosLocationService : Service() {
         FusedLocationProviderClient
 
     private var locationCallback: LocationCallback? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val updateMutex = Mutex()
+    private var sessionId: String? = null
+    private var starting = false
+    private var closing = false
+
+    private fun selectedConnections(): List<String> {
+        val prefs = getSharedPreferences("EmergencyContactSettings", MODE_PRIVATE)
+        return (1..3).mapNotNull { slot ->
+            prefs.getString("es_contact${slot}_id", null)
+                ?.trim()?.takeIf { it.isNotEmpty() }
+        }.distinct()
+    }
+
+    private fun beginTracking() {
+        if (starting || sessionId != null || closing) return
+        starting = true
+        scope.launch {
+            val ids = selectedConnections()
+            val result = withContext(Dispatchers.IO) {
+                ConnectionApi.startEmergencyLocation(applicationContext, ids)
+            }
+            starting = false
+            if (closing) {
+                result.data?.let { stopRemote(it) }
+                return@launch
+            }
+            if (!result.success || result.data.isNullOrBlank()) {
+                Log.e(TAG, "SOS konum oturumu baslatilamadi: ${result.message}")
+                stopForegroundCompat()
+                stopSelf()
+                return@launch
+            }
+            sessionId = result.data
+            startLocationUpdates()
+        }
+    }
+
+    private fun stopRemote(id: String) {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            val result = ConnectionApi.stopEmergencyLocation(applicationContext, id)
+            if (!result.success) {
+                Log.w(TAG, "SOS konum oturumu kapatilamadi: ${result.message}")
+            }
+        }
+    }
+
+    private fun finishTracking() {
+        if (closing) return
+        closing = true
+        stopLocationUpdates()
+        sessionId?.let { stopRemote(it) }
+        sessionId = null
+        stopForegroundCompat()
+        stopSelf()
+    }
+
 
     override fun onCreate() {
         super.onCreate()
@@ -53,9 +117,7 @@ class SosLocationService : Service() {
     ): Int {
 
         if (intent?.action == ACTION_STOP_SOS) {
-            stopLocationUpdates()
-            stopForegroundCompat()
-            stopSelf()
+            finishTracking()
             return START_NOT_STICKY
         }
 
@@ -86,7 +148,7 @@ class SosLocationService : Service() {
             notification
         )
 
-        startLocationUpdates()
+        beginTracking()
 
         return START_NOT_STICKY
     }
@@ -113,14 +175,22 @@ class SosLocationService : Service() {
                 val location =
                     locationResult.lastLocation ?: return
 
-                // Konum cihazda alınır.
-                // Bu sürümde henüz sunucuya gönderilmez.
-                // Güvenli konum aktarımı ayrıca kurulacak.
-
-                Log.d(
-                    TAG,
-                    "SOS konum güncellemesi alındı."
-                )
+                val activeSession = sessionId ?: return
+                if (closing) return
+                scope.launch(Dispatchers.IO) {
+                    if (!updateMutex.tryLock()) return@launch
+                    try {
+                        val response = ConnectionApi.updateEmergencyLocation(
+                            applicationContext, activeSession,
+                            location.latitude, location.longitude, location.accuracy
+                        )
+                        if (!response.success) {
+                            Log.w(TAG, "SOS konum aktarimi basarisiz: ${response.message}")
+                        }
+                    } finally {
+                        updateMutex.unlock()
+                    }
+                }
             }
         }
 
@@ -234,9 +304,13 @@ class SosLocationService : Service() {
     }
 
     override fun onDestroy() {
-
-        stopLocationUpdates()
-
+        if (!closing) {
+            closing = true
+            stopLocationUpdates()
+            sessionId?.let { stopRemote(it) }
+            sessionId = null
+        }
+        scope.cancel()
         super.onDestroy()
     }
 
