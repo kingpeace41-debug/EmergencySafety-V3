@@ -57,7 +57,7 @@ class EmergencyLocationMapActivity : AppCompatActivity() {
                     showLocation(result.data)
                 } finally {
                     busy = false
-                    if (active) handler.postDelayed(this@object, 10000L)
+                    if (active) handler.postDelayed(poll, 10000L)
                 }
             }
         }
