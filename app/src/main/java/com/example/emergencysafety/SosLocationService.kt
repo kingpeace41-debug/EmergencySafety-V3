@@ -94,6 +94,50 @@ class SosLocationService : Service() {
                 }
             }
             startLocationUpdates()
+            // A recent cached fix can populate the map before the first new GPS callback.
+            try {
+                fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                    if (location != null && !closing && sessionId == activeId) {
+                        uploadLocation(
+                            activeId,
+                            location.latitude,
+                            location.longitude,
+                            location.accuracy
+                        )
+                    }
+                }
+            } catch (error: SecurityException) {
+                Log.w(TAG, "Son konum okunamadi: izin gerekli.", error)
+            }
+        }
+    }
+
+    private fun uploadLocation(
+        activeSession: String,
+        latitude: Double,
+        longitude: Double,
+        accuracy: Float
+    ) {
+        if (closing) return
+        scope.launch(Dispatchers.IO) {
+            if (!updateMutex.tryLock()) return@launch
+            try {
+                if (closing || sessionId != activeSession) return@launch
+                val response = ConnectionApi.updateEmergencyLocation(
+                    applicationContext,
+                    activeSession,
+                    latitude,
+                    longitude,
+                    accuracy
+                )
+                if (!response.success) {
+                    Log.w(TAG, "SOS konum aktarimi basarisiz: ${response.message}")
+                } else {
+                    Log.d(TAG, "SOS konum sunucuya guncellendi.")
+                }
+            } finally {
+                updateMutex.unlock()
+            }
         }
     }
 
@@ -206,20 +250,12 @@ class SosLocationService : Service() {
 
                 val activeSession = sessionId ?: return
                 if (closing) return
-                scope.launch(Dispatchers.IO) {
-                    if (!updateMutex.tryLock()) return@launch
-                    try {
-                        val response = ConnectionApi.updateEmergencyLocation(
-                            applicationContext, activeSession,
-                            location.latitude, location.longitude, location.accuracy
-                        )
-                        if (!response.success) {
-                            Log.w(TAG, "SOS konum aktarimi basarisiz: ${response.message}")
-                        }
-                    } finally {
-                        updateMutex.unlock()
-                    }
-                }
+                uploadLocation(
+                    activeSession,
+                    location.latitude,
+                    location.longitude,
+                    location.accuracy
+                )
             }
         }
 
