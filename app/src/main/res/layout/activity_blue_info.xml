@@ -67,6 +67,18 @@
                 android:focusable="true"
                 android:contentDescription="En yakın eczane" />
 
+            <!-- BILGI MERKEZI: mevcut uc butonun altinda -->
+            <ImageView
+                android:id="@+id/blueInfoCenterButton"
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:layout_marginTop="5dp"
+                android:src="@drawable/mavi_2"
+                android:scaleType="fitCenter"
+                android:clickable="true"
+                android:focusable="true"
+                android:contentDescription="Bilgi merkezi" />
+
         </LinearLayout>
     </ScrollView>
 
