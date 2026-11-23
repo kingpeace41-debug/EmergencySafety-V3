@@ -14,6 +14,8 @@ object FcmTokenRegistrar {
     fun registerIfLoggedIn(context: Context) {
         val appContext = context.applicationContext
 
+        executor.execute {
+
         val userId = try {
             SecureSessionStore.getUserId(appContext)
         } catch (_: Exception) {
@@ -69,6 +71,7 @@ object FcmTokenRegistrar {
                     }
                 }
             }
+        }
     }
 
     fun registerNewToken(
