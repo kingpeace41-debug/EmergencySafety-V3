@@ -678,6 +678,11 @@ internal object ConnectionApi {
         )
         if (!response.optBoolean("success", false)) return failure(response)
         val session = response.optJSONObject("session")
+            ?: response.optJSONObject("location")
+            ?: response.optJSONObject("data")
+            ?: response.takeIf {
+                it.has("latitude") || it.has("longitude")
+            }
             ?: return ConnectionApiResult(false, "Konum verisi bulunamadi.")
         return ConnectionApiResult(true, "Konum alindi.", session)
     }
