@@ -284,6 +284,107 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Ana ekrandaki guvenlik paneli: gercek cihaz durumunu gosterir.
+    private fun refreshReadinessPanel() {
+        val microphoneReady = AppPermissionManager.isGranted(
+            this, Manifest.permission.RECORD_AUDIO
+        )
+        val locationPermission = AppPermissionManager.hasLocationPermission(this)
+        val locationManager = getSystemService(Context.LOCATION_SERVICE)
+            as android.location.LocationManager
+        val locationEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            locationManager.isLocationEnabled
+        } else {
+            locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
+                locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+        }
+        val locationReady = locationPermission && locationEnabled
+        val backgroundReady = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            AppPermissionManager.isGranted(this, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        val connectivity = getSystemService(Context.CONNECTIVITY_SERVICE)
+            as android.net.ConnectivityManager
+        val networkReady = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val network = connectivity.activeNetwork
+            val capabilities = network?.let { connectivity.getNetworkCapabilities(it) }
+            capabilities?.hasCapability(
+                android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET
+            ) == true
+        } else {
+            @Suppress("DEPRECATION")
+            val active = connectivity.activeNetworkInfo
+            active?.isConnected == true
+        }
+        val ready = microphoneReady && locationReady && backgroundReady && networkReady
+        val green = Color.rgb(66, 217, 144)
+        val red = Color.rgb(255, 86, 86)
+        val gray = Color.rgb(174, 187, 205)
+
+        findViewById<TextView>(R.id.readinessTitle)?.apply {
+            text = if (ready) "◆ ACİL DURUMA HAZIR ◆" else "◇ HAZIRLIK KONTROLÜ GEREKLİ ◇"
+            setTextColor(if (ready) green else red)
+        }
+        findViewById<TextView>(R.id.readinessMicrophone)?.apply {
+            text = if (microphoneReady) "● Ses" else "○ Ses"
+            setTextColor(if (microphoneReady) green else red)
+        }
+        findViewById<TextView>(R.id.readinessLocation)?.apply {
+            text = if (locationReady && backgroundReady) "● Konum" else "○ Konum"
+            setTextColor(if (locationReady && backgroundReady) green else red)
+        }
+        findViewById<TextView>(R.id.readinessConnection)?.apply {
+            text = if (networkReady) "● Bağlantı" else "○ Bağlantı"
+            setTextColor(if (networkReady) green else red)
+        }
+        findViewById<View>(R.id.emergencyReadinessPanel)?.setOnClickListener {
+            when {
+                !microphoneReady -> ensureMicrophonePermission()
+                !locationPermission -> requestPermissions(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    ), 402
+                )
+                !locationEnabled -> {
+                    startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                }
+                !backgroundReady -> showBackgroundLocationExplanation()
+                !networkReady -> {
+                    Toast.makeText(this, "İnternet bağlantısını açın.", Toast.LENGTH_LONG).show()
+                    startActivity(Intent(Settings.ACTION_WIRELESS_SETTINGS))
+                }
+                else -> Toast.makeText(
+                    this, "Temel izinler ve bağlantı hazır.", Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    private fun showBackgroundLocationExplanation() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Arka planda konum izni")
+            .setMessage(
+                "Telefon kilitliyken sesli acil durum başlatıldığında konum paylaşımı " +
+                    "için 'Her zaman izin ver' seçeneğini etkinleştirin. " +
+                    "Bu izin, telefonun genel konum anahtarını açmaz."
+            )
+            .setNegativeButton("VAZGEÇ", null)
+            .setPositiveButton("İZİN AYARLARI") { _, _ ->
+                if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+                    requestPermissions(
+                        arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION), 403
+                    )
+                } else {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:$packageName")
+                        )
+                    )
+                }
+            }
+            .show()
+    }
+
     private fun isRegisteredUser(): Boolean {
         val isGuest = accountPreferences.getBoolean(
             "guest_mode",
@@ -735,6 +836,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+
+        refreshReadinessPanel()
 
         if (::wolfBackground.isInitialized) {
             val isVoiceActive = getSharedPreferences(
@@ -1202,6 +1305,11 @@ class MainActivity : AppCompatActivity() {
             permissions,
             grantResults
         )
+
+        if (requestCode == 402 || requestCode == 403) {
+            AppPermissionManager.recordPermissionResults(this, permissions, grantResults)
+            refreshReadinessPanel()
+        }
 
         if (requestCode == REQUEST_MICROPHONE_PERMISSION) {
             val permissionGranted =
