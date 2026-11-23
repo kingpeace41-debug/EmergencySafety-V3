@@ -37,7 +37,7 @@ class EmergencyLocationMapActivity : AppCompatActivity() {
     private var lastUpdated: String? = null
     private var sessionId = ""
 
-    private val poll = object : Runnable {
+    private val poll: Runnable = object : Runnable {
         override fun run() {
             if (!active || busy) return
             busy = true
@@ -59,7 +59,7 @@ class EmergencyLocationMapActivity : AppCompatActivity() {
                     if (active) status.text = "Konum baglantisi bekleniyor..."
                 } finally {
                     busy = false
-                    if (active) handler.postDelayed(poll, 10000L)
+                    if (active) handler.postDelayed(this@EmergencyLocationMapActivity.poll, 10000L)
                 }
             }
         }
