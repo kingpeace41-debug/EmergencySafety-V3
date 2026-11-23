@@ -6,6 +6,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.location.LocationManager
+import android.provider.Settings
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -60,6 +63,36 @@ class SosLocationService : Service() {
         }.distinct()
     }
 
+    private fun isDeviceLocationEnabled(): Boolean {
+        val manager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            manager.isLocationEnabled
+        } else {
+            manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        }
+    }
+
+    private fun notifyLocationSettingsNeeded() {
+        val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+        val pending = PendingIntent.getActivity(
+            this, 4103, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setContentTitle("Acil konum bekleniyor")
+            .setContentText("Telefon konumu kapali. Konumu acmak icin dokunun.")
+            .setContentIntent(pending)
+            .setOngoing(true)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .notify(NOTIFICATION_ID, notification)
+        Log.w(TAG, "Cihaz konum hizmeti kapali; kullanici onayi gerekli.")
+    }
+
     private fun beginTracking() {
         if (starting || sessionId != null || closing) return
         starting = true
@@ -94,6 +127,9 @@ class SosLocationService : Service() {
                         Log.w(TAG, "SOS konum bildirimi gonderilemedi: ${message.message}")
                     }
                 }
+            }
+            if (!isDeviceLocationEnabled()) {
+                notifyLocationSettingsNeeded()
             }
             startLocationUpdates()
             // Fused Location combines available GPS, Wi-Fi and network sources.
