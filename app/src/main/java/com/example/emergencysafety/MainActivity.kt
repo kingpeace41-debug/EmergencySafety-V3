@@ -597,8 +597,8 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply {
-                topMargin = dp(12)
-                bottomMargin = dp(10)
+                topMargin = dp(2)
+                bottomMargin = dp(22)
             }
         }
 
@@ -658,6 +658,9 @@ class MainActivity : AppCompatActivity() {
         accountButton.addView(accountImage)
 
         buttonRow.addView(listeningButton)
+        buttonRow.addView(View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(24), dp(1))
+        })
         buttonRow.addView(accountButton)
 
         parent.addView(buttonRow, originalIndex)
