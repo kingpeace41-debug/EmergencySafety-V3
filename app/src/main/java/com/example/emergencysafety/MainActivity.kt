@@ -591,7 +591,7 @@ class MainActivity : AppCompatActivity() {
                     FrameLayout.LayoutParams.MATCH_PARENT
                 )
                 scaleType = ImageView.ScaleType.FIT_CENTER
-                setImageResource(R.drawable.button_power)
+                setImageResource(R.drawable.power_button)
                 contentDescription = "Sesli dinleme güç butonu"
             }
 
@@ -623,7 +623,7 @@ class MainActivity : AppCompatActivity() {
                 FrameLayout.LayoutParams.MATCH_PARENT
             )
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setImageResource(R.drawable.button_log)
+            setImageResource(R.drawable.log_button)
             contentDescription = "Hesabım butonu"
         }
 
