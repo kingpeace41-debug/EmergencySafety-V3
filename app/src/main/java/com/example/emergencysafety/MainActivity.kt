@@ -277,9 +277,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupAccountButton()
-        // Konsolu 16dp yukari, icerigi ve dokunma alanlariyla birlikte tasi.
+        // Konsolu toplam 26dp yukari, icerigi ve dokunma alanlariyla birlikte tasi.
         findViewById<View>(R.id.emergencyReadinessPanel)?.translationY =
-            -16f * resources.displayMetrics.density
+            -26f * resources.displayMetrics.density
 
         findViewById<View>(R.id.wolfTouchArea)?.setOnClickListener {
             vibrateOnClick()
@@ -642,7 +642,7 @@ class MainActivity : AppCompatActivity() {
 
         // Panel yukari tasindiktan sonra kalan gorunur boslugu azalt.
         // Butonlar tek sira halinde, dokunma alanlariyla birlikte tasinir.
-        buttonRow.translationY = -dp(28).toFloat()
+        buttonRow.translationY = -dp(33).toFloat()
         parent.addView(buttonRow, originalIndex)
     }
 
