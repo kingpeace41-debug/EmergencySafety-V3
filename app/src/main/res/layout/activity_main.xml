@@ -142,6 +142,84 @@
 
             </LinearLayout>
 
+            <!-- Acil durum hazirlik paneli: durumlar MainActivity tarafindan guncellenecek. -->
+            <LinearLayout
+                android:id="@+id/emergencyReadinessPanel"
+                android:layout_width="match_parent"
+                android:layout_height="112dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="6dp"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:paddingStart="26dp"
+                android:paddingEnd="26dp"
+                android:paddingTop="26dp"
+                android:paddingBottom="18dp"
+                android:background="@drawable/hazirlik_konsolu"
+                android:clickable="true"
+                android:focusable="true"
+                android:contentDescription="Acil durum hazirlik durumunu kontrol et">
+
+                <TextView
+                    android:id="@+id/readinessTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:text="◇  GÜVENLİK KONTROLÜ  ◇"
+                    android:textColor="#D9E5F3"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:orientation="horizontal"
+                    android:gravity="center">
+
+                    <TextView
+                        android:id="@+id/readinessMicrophone"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"\n                        android:layout_weight="1"\n                        android:gravity="center"
+                        android:layout_marginEnd="0dp"
+                        android:text="● Ses"
+                        android:textColor="#AEBBCD"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/readinessLocation"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"\n                        android:layout_weight="1"\n                        android:gravity="center"
+                        android:layout_marginEnd="18dp"
+                        android:text="● Konum"
+                        android:textColor="#AEBBCD"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/readinessConnection"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="8dp"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"\n                        android:layout_weight="1"\n                        android:gravity="center"
+                        android:text="● Bağlantı"
+                        android:textColor="#AEBBCD"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+
             <androidx.cardview.widget.CardView
                 android:id="@+id/btnToggleListening"
                 android:layout_width="54dp"
@@ -165,82 +243,6 @@
 
             </androidx.cardview.widget.CardView>
 
-            <!-- Acil durum hazirlik paneli: durumlar MainActivity tarafindan guncellenecek. -->
-            <LinearLayout
-                android:id="@+id/emergencyReadinessPanel"
-                android:layout_width="match_parent"
-                android:layout_height="104dp"
-                android:layout_marginStart="12dp"
-                android:layout_marginEnd="12dp"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="12dp"
-                android:orientation="vertical"
-                android:gravity="center"
-                android:paddingStart="18dp"
-                android:paddingEnd="18dp"
-                android:paddingTop="10dp"
-                android:paddingBottom="10dp"
-                android:background="@drawable/hazirlik_konsolu"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Acil durum hazirlik durumunu kontrol et">
-
-                <TextView
-                    android:id="@+id/readinessTitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:text="◇  GÜVENLİK KONTROLÜ  ◇"
-                    android:textColor="#D9E5F3"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:orientation="horizontal"
-                    android:gravity="center">
-
-                    <TextView
-                        android:id="@+id/readinessMicrophone"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:paddingTop="8dp"
-                        android:paddingBottom="8dp"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="18dp"
-                        android:text="● Ses"
-                        android:textColor="#AEBBCD"
-                        android:textSize="12sp" />
-
-                    <TextView
-                        android:id="@+id/readinessLocation"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:paddingTop="8dp"
-                        android:paddingBottom="8dp"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="18dp"
-                        android:text="● Konum"
-                        android:textColor="#AEBBCD"
-                        android:textSize="12sp" />
-
-                    <TextView
-                        android:id="@+id/readinessConnection"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:paddingTop="8dp"
-                        android:paddingBottom="8dp"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="● Bağlantı"
-                        android:textColor="#AEBBCD"
-                        android:textSize="12sp" />
-                </LinearLayout>
-            </LinearLayout>
 
         </LinearLayout>
     </ScrollView>
