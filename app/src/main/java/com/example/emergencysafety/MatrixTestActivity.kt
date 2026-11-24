@@ -176,7 +176,7 @@ class MatrixTestActivity : AppCompatActivity() {
                         try { withTimeout(30000L) { block() }; report(test, if (test == "MESSAGE_QUEUE" || test == "ROOM_SEARCH") "INFO" else "PASS") }
                         catch (e: kotlinx.coroutines.TimeoutCancellationException) { report(test, "FAIL", "TIMEOUT"); roomStatus.text = "İşlem zaman aşımına uğradı. Tekrar deneyin." }
                         catch (e: CancellationException) { throw e }
-                        catch (e: Exception) { report(test, "FAIL", e.javaClass.simpleName); roomStatus.text = if (e is IllegalArgumentException && roomInput.text.isBlank()) "Önce şifreli test odasını seçin." else "Test hatası: " + e.javaClass.simpleName }
+                        catch (e: Exception) { report(test, "FAIL", e.message?.takeIf { it in setOf("TEST_DEVICE_ALREADY_VERIFIED", "POLICY_NOT_AVAILABLE", "POLICY_DENIAL_TEST_FAILED", "ROOM_MEMBERS_MISMATCH", "ROOM_NOT_ENCRYPTED", "PEER_NOT_VERIFIED", "PEER_NOT_JOINED", "ROOM_NOT_SELECTED") } ?: e.javaClass.simpleName); roomStatus.text = if (e is IllegalArgumentException && roomInput.text.isBlank()) "Önce şifreli test odasını seçin." else "Test hatası: " + e.javaClass.simpleName }
                         finally { busy = false }
                     }
                 }
@@ -219,24 +219,31 @@ class MatrixTestActivity : AppCompatActivity() {
                 report("KEY_CHECK", "INFO", if (denials > 0) "POLICY_DENIAL_OBSERVED" else "NO_DENIAL_OBSERVED")
             }
         })
+        roomAction("DOĞRULANMAMIŞ CİHAZ ANAHTAR TESTİ", "KEY_CHECK") {
+            check(!verified(client.key.getTrustLevel(user, device).first())) { "TEST_DEVICE_ALREADY_VERIFIED" }
+            val policy = checkNotNull(MatrixPolicyAudit.policy?.get()) { "POLICY_NOT_AVAILABLE" }
+            check(policy.testDenial(user, device)) { "POLICY_DENIAL_TEST_FAILED" }
+            report("KEY_CHECK", "PASS", "SINGLE_AND_BATCH_DENIED")
+            roomStatus.text = "BAŞARILI: Tekli ve toplu anahtar politikası denemeleri reddedildi."
+        }
         addControl(roomStatus)
         fun selectedRoom(): RoomId {
             val value = roomInput.text.toString().trim()
-            require(value.startsWith("!") && value.length > 1) { "Önce şifreli test odasını seçin" }
+            require(value.startsWith("!") && value.length > 1) { "ROOM_NOT_SELECTED" }
             return RoomId(value)
         }
         suspend fun checkDirectRoom(id: RoomId, requireJoined: Boolean) {
             val room = requireNotNull(client.room.getById(id).first())
-            check(room.encrypted) { "Encryption required" }
+            check(room.encrypted) { "ROOM_NOT_ENCRYPTED" }
             if (requireJoined) check(room.membership == Membership.JOIN)
             val members = client.room.getAllState(id, MemberEventContent::class).first()
             val active = members.mapNotNull { (key, flow) ->
                 val membership = flow.first()?.content?.membership
                 if (membership == Membership.JOIN || membership == Membership.INVITE) key else null
             }.toSet()
-            check(active == setOf(client.userId.toString(), user.toString())) { "Unexpected or missing room members" }
+            check(active == setOf(client.userId.toString(), user.toString())) { "ROOM_MEMBERS_MISMATCH" }
             if (requireJoined) {
-                check(members[user.toString()]?.first()?.content?.membership == Membership.JOIN)
+                check(members[user.toString()]?.first()?.content?.membership == Membership.JOIN) { "PEER_NOT_JOINED" }
             }
         }
         roomAction("ŞİFRELİ TEST ODASI OLUŞTUR", "ROOM_CREATE") {
@@ -274,14 +281,14 @@ class MatrixTestActivity : AppCompatActivity() {
         }
         roomAction("ŞİFRELİ ODAYA KATIL", "ROOM_JOIN") {
             val id = selectedRoom()
-            check(verified(client.key.getTrustLevel(user, device).first()))
+            check(verified(client.key.getTrustLevel(user, device).first())) { "PEER_NOT_VERIFIED" }
             checkDirectRoom(id, false)
             client.api.room.joinRoom(id).getOrThrow()
             roomStatus.text = "Katılım tamamlandı"
         }
         roomAction("ŞİFRELİ TEST MESAJI GÖNDER", "MESSAGE_QUEUE") {
             val id = selectedRoom()
-            check(verified(client.key.getTrustLevel(user, device).first()))
+            check(verified(client.key.getTrustLevel(user, device).first())) { "PEER_NOT_VERIFIED" }
             checkDirectRoom(id, true)
             val body = messageInput.text.toString().trim()
             check(body.isNotEmpty())
