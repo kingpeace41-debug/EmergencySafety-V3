@@ -11,6 +11,10 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.CancellationException
+import de.connect2x.trixnity.client.MatrixClient
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -21,6 +25,57 @@ class MatrixTestActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var resultText: TextView
     private lateinit var testButton: Button
+
+    private var syncJob: Job? = null
+    private var syncClient: MatrixClient? = null
+    private lateinit var continuousButton: Button
+    private lateinit var testLayout: LinearLayout
+
+    override fun onStop() {
+        syncJob?.cancel()
+        super.onStop()
+    }
+
+    private fun runContinuousSync() {
+        if (syncJob?.isActive == true) {
+            continuousButton.isEnabled = false
+            syncJob?.cancel()
+            return
+        }
+        if (syncJob?.isCompleted == false) return
+        val buttons = (0 until testLayout.childCount)
+            .mapNotNull { testLayout.getChildAt(it) as? Button }
+            .filter { it !== continuousButton }
+        if (buttons.any { !it.isEnabled }) return
+        buttons.forEach { it.isEnabled = false }
+        continuousButton.text = "SENKRONİZASYONU DURDUR"
+        statusText.text = "Sürekli senkronizasyon hazırlanıyor..."
+        resultText.text = ""
+        syncJob = CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val client = MatrixClientManager.openForCurrentSession(applicationContext).getOrThrow()
+                syncClient = client
+                withTimeout(60000L) { client.startSync(presence = null) }
+                statusText.text = "SENKRONİZASYON BAŞLATILDI"
+                resultText.text = "Başlatma çağrısı tamamlandı. Veri akışı henüz doğrulanmadı."
+                kotlinx.coroutines.awaitCancellation()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                statusText.text = "SENKRONİZASYON HATASI"
+                resultText.text = error.javaClass.simpleName
+            } finally {
+                val stopped = withContext(NonCancellable + Dispatchers.IO) {
+                    runCatching { syncClient?.cancelSync() }.isSuccess
+                }
+                syncClient = null
+                continuousButton.text = "SÜREKLİ SENKRONİZASYON BAŞLAT"
+                continuousButton.isEnabled = stopped
+                buttons.forEach { it.isEnabled = stopped }
+                statusText.text = if (stopped) "SENKRONİZASYON DURDURULDU" else "SENKRONİZASYON DURDURULAMADI"
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,6 +136,13 @@ class MatrixTestActivity : AppCompatActivity() {
             text = "ŞİFRELEME ANAHTARLARINI DOĞRULA"
             setOnClickListener { runKeyTest(this) }
         })
+
+        testLayout = layout
+        continuousButton = Button(this).apply {
+            text = "SÜREKLİ SENKRONİZASYON BAŞLAT"
+            setOnClickListener { runContinuousSync() }
+        }
+        layout.addView(continuousButton)
 
         setContentView(android.widget.ScrollView(this).apply {
             isFillViewport = true
@@ -160,6 +222,8 @@ class MatrixTestActivity : AppCompatActivity() {
     }
 
     private fun runStorageTest() {
+        val button = (0 until testLayout.childCount).mapNotNull { testLayout.getChildAt(it) as? Button }.first { it.text == "YEREL DEPOLAMA TESTİ" }
+        button.isEnabled = false
         statusText.text = "Yerel depolama kontrol ediliyor..."
         resultText.text = ""
         CoroutineScope(Dispatchers.Main).launch {
@@ -178,6 +242,7 @@ class MatrixTestActivity : AppCompatActivity() {
                     }
                 }
             }
+            button.isEnabled = true
             statusText.text = if (result.isSuccess) "DEPOLAMA TESTİ BAŞARILI" else "DEPOLAMA TESTİ BAŞARISIZ"
             resultText.text = if (result.isSuccess) "SQLite yazma, kapatma ve yeniden okuma başarılı." else result.exceptionOrNull()?.javaClass?.simpleName ?: "Bilinmeyen hata"
         }
