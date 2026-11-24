@@ -2,6 +2,8 @@
 package com.example.emergencysafety
 
 import android.os.Bundle
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import java.io.File
 import android.view.Gravity
 import android.widget.Button
 import android.widget.LinearLayout
@@ -58,8 +60,36 @@ class MatrixTestActivity : AppCompatActivity() {
         layout.addView(statusText)
         layout.addView(resultText)
         layout.addView(testButton)
+        layout.addView(Button(this).apply {
+            text = "YEREL DEPOLAMA TESTİ"
+            setOnClickListener { runStorageTest() }
+        })
 
         setContentView(layout)
+    }
+
+    private fun runStorageTest() {
+        statusText.text = "Yerel depolama kontrol ediliyor..."
+        resultText.text = ""
+        CoroutineScope(Dispatchers.Main).launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val path = File(noBackupFilesDir, "matrix-storage-test.db").absolutePath
+                    val driver = BundledSQLiteDriver()
+                    driver.open(path).use { db ->
+                        db.prepare("CREATE TABLE IF NOT EXISTS storage_test (id INTEGER PRIMARY KEY, value TEXT NOT NULL)").use { it.step() }
+                        db.prepare("INSERT OR REPLACE INTO storage_test VALUES (1, 'ES_TEST')").use { it.step() }
+                    }
+                    driver.open(path).use { db ->
+                        db.prepare("SELECT value FROM storage_test WHERE id = 1").use {
+                            check(it.step() && it.getText(0) == "ES_TEST")
+                        }
+                    }
+                }
+            }
+            statusText.text = if (result.isSuccess) "DEPOLAMA TESTİ BAŞARILI" else "DEPOLAMA TESTİ BAŞARISIZ"
+            resultText.text = if (result.isSuccess) "SQLite yazma, kapatma ve yeniden okuma başarılı." else result.exceptionOrNull()?.javaClass?.simpleName ?: "Bilinmeyen hata"
+        }
     }
 
     private fun runConnectionTest() {
