@@ -103,7 +103,12 @@ internal object MatrixClientManager {
             MatrixClient.create(
                 repositoriesModule = storage.repositories,
                 mediaStoreModule = storage.media,
-                cryptoDriverModule = storage.crypto
+                cryptoDriverModule = storage.crypto,
+                configuration = {
+                    storeTimelineEventContentUnencrypted = false
+                    defaultKeyBackupEnabled = false
+                    modulesFactories += ::createMatrixSecurityModule
+                }
             ).getOrThrow()
         }
 
@@ -128,7 +133,12 @@ internal object MatrixClientManager {
                 accessToken = accessToken,
                 accessTokenExpiresInMs = expiresInMs,
                 refreshToken = refreshToken
-            )
+            ),
+            configuration = {
+                storeTimelineEventContentUnencrypted = false
+                defaultKeyBackupEnabled = false
+                modulesFactories += ::createMatrixSecurityModule
+            }
         ).getOrThrow()
     }
 
