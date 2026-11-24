@@ -26,7 +26,7 @@ internal object MatrixClientManager {
     private var activeClient: MatrixClient? = null
     private var activeSessionId: String? = null
 
-    // Test-only entry point. Provisioning remains disabled until server lifecycle is ready.
+    // Test-only entry point. Server-side test allowlist applies.
     suspend fun openForCurrentSession(context: Context): Result<MatrixClient> =
         withContext(Dispatchers.IO) {
             clientLock.withLock {
@@ -72,8 +72,17 @@ internal object MatrixClientManager {
                         client.closeSuspending()
                         error("EmergencySafety session changed")
                     }
-                    // Confirmation is deliberately deferred until the on-device
-                    // persistence test and server-side recovery policy are verified.
+                    // Confirm only after persistent storage has been opened successfully.
+                    // The server endpoint is idempotent; retry on the next open if it fails.
+                    try {
+                        check(ConnectionApi.confirmMatrixSessionDelivery(app, client.deviceId.toString())) {
+                            "Matrix delivery confirmation failed"
+                        }
+                        check(SecureSessionStore.getSessionId(app) == sessionId)
+                    } catch (error: Throwable) {
+                        runCatching { client.closeSuspending() }
+                        throw error
+                    }
                     activeClient = client
                     activeSessionId = sessionId
                     client
