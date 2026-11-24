@@ -13,6 +13,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlin.time.Duration.Companion.seconds
 
 class MatrixTestActivity : AppCompatActivity() {
 
@@ -70,6 +72,11 @@ class MatrixTestActivity : AppCompatActivity() {
             setOnClickListener { runSessionTest(this) }
         })
 
+        layout.addView(Button(this).apply {
+            text = "MATRIX SENKRONİZASYON TESTİ"
+            setOnClickListener { runSyncTest(this) }
+        })
+
         setContentView(layout)
     }
 
@@ -85,6 +92,29 @@ class MatrixTestActivity : AppCompatActivity() {
                 resultText.text = "Cihaz kimliği: ${client.deviceId}\nKalıcı istemci oluşturuldu. Şifreli mesaj testi henüz yapılmadı."
             } catch (error: Exception) {
                 statusText.text = "MATRIX OTURUMU BAŞLATILAMADI"
+                resultText.text = error.javaClass.simpleName
+            } finally {
+                button.isEnabled = true
+            }
+        }
+    }
+
+    private fun runSyncTest(button: Button) {
+        button.isEnabled = false
+        statusText.text = "Matrix senkronizasyonu yapılıyor..."
+        resultText.text = ""
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val client = MatrixClientManager.openForCurrentSession(applicationContext).getOrThrow()
+                withContext(Dispatchers.IO) {
+                    withTimeout(60000L) {
+                        client.syncOnce(presence = null, timeout = 10.seconds).getOrThrow()
+                    }
+                }
+                statusText.text = "MATRIX SENKRONİZASYONU BAŞARILI"
+                resultText.text = "Cihaz kimliği: ${client.deviceId}\nTek seferlik senkronizasyon tamamlandı. Şifreli mesaj testi henüz yapılmadı."
+            } catch (error: Exception) {
+                statusText.text = "MATRIX SENKRONİZASYONU BAŞARISIZ"
                 resultText.text = error.javaClass.simpleName
             } finally {
                 button.isEnabled = true
