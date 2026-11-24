@@ -1,6 +1,8 @@
 package com.example.emergencysafety
 
 import android.content.Context
+import de.connect2x.trixnity.clientserverapi.client.ClassicMatrixClientAuthProviderData
+import io.ktor.http.Url
 import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import de.connect2x.trixnity.client.MatrixClient
@@ -32,6 +34,31 @@ internal object MatrixClientManager {
                 cryptoDriverModule = storage.crypto
             ).getOrThrow()
         }
+
+    // Initial provisioning only; never overwrite an existing crypto database.
+    suspend fun initializeNew(
+        context: Context,
+        sessionId: String,
+        accessToken: String,
+        refreshToken: String?,
+        expiresInMs: Long?
+    ): Result<MatrixClient> = runCatching {
+        require(accessToken.isNotBlank())
+        val storage = prepareStorage(context, sessionId)
+        val database = File(context.applicationContext.noBackupFilesDir, "matrix/$sessionId/matrix.db")
+        check(!database.exists()) { "Existing Matrix storage must be reopened" }
+        MatrixClient.create(
+            repositoriesModule = storage.repositories,
+            mediaStoreModule = storage.media,
+            cryptoDriverModule = storage.crypto,
+            authProviderData = ClassicMatrixClientAuthProviderData(
+                baseUrl = Url("https://emergency-safety.com"),
+                accessToken = accessToken,
+                accessTokenExpiresInMs = expiresInMs,
+                refreshToken = refreshToken
+            )
+        ).getOrThrow()
+    }
 
     fun prepareStorage(context: Context, sessionId: String): StorageModules {
         require(Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$").matches(sessionId))
