@@ -73,7 +73,8 @@ class MatrixTestActivity : AppCompatActivity() {
 
     private suspend fun watchSas(client: MatrixClient) = coroutineScope {
         val choices = peers(client)
-        var (user, device) = choices.first()
+        val prefs = getSharedPreferences("matrix_test_" + client.deviceId, MODE_PRIVATE)
+        var (user, device) = choices.firstOrNull { it.second == prefs.getString("peer", "") } ?: choices.first()
         val peerButton = Button(this@MatrixTestActivity).apply { text = "TEST CİHAZI: " + device }
         testLayout.addView(peerButton, testLayout.indexOfChild(sasText))
 
@@ -121,7 +122,7 @@ class MatrixTestActivity : AppCompatActivity() {
                 catch (e: Exception) { sasText.text = "Güven kontrolü başarısız" }
             }
         }
-        val roomInput = android.widget.EditText(this@MatrixTestActivity).apply { hint = "Şifreli test oda kimliği"; setSingleLine(true) }
+        val roomInput = android.widget.EditText(this@MatrixTestActivity).apply { hint = "Şifreli test oda kimliği"; setSingleLine(true); setText(prefs.getString("room_" + device, "")) }
         val messageInput = android.widget.EditText(this@MatrixTestActivity).apply { hint = "Test mesajı"; setText("ES E2EE TEST") }
         val roomStatus = TextView(this@MatrixTestActivity)
         val controls = mutableListOf<android.view.View>()
@@ -134,6 +135,7 @@ class MatrixTestActivity : AppCompatActivity() {
                     busy = true
                     launch {
                         try { withTimeout(30000L) { block() } }
+                        catch (e: kotlinx.coroutines.TimeoutCancellationException) { roomStatus.text = "İşlem zaman aşımına uğradı. Tekrar deneyin." }
                         catch (e: CancellationException) { throw e }
                         catch (e: Exception) { roomStatus.text = if (e is IllegalArgumentException && roomInput.text.isBlank()) "Önce şifreli test odasını seçin." else "Test hatası: " + e.javaClass.simpleName }
                         finally { busy = false }
@@ -152,11 +154,19 @@ class MatrixTestActivity : AppCompatActivity() {
             actedState = null
             confirmed = false
             completed = false
-            roomInput.text.clear()
+            prefs.edit().putString("peer", device).apply()
+            roomInput.setText(prefs.getString("room_" + device, ""))
             roomStatus.text = ""
             sasText.text = "Karşı cihaz seçildi. Güveni kontrol edin."
         }
         addControl(roomInput)
+        roomInput.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                prefs.edit().putString("room_" + device, s?.toString().orEmpty()).apply()
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
         addControl(messageInput)
         addControl(roomStatus)
         fun selectedRoom(): RoomId {
@@ -179,10 +189,23 @@ class MatrixTestActivity : AppCompatActivity() {
             val rooms = client.room.getAll().first()
             val found = rooms.mapNotNull { (id, flow) ->
                 val room = flow.first()
-                if (room?.encrypted == true) id.toString() else null
+                if (room?.encrypted == true && (room.membership == Membership.JOIN || room.membership == Membership.INVITE)) id.toString() else null
             }
             roomStatus.text = found.joinToString("\n").ifBlank { "Şifreli oda bulunamadı" }
             if (found.size == 1) roomInput.setText(found.first())
+            else if (found.isNotEmpty()) {
+                val selectedDevice = device
+                androidx.appcompat.app.AlertDialog.Builder(this@MatrixTestActivity)
+                    .setTitle("Şifreli test odasını seç")
+                    .setItems(found.toTypedArray()) { _, index ->
+                        if (device == selectedDevice && !busy) {
+                            roomInput.setText(found[index])
+                            roomStatus.text = "Seçilen oda: " + found[index]
+                        }
+                    }
+                    .setNegativeButton("İptal", null)
+                    .show()
+            }
         }
         roomAction("ŞİFRELİ ODAYA KATIL") {
             val id = selectedRoom()
@@ -228,7 +251,7 @@ class MatrixTestActivity : AppCompatActivity() {
                 val state = v.state.value
                 if (v.theirUserId != user || (v.theirDeviceId != null && v.theirDeviceId != device)) {
                     sasText.text = "Beklenmeyen cihaz: doğrulama reddedildi"
-                    if (current != null && !busy) v.cancel()
+                    if (current != null && !busy) { busy = true; launch { try { withTimeout(5000L) { v.cancel() } } catch (e: kotlinx.coroutines.TimeoutCancellationException) { sasText.text = "İptal zaman aşımı" } catch (e: CancellationException) { throw e } catch (e: Exception) { sasText.text = "İptal hatası" } finally { busy = false } } }
                 } else {
                     sasReject.isEnabled = current != null && !busy && state !is ActiveVerificationState.Done && state !is ActiveVerificationState.Cancel
                     sasReject.setOnClickListener {
@@ -288,9 +311,9 @@ class MatrixTestActivity : AppCompatActivity() {
         } finally { controls.forEach { testLayout.removeView(it) } }
     }
 
-    override fun onStop() {
+    override fun onDestroy() {
         syncJob?.cancel()
-        super.onStop()
+        super.onDestroy()
     }
 
     private fun runContinuousSync() {
@@ -342,6 +365,7 @@ class MatrixTestActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
