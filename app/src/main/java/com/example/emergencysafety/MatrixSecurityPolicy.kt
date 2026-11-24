@@ -9,6 +9,11 @@ import de.connect2x.trixnity.crypto.olm.OlmEncryptionServiceImpl
 import de.connect2x.trixnity.crypto.olm.OlmStore
 import org.koin.dsl.module
 
+internal object MatrixPolicyAudit {
+    val checks = java.util.concurrent.atomic.AtomicLong()
+    val denied = java.util.concurrent.atomic.AtomicLong()
+}
+
 // Test policy: all non-verification Olm payloads require verified recipients.
 internal class MatrixSecurityPolicy(
     private val delegate: OlmEncryptionService,
@@ -17,11 +22,14 @@ internal class MatrixSecurityPolicy(
     private suspend fun allowed(content: EventContent, user: UserId, device: String): Boolean {
         val name = content::class.qualifiedName.orEmpty()
         if (name.startsWith("de.connect2x.trixnity.core.model.events.m.key.verification.")) return true
-        return when (val trust = store.getTrustLevel(user, device)) {
+        MatrixPolicyAudit.checks.incrementAndGet()
+        val permitted = when (val trust = store.getTrustLevel(user, device)) {
             is DeviceTrustLevel.Valid -> trust.verified
             is DeviceTrustLevel.CrossSigned -> trust.verified
             else -> false
         }
+        if (!permitted) MatrixPolicyAudit.denied.incrementAndGet()
+        return permitted
     }
 
     private fun denied(): Result<OlmEncryptedToDeviceEventContent> =
