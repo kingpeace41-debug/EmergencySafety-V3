@@ -12,6 +12,7 @@ import org.koin.dsl.module
 internal object MatrixPolicyAudit {
     val checks = java.util.concurrent.atomic.AtomicLong()
     val denied = java.util.concurrent.atomic.AtomicLong()
+    @Volatile var policy: java.lang.ref.WeakReference<MatrixSecurityPolicy>? = null
 }
 
 // Test policy: all non-verification Olm payloads require verified recipients.
@@ -19,6 +20,25 @@ internal class MatrixSecurityPolicy(
     private val delegate: OlmEncryptionService,
     private val store: OlmStore
 ) : OlmEncryptionService by delegate {
+    init { MatrixPolicyAudit.policy = java.lang.ref.WeakReference(this) }
+
+    // Harmless synthetic payload; no room key and no send-to-device call.
+    suspend fun testDenial(user: UserId, device: String): Boolean {
+        val trust = store.getTrustLevel(user, device)
+        check(when (trust) {
+            is DeviceTrustLevel.Valid -> !trust.verified
+            is DeviceTrustLevel.CrossSigned -> !trust.verified
+            else -> true
+        }) { "TEST_DEVICE_ALREADY_VERIFIED" }
+        val payload = de.connect2x.trixnity.core.model.events.m.room.EncryptionEventContent()
+        val before = MatrixPolicyAudit.denied.get()
+        val single = encryptOlm(payload, user, device)
+        val batch = encryptOlm(payload, setOf(user to device))[user to device]
+        return single.exceptionOrNull() is OlmEncryptionService.EncryptOlmError.NoOlmSupported &&
+            batch?.exceptionOrNull() is OlmEncryptionService.EncryptOlmError.NoOlmSupported &&
+            MatrixPolicyAudit.denied.get() >= before + 2
+    }
+
     private suspend fun allowed(content: EventContent, user: UserId, device: String): Boolean {
         val name = content::class.qualifiedName.orEmpty()
         if (name.startsWith("de.connect2x.trixnity.core.model.events.m.key.verification.")) return true
