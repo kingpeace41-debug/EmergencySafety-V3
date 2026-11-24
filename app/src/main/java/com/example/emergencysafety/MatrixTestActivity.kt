@@ -77,7 +77,15 @@ class MatrixTestActivity : AppCompatActivity() {
             setOnClickListener { runSyncTest(this) }
         })
 
-        setContentView(layout)
+        layout.addView(Button(this).apply {
+            text = "ŞİFRELEME ANAHTARLARINI DOĞRULA"
+            setOnClickListener { runKeyTest(this) }
+        })
+
+        setContentView(android.widget.ScrollView(this).apply {
+            isFillViewport = true
+            addView(layout)
+        })
     }
 
     private fun runSessionTest(button: Button) {
@@ -115,6 +123,35 @@ class MatrixTestActivity : AppCompatActivity() {
                 resultText.text = "Cihaz kimliği: ${client.deviceId}\nTek seferlik senkronizasyon tamamlandı. Şifreli mesaj testi henüz yapılmadı."
             } catch (error: Exception) {
                 statusText.text = "MATRIX SENKRONİZASYONU BAŞARISIZ"
+                resultText.text = error.javaClass.simpleName
+            } finally {
+                button.isEnabled = true
+            }
+        }
+    }
+
+    private fun runKeyTest(button: Button) {
+        button.isEnabled = false
+        statusText.text = "Açık cihaz anahtarları kontrol ediliyor..."
+        resultText.text = ""
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val client = MatrixClientManager.openForCurrentSession(applicationContext).getOrThrow()
+                withContext(Dispatchers.IO) {
+                    withTimeout(30000L) {
+                        val response = client.api.key.getKeys(
+                            deviceKeys = mapOf(client.userId to setOf(client.deviceId))
+                        ).getOrThrow()
+                        val keys = requireNotNull(response.deviceKeys?.get(client.userId)?.get(client.deviceId)).signed
+                        check(keys.userId == client.userId && keys.deviceId == client.deviceId)
+                        check(client.identityKey in keys.keys)
+                        check(client.signingKey in keys.keys)
+                    }
+                }
+                statusText.text = "AÇIK ANAHTARLAR EŞLEŞİYOR"
+                resultText.text = "Curve25519 ve Ed25519 anahtarları sunucudaki kayıtla eşleşti. Karşılıklı cihaz güveni henüz doğrulanmadı."
+            } catch (error: Exception) {
+                statusText.text = "ANAHTAR KONTROLÜ BAŞARISIZ"
                 resultText.text = error.javaClass.simpleName
             } finally {
                 button.isEnabled = true
