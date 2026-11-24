@@ -106,6 +106,20 @@ class BlueInfoActivity : AppCompatActivity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { bottomMargin = dp(9) })
         }
+        // Gecici Matrix test girisi - yayin oncesinde kaldirilacak.
+        content.addView(text("MATRIX TEST MERKEZİ   ›", 16f, true).apply {
+            background = panelBackground()
+            setPadding(dp(15), dp(17), dp(12), dp(17))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                dialog.dismiss()
+                startActivity(Intent(this@BlueInfoActivity, MatrixTestActivity::class.java))
+            }
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
         scroll.addView(content)
         dialog.setContentView(scroll)
         dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
