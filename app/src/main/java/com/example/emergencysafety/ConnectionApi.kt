@@ -69,6 +69,38 @@ internal object ConnectionApi {
         val json: JSONObject
     )
 
+    // Credentials are kept in memory and never included in diagnostic output.
+    internal class MatrixSessionCredentials(
+        val userId: String,
+        val deviceId: String,
+        val accessToken: String,
+        val refreshToken: String?,
+        val expiresInMs: Long?
+    )
+
+    fun requestMatrixSession(context: Context): ConnectionApiResult<MatrixSessionCredentials> {
+        val response = request(context, "/matrix/session", "POST", JSONObject())
+        if (!response.optBoolean("success", false)) {
+            return ConnectionApiResult(false, "Matrix oturumu şu anda alınamadı.")
+        }
+        val matrix = response.optJSONObject("matrix")
+            ?: return ConnectionApiResult(false, "Matrix oturum yanıtı eksik.")
+        val userId = matrix.optString("userId", "")
+        val deviceId = matrix.optString("deviceId", "")
+        val token = matrix.optString("accessToken", "")
+        if (matrix.optString("homeserver") != "https://emergency-safety.com" ||
+            !Regex("^@es[a-f0-9]{32}:emergency-safety[.]com$").matches(userId) ||
+            !Regex("^ES[a-f0-9]{24}$").matches(deviceId) ||
+            token.isBlank()) {
+            return ConnectionApiResult(false, "Matrix oturum yanıtı geçersiz.")
+        }
+        val refresh = if (matrix.isNull("refreshToken")) null
+            else matrix.optString("refreshToken", "").takeIf { it.isNotBlank() }
+        val expires = matrix.optLong("expiresInMs", -1L).takeIf { it > 0 }
+        return ConnectionApiResult(true, "Matrix oturumu alındı.",
+            MatrixSessionCredentials(userId, deviceId, token, refresh, expires))
+    }
+
     fun sendRequest(
         context: Context,
         email: String
