@@ -16,8 +16,48 @@ import de.connect2x.trixnity.client.media.okio.okio
 import de.connect2x.trixnity.client.cryptodriver.vodozemac.vodozemac
 import okio.Path.Companion.toPath
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 internal object MatrixClientManager {
+    private val clientLock = Mutex()
+    private var activeClient: MatrixClient? = null
+    private var activeSessionId: String? = null
+
+    // Test-only entry point. Provisioning remains disabled until server lifecycle is ready.
+    suspend fun openForCurrentSession(context: Context): Result<MatrixClient> =
+        withContext(Dispatchers.IO) {
+            clientLock.withLock {
+                runCatching {
+                    val app = context.applicationContext
+                    val sessionId = requireNotNull(SecureSessionStore.getSessionId(app))
+                    require(Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$").matches(sessionId))
+                    check(activeSessionId == null || activeSessionId == sessionId)
+                    activeClient?.let { return@runCatching it }
+                    val database = File(app.noBackupFilesDir, "matrix/$sessionId/matrix.db")
+                    val client = if (database.exists()) {
+                        reopenExisting(app, sessionId).getOrThrow()
+                    } else {
+                        val credentials = requireNotNull(ConnectionApi.requestMatrixSession(app).data) {
+                            "Matrix session unavailable"
+                        }
+                        check(SecureSessionStore.getSessionId(app) == sessionId)
+                        initializeNew(app, sessionId, credentials.accessToken,
+                            credentials.refreshToken, credentials.expiresInMs).getOrThrow()
+                    }
+                    if (SecureSessionStore.getSessionId(app) != sessionId) {
+                        client.closeSuspending()
+                        error("EmergencySafety session changed")
+                    }
+                    activeClient = client
+                    activeSessionId = sessionId
+                    client
+                }
+            }
+        }
+
     internal data class StorageModules(
         val repositories: RepositoriesModule,
         val media: MediaStoreModule,
