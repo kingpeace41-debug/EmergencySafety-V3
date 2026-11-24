@@ -37,6 +37,43 @@ import kotlin.time.Duration.Companion.seconds
 
 class MatrixTestActivity : AppCompatActivity() {
 
+    private val reportScope = CoroutineScope(Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
+    private val reportLock = kotlinx.coroutines.sync.Mutex()
+    private fun report(name: String, result: String, error: String? = null) {
+        val app = applicationContext
+        val session = SecureSessionStore.getSessionId(app) ?: return
+        val prefs = app.getSharedPreferences("matrix_reports_" + session, MODE_PRIVATE)
+        val id = java.util.UUID.randomUUID().toString()
+        val body = org.json.JSONObject().put("reportId", id).put("testName", name)
+            .put("result", result).put("testedAt", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }.format(java.util.Date()))
+        if (error != null) body.put("errorCode", error.replace(Regex("[^A-Za-z0-9_]"), "_").take(80).ifBlank { "UNKNOWN" })
+        prefs.edit().putString(id, body.toString()).commit()
+        flushReports()
+    }
+    private fun flushReports() {
+        val app = applicationContext
+        val session = SecureSessionStore.getSessionId(app) ?: return
+        val prefs = app.getSharedPreferences("matrix_reports_" + session, MODE_PRIVATE)
+        reportScope.launch {
+            if (!reportLock.tryLock()) return@launch
+            try {
+                for ((id, raw) in prefs.all) {
+                    if (SecureSessionStore.getSessionId(app) != session) break
+                    val body = org.json.JSONObject(raw as? String ?: continue)
+                    if (!ConnectionApi.sendMatrixTestReport(app, body)) break
+                    prefs.edit().remove(id).commit()
+                }
+            } finally { reportLock.unlock() }
+        }
+    }
+    override fun onResume() {
+        super.onResume()
+        flushReports()
+        if (syncJob?.isActive == true) report("BACKGROUND_RETURN", "INFO")
+    }
+
     private lateinit var statusText: TextView
     private lateinit var resultText: TextView
     private lateinit var testButton: Button
@@ -117,6 +154,7 @@ class MatrixTestActivity : AppCompatActivity() {
             launch {
                 try {
                     val level = withTimeout(15000L) { client.key.getTrustLevel(user, device).first() }
+                    report("DEVICE_TRUST", if (verified(level)) "PASS" else "FAIL")
                     sasText.text = "Kayıtlı cihaz güveni: " + if (verified(level)) "DOĞRULANMIŞ" else "DOĞRULANMAMIŞ (${level.javaClass.simpleName})"
                 } catch (e: CancellationException) { throw e }
                 catch (e: Exception) { sasText.text = "Güven kontrolü başarısız" }
@@ -127,17 +165,17 @@ class MatrixTestActivity : AppCompatActivity() {
         val roomStatus = TextView(this@MatrixTestActivity)
         val controls = mutableListOf<android.view.View>()
         fun addControl(view: android.view.View) { controls.add(view); testLayout.addView(view) }
-        fun roomAction(label: String, block: suspend () -> Unit) {
+        fun roomAction(label: String, test: String, block: suspend () -> Unit) {
             addControl(Button(this@MatrixTestActivity).apply {
                 text = label
                 setOnClickListener {
                     if (busy) return@setOnClickListener
                     busy = true
                     launch {
-                        try { withTimeout(30000L) { block() } }
-                        catch (e: kotlinx.coroutines.TimeoutCancellationException) { roomStatus.text = "İşlem zaman aşımına uğradı. Tekrar deneyin." }
+                        try { withTimeout(30000L) { block() }; report(test, if (test == "MESSAGE_QUEUE" || test == "ROOM_SEARCH") "INFO" else "PASS") }
+                        catch (e: kotlinx.coroutines.TimeoutCancellationException) { report(test, "FAIL", "TIMEOUT"); roomStatus.text = "İşlem zaman aşımına uğradı. Tekrar deneyin." }
                         catch (e: CancellationException) { throw e }
-                        catch (e: Exception) { roomStatus.text = if (e is IllegalArgumentException && roomInput.text.isBlank()) "Önce şifreli test odasını seçin." else "Test hatası: " + e.javaClass.simpleName }
+                        catch (e: Exception) { report(test, "FAIL", e.javaClass.simpleName); roomStatus.text = if (e is IllegalArgumentException && roomInput.text.isBlank()) "Önce şifreli test odasını seçin." else "Test hatası: " + e.javaClass.simpleName }
                         finally { busy = false }
                     }
                 }
@@ -174,7 +212,7 @@ class MatrixTestActivity : AppCompatActivity() {
             require(value.startsWith("!") && value.length > 1) { "Önce şifreli test odasını seçin" }
             return RoomId(value)
         }
-        roomAction("ŞİFRELİ TEST ODASI OLUŞTUR") {
+        roomAction("ŞİFRELİ TEST ODASI OLUŞTUR", "ROOM_CREATE") {
             check(verified(client.key.getTrustLevel(user, device).first())) { "Önce cihaz güvenini doğrulayın" }
             val id = client.api.room.createRoom(
                 name = "ES E2EE TEST",
@@ -185,7 +223,7 @@ class MatrixTestActivity : AppCompatActivity() {
             roomInput.setText(id.toString())
             roomStatus.text = "Şifreli test odası oluşturuldu. Karşı cihaz davet edildi."
         }
-        roomAction("ŞİFRELİ TEST ODALARINI BUL") {
+        roomAction("ŞİFRELİ TEST ODALARINI BUL", "ROOM_SEARCH") {
             val rooms = client.room.getAll().first()
             val found = rooms.mapNotNull { (id, flow) ->
                 val room = flow.first()
@@ -207,14 +245,14 @@ class MatrixTestActivity : AppCompatActivity() {
                     .show()
             }
         }
-        roomAction("ŞİFRELİ ODAYA KATIL") {
+        roomAction("ŞİFRELİ ODAYA KATIL", "ROOM_JOIN") {
             val id = selectedRoom()
             check(verified(client.key.getTrustLevel(user, device).first()))
             check(client.room.getById(id).first()?.encrypted == true)
             client.api.room.joinRoom(id).getOrThrow()
             roomStatus.text = "Katılım tamamlandı"
         }
-        roomAction("ŞİFRELİ TEST MESAJI GÖNDER") {
+        roomAction("ŞİFRELİ TEST MESAJI GÖNDER", "MESSAGE_QUEUE") {
             val id = selectedRoom()
             check(verified(client.key.getTrustLevel(user, device).first()))
             val room = requireNotNull(client.room.getById(id).first())
@@ -227,6 +265,13 @@ class MatrixTestActivity : AppCompatActivity() {
         launch {
             client.room.getTimelineEventsFromNowOn().collect { event ->
                 if (event.event.roomId.toString() == roomInput.text.toString().trim()) {
+                    val encrypted = event.event.content::class.simpleName == "MegolmEncryptedMessageEventContent"
+                    if (encrypted) {
+                        report("ENCRYPTED_EVENT", "PASS")
+                        report("MESSAGE_DECRYPT", if (event.content?.getOrNull() != null) "PASS" else "FAIL")
+                    } else if (event.event.content::class.simpleName?.contains("MessageEventContent") == true) {
+                        report("ENCRYPTED_EVENT", "FAIL", "PLAINTEXT_EVENT")
+                    }
                     roomStatus.text = "Oda olayı: " + event.event.content::class.simpleName +
                         "\nÇözülmüş içerik: " + (event.content?.getOrNull()?.toString() ?: "Yok")
                 }
@@ -298,6 +343,7 @@ class MatrixTestActivity : AppCompatActivity() {
                             if (!completed) {
                                 completed = true
                                 val level = withTimeout(15000L) { client.key.getTrustLevel(user, device).first() }
+                                report("SAS_VERIFICATION", if (confirmed && verified(level)) "PASS" else "FAIL")
                                 sasText.text = if (confirmed && verified(level)) "SAS TAMAMLANDI — CİHAZ DOĞRULANMIŞ" else "SAS tamamlandı; cihaz güveni ayrıca kontrol edilmeli"
                             }
                         }
@@ -306,6 +352,7 @@ class MatrixTestActivity : AppCompatActivity() {
                     }
                 }
             }
+            flushReports()
             delay(250)
         }
         } finally { controls.forEach { testLayout.removeView(it) } }
@@ -336,12 +383,14 @@ class MatrixTestActivity : AppCompatActivity() {
                 val client = MatrixClientManager.openForCurrentSession(applicationContext).getOrThrow()
                 syncClient = client
                 withTimeout(60000L) { client.startSync(presence = null) }
+                report("SYNC_START", "INFO")
                 statusText.text = "SENKRONİZASYON BAŞLATILDI"
                 resultText.text = "Başlatma çağrısı tamamlandı. Veri akışı henüz doğrulanmadı."
                 watchSas(client)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
+                report("SYNC_START", "FAIL", error.javaClass.simpleName)
                 statusText.text = "SENKRONİZASYON HATASI"
                 resultText.text = error.javaClass.simpleName
             } finally {
@@ -358,6 +407,7 @@ class MatrixTestActivity : AppCompatActivity() {
                 continuousButton.text = "SÜREKLİ SENKRONİZASYON BAŞLAT"
                 continuousButton.isEnabled = stopped
                 buttons.forEach { it.isEnabled = stopped }
+                report("SYNC_STOP", if (stopped) "PASS" else "FAIL")
                 statusText.text = if (stopped) "SENKRONİZASYON DURDURULDU" else "SENKRONİZASYON DURDURULAMADI"
             }
         }
@@ -452,9 +502,11 @@ class MatrixTestActivity : AppCompatActivity() {
             try {
                 val result = MatrixClientManager.openForCurrentSession(applicationContext)
                 val client = result.getOrThrow()
+                report("MATRIX_SESSION", "PASS")
                 statusText.text = "MATRIX İSTEMCİSİ AÇILDI"
                 resultText.text = "Cihaz kimliği: ${client.deviceId}\nKalıcı istemci oluşturuldu. Şifreli mesaj testi henüz yapılmadı."
             } catch (error: Exception) {
+                report("MATRIX_SESSION", "FAIL", error.javaClass.simpleName)
                 statusText.text = "MATRIX OTURUMU BAŞLATILAMADI"
                 resultText.text = error.javaClass.simpleName
             } finally {
@@ -475,9 +527,11 @@ class MatrixTestActivity : AppCompatActivity() {
                         client.syncOnce(presence = null, timeout = 10.seconds).getOrThrow()
                     }
                 }
+                report("SYNC_START", "PASS")
                 statusText.text = "MATRIX SENKRONİZASYONU BAŞARILI"
                 resultText.text = "Cihaz kimliği: ${client.deviceId}\nTek seferlik senkronizasyon tamamlandı. Şifreli mesaj testi henüz yapılmadı."
             } catch (error: Exception) {
+                report("SYNC_START", "FAIL", error.javaClass.simpleName)
                 statusText.text = "MATRIX SENKRONİZASYONU BAŞARISIZ"
                 resultText.text = error.javaClass.simpleName
             } finally {
@@ -504,9 +558,11 @@ class MatrixTestActivity : AppCompatActivity() {
                         check(client.signingKey in keys.keys)
                     }
                 }
+                report("KEY_CHECK", "PASS")
                 statusText.text = "AÇIK ANAHTARLAR EŞLEŞİYOR"
                 resultText.text = "Curve25519 ve Ed25519 anahtarları sunucudaki kayıtla eşleşti. Karşılıklı cihaz güveni henüz doğrulanmadı."
             } catch (error: Exception) {
+                report("KEY_CHECK", "FAIL", error.javaClass.simpleName)
                 statusText.text = "ANAHTAR KONTROLÜ BAŞARISIZ"
                 resultText.text = error.javaClass.simpleName
             } finally {
@@ -537,6 +593,7 @@ class MatrixTestActivity : AppCompatActivity() {
                 }
             }
             button.isEnabled = true
+            report("STORAGE_TEST", if (result.isSuccess) "PASS" else "FAIL")
             statusText.text = if (result.isSuccess) "DEPOLAMA TESTİ BAŞARILI" else "DEPOLAMA TESTİ BAŞARISIZ"
             resultText.text = if (result.isSuccess) "SQLite yazma, kapatma ve yeniden okuma başarılı." else result.exceptionOrNull()?.javaClass?.simpleName ?: "Bilinmeyen hata"
         }
