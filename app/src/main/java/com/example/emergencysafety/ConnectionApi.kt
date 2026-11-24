@@ -78,6 +78,17 @@ internal object ConnectionApi {
         val expiresInMs: Long?
     )
 
+    fun confirmMatrixSessionDelivery(context: Context, deviceId: String): Boolean {
+        if (!Regex("^ES[a-f0-9]{24}$").matches(deviceId)) return false
+        val response = request(
+            context = context,
+            path = "/matrix/session/confirm",
+            method = "POST",
+            body = JSONObject().put("deviceId", deviceId)
+        )
+        return response.optBoolean("success", false)
+    }
+
     fun requestMatrixSession(context: Context): ConnectionApiResult<MatrixSessionCredentials> {
         val response = request(context, "/matrix/session", "POST", JSONObject())
         if (!response.optBoolean("success", false)) {
