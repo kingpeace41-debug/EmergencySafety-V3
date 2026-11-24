@@ -2,6 +2,15 @@
 package com.example.emergencysafety
 
 import android.os.Bundle
+import de.connect2x.trixnity.client.verification
+import de.connect2x.trixnity.client.key
+import de.connect2x.trixnity.client.verification.*
+import de.connect2x.trixnity.core.model.UserId
+import de.connect2x.trixnity.core.model.events.m.key.verification.VerificationMethod
+import de.connect2x.trixnity.crypto.key.DeviceTrustLevel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.coroutineScope
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import java.io.File
 import android.view.Gravity
@@ -31,6 +40,151 @@ class MatrixTestActivity : AppCompatActivity() {
     private lateinit var continuousButton: Button
     private lateinit var testLayout: LinearLayout
 
+    private lateinit var sasButton: Button
+    private lateinit var trustButton: Button
+    private lateinit var sasAction: Button
+    private lateinit var sasReject: Button
+    private lateinit var sasText: TextView
+    private var sasJob: Job? = null
+    private var activeVerification: ActiveDeviceVerification? = null
+
+    private fun peer(client: MatrixClient): Pair<UserId, String> {
+        return when (client.deviceId) {
+            "ES92dd49af054f02dac88d6e76" -> UserId("@es8de5ac49b6f51486aa1bdf0be9f0fd03:emergency-safety.com") to "ES6b352fe620738427b4dc51d1"
+            "ES6b352fe620738427b4dc51d1" -> UserId("@esf78bb1b86885ce83a926f496719785e7:emergency-safety.com") to "ES92dd49af054f02dac88d6e76"
+            else -> error("Bu cihaz SAS test listesinde yok")
+        }
+    }
+
+    private fun verified(level: DeviceTrustLevel): Boolean =
+        when (level) {
+            is DeviceTrustLevel.Valid -> level.verified
+            is DeviceTrustLevel.CrossSigned -> level.verified
+            else -> false
+        }
+
+    private suspend fun watchSas(client: MatrixClient) = coroutineScope {
+        val (user, device) = peer(client)
+        sasButton.isEnabled = true
+        trustButton.isEnabled = true
+        var last: ActiveDeviceVerification? = null
+        var actedState: Any? = null
+        var busy = false
+        var confirmed = false
+        var completed = false
+        fun action(label: String, state: Any, block: suspend () -> Unit) {
+            sasAction.text = label
+            sasAction.isEnabled = !busy && actedState !== state
+            sasAction.setOnClickListener {
+                if (busy || actedState === state) return@setOnClickListener
+                busy = true
+                actedState = state
+                sasAction.isEnabled = false
+                launch {
+                    try { block() }
+                    catch (e: CancellationException) { throw e }
+                    catch (e: Exception) { sasText.text = "İşlem hatası: ${e.javaClass.simpleName}" }
+                    finally { busy = false }
+                }
+            }
+        }
+        sasButton.setOnClickListener {
+            if (busy || client.verification.activeDeviceVerification.value != null) return@setOnClickListener
+            busy = true
+            sasButton.isEnabled = false
+            launch {
+                try {
+                    client.verification.createDeviceVerificationRequest(user, setOf(device)).getOrThrow()
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { sasText.text = "İstek hatası: ${e.javaClass.simpleName}" }
+                finally { busy = false }
+            }
+        }
+        trustButton.setOnClickListener {
+            launch {
+                try {
+                    val level = withTimeout(15000L) { client.key.getTrustLevel(user, device).first() }
+                    sasText.text = "Kayıtlı cihaz güveni: " + if (verified(level)) "DOĞRULANMIŞ" else "DOĞRULANMAMIŞ (${level.javaClass.simpleName})"
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { sasText.text = "Güven kontrolü başarısız" }
+            }
+        }
+        while (true) {
+            val current = client.verification.activeDeviceVerification.value
+            val v = current ?: last
+            activeVerification = current
+            sasButton.isEnabled = !busy && current == null
+            sasAction.isEnabled = false
+            sasReject.isEnabled = false
+            if (v != null) {
+                if (v !== last) {
+                    last = v
+                    actedState = null
+                    confirmed = false
+                    completed = false
+                }
+                val state = v.state.value
+                if (v.theirUserId != user || (v.theirDeviceId != null && v.theirDeviceId != device)) {
+                    sasText.text = "Beklenmeyen cihaz: doğrulama reddedildi"
+                    if (current != null && !busy) v.cancel()
+                } else {
+                    sasReject.isEnabled = current != null && !busy && state !is ActiveVerificationState.Done && state !is ActiveVerificationState.Cancel
+                    sasReject.setOnClickListener {
+                        if (busy) return@setOnClickListener
+                        busy = true
+                        launch {
+                            try {
+                                val method = (v.state.value as? ActiveVerificationState.Start)?.method as? ActiveSasVerificationMethod
+                                val comparison = method?.state?.value as? ActiveSasVerificationState.ComparisonByUser
+                                if (comparison != null) comparison.noMatch() else v.cancel()
+                            } finally { busy = false }
+                        }
+                    }
+                    when (state) {
+                        is ActiveVerificationState.TheirRequest -> {
+                            sasText.text = "Test cihazından doğrulama isteği"
+                            action("İSTEĞİ KABUL ET", state) { check(v.state.value === state); state.ready() }
+                        }
+                        is ActiveVerificationState.OwnRequest -> sasText.text = "Karşı cihazın kabulü bekleniyor"
+                        is ActiveVerificationState.Ready -> {
+                            sasText.text = "SAS başlatılabilir"
+                            action("SAS BAŞLAT", state) { check(v.state.value === state); state.start(VerificationMethod.Sas) }
+                        }
+                        is ActiveVerificationState.Start -> {
+                            val method = state.method as? ActiveSasVerificationMethod
+                            when (val sub = method?.state?.value) {
+                                is ActiveSasVerificationState.TheirSasStart -> {
+                                    sasText.text = "SAS isteği geldi"
+                                    action("SAS KABUL ET", sub) { check(method.state.value === sub); sub.accept() }
+                                }
+                                is ActiveSasVerificationState.ComparisonByUser -> {
+                                    sasText.text = "İki telefondaki üç sayıyı karşılaştır:\n" + sub.decimal.joinToString("   ")
+                                    if (!confirmed && v.theirDeviceId == device) action("ÜÇ SAYI EŞLEŞİYOR", sub) {
+                                        check(v.state.value === state && method.state.value === sub)
+                                        check(v.theirUserId == user && v.theirDeviceId == device)
+                                        sub.match()
+                                        confirmed = true
+                                    }
+                                }
+                                else -> sasText.text = "SAS anahtarları / karşı onay bekleniyor"
+                            }
+                        }
+                        is ActiveVerificationState.Done -> {
+                            if (!completed) {
+                                completed = true
+                                val level = withTimeout(15000L) { client.key.getTrustLevel(user, device).first() }
+                                sasText.text = if (confirmed && verified(level)) "SAS TAMAMLANDI — CİHAZ DOĞRULANMIŞ" else "SAS tamamlandı; cihaz güveni ayrıca kontrol edilmeli"
+                            }
+                        }
+                        is ActiveVerificationState.Cancel -> sasText.text = "DOĞRULAMA İPTAL EDİLDİ"
+                        else -> sasText.text = "Karşı cihazın işlemi bekleniyor"
+                    }
+                }
+            }
+            delay(250)
+        }
+    }
+
     override fun onStop() {
         syncJob?.cancel()
         super.onStop()
@@ -45,7 +199,7 @@ class MatrixTestActivity : AppCompatActivity() {
         if (syncJob?.isCompleted == false) return
         val buttons = (0 until testLayout.childCount)
             .mapNotNull { testLayout.getChildAt(it) as? Button }
-            .filter { it !== continuousButton }
+            .filter { it !== continuousButton && it !== sasButton && it !== trustButton && it !== sasAction && it !== sasReject }
         if (buttons.any { !it.isEnabled }) return
         buttons.forEach { it.isEnabled = false }
         continuousButton.text = "SENKRONİZASYONU DURDUR"
@@ -58,7 +212,7 @@ class MatrixTestActivity : AppCompatActivity() {
                 withTimeout(60000L) { client.startSync(presence = null) }
                 statusText.text = "SENKRONİZASYON BAŞLATILDI"
                 resultText.text = "Başlatma çağrısı tamamlandı. Veri akışı henüz doğrulanmadı."
-                kotlinx.coroutines.awaitCancellation()
+                watchSas(client)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
@@ -66,8 +220,14 @@ class MatrixTestActivity : AppCompatActivity() {
                 resultText.text = error.javaClass.simpleName
             } finally {
                 val stopped = withContext(NonCancellable + Dispatchers.IO) {
+                    runCatching { withTimeout(5000L) { activeVerification?.cancel() } }
                     runCatching { syncClient?.cancelSync() }.isSuccess
                 }
+                activeVerification = null
+                sasButton.isEnabled = false
+                trustButton.isEnabled = false
+                sasAction.isEnabled = false
+                sasReject.isEnabled = false
                 syncClient = null
                 continuousButton.text = "SÜREKLİ SENKRONİZASYON BAŞLAT"
                 continuousButton.isEnabled = stopped
@@ -143,6 +303,13 @@ class MatrixTestActivity : AppCompatActivity() {
             setOnClickListener { runContinuousSync() }
         }
         layout.addView(continuousButton)
+        sasText = TextView(this).apply { text = "SAS için sürekli senkronizasyonu başlat."; gravity = Gravity.CENTER; textSize = 18f }
+        layout.addView(sasText)
+        sasButton = Button(this).apply { text = "CİHAZ DOĞRULAMA İSTEĞİ GÖNDER"; isEnabled = false }
+        trustButton = Button(this).apply { text = "KAYITLI CİHAZ GÜVENİNİ KONTROL ET"; isEnabled = false }
+        sasAction = Button(this).apply { text = "DOĞRULAMA İŞLEMİ"; isEnabled = false }
+        sasReject = Button(this).apply { text = "EŞLEŞMİYOR / İPTAL"; isEnabled = false }
+        listOf(sasButton, sasAction, sasReject, trustButton).forEach { layout.addView(it) }
 
         setContentView(android.widget.ScrollView(this).apply {
             isFillViewport = true
