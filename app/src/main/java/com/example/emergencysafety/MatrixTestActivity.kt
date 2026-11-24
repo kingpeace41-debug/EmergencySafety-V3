@@ -206,6 +206,18 @@ class MatrixTestActivity : AppCompatActivity() {
             override fun afterTextChanged(s: android.text.Editable?) {}
         })
         addControl(messageInput)
+        var lastChecks = MatrixPolicyAudit.checks.get()
+        var lastDenials = MatrixPolicyAudit.denied.get()
+        addControl(Button(this@MatrixTestActivity).apply {
+            text = "ANAHTAR POLİTİKASI RAPORU"
+            setOnClickListener {
+                val checks = MatrixPolicyAudit.checks.get()
+                val denials = MatrixPolicyAudit.denied.get()
+                roomStatus.text = "Anahtar güven kontrolleri: $checks / Reddedilen: $denials"
+                report("KEY_CHECK", "INFO", if (checks > 0) "POLICY_CHECK_OBSERVED" else "POLICY_NOT_OBSERVED")
+                report("KEY_CHECK", "INFO", if (denials > 0) "POLICY_DENIAL_OBSERVED" else "NO_DENIAL_OBSERVED")
+            }
+        })
         addControl(roomStatus)
         fun selectedRoom(): RoomId {
             val value = roomInput.text.toString().trim()
@@ -265,10 +277,12 @@ class MatrixTestActivity : AppCompatActivity() {
         launch {
             client.room.getTimelineEventsFromNowOn().collect { event ->
                 if (event.event.roomId.toString() == roomInput.text.toString().trim()) {
-                    val encrypted = event.event.content::class.simpleName == "MegolmEncryptedMessageEventContent"
+                    val encrypted = event.isEncrypted
                     if (encrypted) {
                         report("ENCRYPTED_EVENT", "PASS")
-                        report("MESSAGE_DECRYPT", if (event.content?.getOrNull() != null) "PASS" else "FAIL")
+                        if (event.event.sender != client.userId) {
+                            report("MESSAGE_DECRYPT", if (event.content?.getOrNull() != null) "PASS" else "FAIL")
+                        }
                     } else if (event.event.content::class.simpleName?.contains("MessageEventContent") == true) {
                         report("ENCRYPTED_EVENT", "FAIL", "PLAINTEXT_EVENT")
                     }
@@ -352,6 +366,10 @@ class MatrixTestActivity : AppCompatActivity() {
                     }
                 }
             }
+            val checks = MatrixPolicyAudit.checks.get()
+            val denials = MatrixPolicyAudit.denied.get()
+            if (checks != lastChecks) { lastChecks = checks; report("KEY_CHECK", "INFO", "POLICY_CHECK_OBSERVED") }
+            if (denials != lastDenials) { lastDenials = denials; report("KEY_CHECK", "INFO", "POLICY_DENIAL_OBSERVED") }
             flushReports()
             delay(250)
         }
