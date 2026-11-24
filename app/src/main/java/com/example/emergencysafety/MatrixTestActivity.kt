@@ -2,6 +2,8 @@
 package com.example.emergencysafety
 
 import android.os.Bundle
+import de.connect2x.trixnity.core.model.events.InitialStateEvent
+import de.connect2x.trixnity.core.model.events.m.room.EncryptionEventContent
 import de.connect2x.trixnity.client.room
 import de.connect2x.trixnity.client.room.message.text
 import de.connect2x.trixnity.core.model.RoomId
@@ -127,7 +129,7 @@ class MatrixTestActivity : AppCompatActivity() {
                     launch {
                         try { withTimeout(30000L) { block() } }
                         catch (e: CancellationException) { throw e }
-                        catch (e: Exception) { roomStatus.text = "Test hatası: " + e.javaClass.simpleName }
+                        catch (e: Exception) { roomStatus.text = if (e is IllegalArgumentException && roomInput.text.isBlank()) "Önce şifreli test odasını seçin." else "Test hatası: " + e.javaClass.simpleName }
                         finally { busy = false }
                     }
                 }
@@ -136,6 +138,22 @@ class MatrixTestActivity : AppCompatActivity() {
         addControl(roomInput)
         addControl(messageInput)
         addControl(roomStatus)
+        fun selectedRoom(): RoomId {
+            val value = roomInput.text.toString().trim()
+            require(value.startsWith("!") && value.length > 1) { "Önce şifreli test odasını seçin" }
+            return RoomId(value)
+        }
+        roomAction("ŞİFRELİ TEST ODASI OLUŞTUR") {
+            check(verified(client.key.getTrustLevel(user, device).first())) { "Önce cihaz güvenini doğrulayın" }
+            val id = client.api.room.createRoom(
+                name = "ES E2EE TEST",
+                invite = setOf(user),
+                initialState = listOf(InitialStateEvent(EncryptionEventContent(rotationPeriodMsgs = 1L), "")),
+                isDirect = true
+            ).getOrThrow()
+            roomInput.setText(id.toString())
+            roomStatus.text = "Şifreli test odası oluşturuldu. Karşı cihaz davet edildi."
+        }
         roomAction("ŞİFRELİ TEST ODALARINI BUL") {
             val rooms = client.room.getAll().first()
             val found = rooms.mapNotNull { (id, flow) ->
@@ -146,14 +164,14 @@ class MatrixTestActivity : AppCompatActivity() {
             if (found.size == 1) roomInput.setText(found.first())
         }
         roomAction("ŞİFRELİ ODAYA KATIL") {
-            val id = RoomId(roomInput.text.toString().trim())
+            val id = selectedRoom()
             check(verified(client.key.getTrustLevel(user, device).first()))
             check(client.room.getById(id).first()?.encrypted == true)
             client.api.room.joinRoom(id).getOrThrow()
             roomStatus.text = "Katılım tamamlandı"
         }
         roomAction("ŞİFRELİ TEST MESAJI GÖNDER") {
-            val id = RoomId(roomInput.text.toString().trim())
+            val id = selectedRoom()
             check(verified(client.key.getTrustLevel(user, device).first()))
             val room = requireNotNull(client.room.getById(id).first())
             check(room.encrypted && room.membership == Membership.JOIN)
