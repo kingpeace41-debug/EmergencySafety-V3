@@ -54,12 +54,14 @@ class MatrixTestActivity : AppCompatActivity() {
     private var sasJob: Job? = null
     private var activeVerification: ActiveDeviceVerification? = null
 
-    private fun peer(client: MatrixClient): Pair<UserId, String> {
-        return when (client.deviceId) {
-            "ES92dd49af054f02dac88d6e76" -> UserId("@es8de5ac49b6f51486aa1bdf0be9f0fd03:emergency-safety.com") to "ES6b352fe620738427b4dc51d1"
-            "ES6b352fe620738427b4dc51d1" -> UserId("@esf78bb1b86885ce83a926f496719785e7:emergency-safety.com") to "ES92dd49af054f02dac88d6e76"
-            else -> error("Bu cihaz SAS test listesinde yok")
-        }
+    private fun peers(client: MatrixClient): List<Pair<UserId, String>> {
+        val devices = listOf(
+            UserId("@esf78bb1b86885ce83a926f496719785e7:emergency-safety.com") to "ES92dd49af054f02dac88d6e76",
+            UserId("@es8de5ac49b6f51486aa1bdf0be9f0fd03:emergency-safety.com") to "ES6b352fe620738427b4dc51d1",
+            UserId("@es87c89b77446e224643839983b927364a:emergency-safety.com") to "ES3ce804d497e17ded0aeed40a"
+        )
+        check(devices.any { it.first == client.userId && it.second == client.deviceId })
+        return devices.filter { it.second != client.deviceId }
     }
 
     private fun verified(level: DeviceTrustLevel): Boolean =
@@ -70,7 +72,11 @@ class MatrixTestActivity : AppCompatActivity() {
         }
 
     private suspend fun watchSas(client: MatrixClient) = coroutineScope {
-        val (user, device) = peer(client)
+        val choices = peers(client)
+        var (user, device) = choices.first()
+        val peerButton = Button(this@MatrixTestActivity).apply { text = "TEST CİHAZI: " + device }
+        testLayout.addView(peerButton, testLayout.indexOfChild(sasText))
+
         sasButton.isEnabled = true
         trustButton.isEnabled = true
         var last: ActiveDeviceVerification? = null
@@ -135,6 +141,21 @@ class MatrixTestActivity : AppCompatActivity() {
                 }
             })
         }
+        controls.add(peerButton)
+        peerButton.setOnClickListener {
+            if (busy || client.verification.activeDeviceVerification.value != null) return@setOnClickListener
+            val next = choices[(choices.indexOf(user to device) + 1) % choices.size]
+            user = next.first
+            device = next.second
+            peerButton.text = "TEST CİHAZI: " + device
+            last = null
+            actedState = null
+            confirmed = false
+            completed = false
+            roomInput.text.clear()
+            roomStatus.text = ""
+            sasText.text = "Karşı cihaz seçildi. Güveni kontrol edin."
+        }
         addControl(roomInput)
         addControl(messageInput)
         addControl(roomStatus)
@@ -193,6 +214,7 @@ class MatrixTestActivity : AppCompatActivity() {
             val current = client.verification.activeDeviceVerification.value
             val v = current ?: last
             activeVerification = current
+            peerButton.isEnabled = !busy && current == null
             sasButton.isEnabled = !busy && current == null
             sasAction.isEnabled = false
             sasReject.isEnabled = false
