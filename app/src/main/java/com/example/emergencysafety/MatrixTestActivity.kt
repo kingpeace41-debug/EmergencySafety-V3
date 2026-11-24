@@ -8,6 +8,7 @@ import de.connect2x.trixnity.client.room
 import de.connect2x.trixnity.client.room.message.text
 import de.connect2x.trixnity.core.model.RoomId
 import de.connect2x.trixnity.core.model.events.m.room.Membership
+import de.connect2x.trixnity.core.model.events.m.room.MemberEventContent
 import de.connect2x.trixnity.client.verification
 import de.connect2x.trixnity.client.key
 import de.connect2x.trixnity.client.verification.*
@@ -224,6 +225,20 @@ class MatrixTestActivity : AppCompatActivity() {
             require(value.startsWith("!") && value.length > 1) { "Önce şifreli test odasını seçin" }
             return RoomId(value)
         }
+        suspend fun checkDirectRoom(id: RoomId, requireJoined: Boolean) {
+            val room = requireNotNull(client.room.getById(id).first())
+            check(room.encrypted) { "Encryption required" }
+            if (requireJoined) check(room.membership == Membership.JOIN)
+            val members = client.room.getAllState(id, MemberEventContent::class).first()
+            val active = members.mapNotNull { (key, flow) ->
+                val membership = flow.first()?.content?.membership
+                if (membership == Membership.JOIN || membership == Membership.INVITE) key else null
+            }.toSet()
+            check(active == setOf(client.userId.toString(), user.toString())) { "Unexpected or missing room members" }
+            if (requireJoined) {
+                check(members[user.toString()]?.first()?.content?.membership == Membership.JOIN)
+            }
+        }
         roomAction("ŞİFRELİ TEST ODASI OLUŞTUR", "ROOM_CREATE") {
             check(verified(client.key.getTrustLevel(user, device).first())) { "Önce cihaz güvenini doğrulayın" }
             val id = client.api.room.createRoom(
@@ -260,15 +275,14 @@ class MatrixTestActivity : AppCompatActivity() {
         roomAction("ŞİFRELİ ODAYA KATIL", "ROOM_JOIN") {
             val id = selectedRoom()
             check(verified(client.key.getTrustLevel(user, device).first()))
-            check(client.room.getById(id).first()?.encrypted == true)
+            checkDirectRoom(id, false)
             client.api.room.joinRoom(id).getOrThrow()
             roomStatus.text = "Katılım tamamlandı"
         }
         roomAction("ŞİFRELİ TEST MESAJI GÖNDER", "MESSAGE_QUEUE") {
             val id = selectedRoom()
             check(verified(client.key.getTrustLevel(user, device).first()))
-            val room = requireNotNull(client.room.getById(id).first())
-            check(room.encrypted && room.membership == Membership.JOIN)
+            checkDirectRoom(id, true)
             val body = messageInput.text.toString().trim()
             check(body.isNotEmpty())
             val txn = client.room.sendMessage(id) { text(body) }
@@ -280,7 +294,7 @@ class MatrixTestActivity : AppCompatActivity() {
                     val encrypted = event.isEncrypted
                     if (encrypted) {
                         report("ENCRYPTED_EVENT", "PASS")
-                        if (event.event.sender != client.userId) {
+                        if (event.event.sender == user) {
                             report("MESSAGE_DECRYPT", if (event.content?.getOrNull() != null) "PASS" else "FAIL")
                         }
                     } else if (event.event.content::class.simpleName?.contains("MessageEventContent") == true) {
