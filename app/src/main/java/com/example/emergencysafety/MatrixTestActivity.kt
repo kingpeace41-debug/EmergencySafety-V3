@@ -291,7 +291,7 @@ class MatrixTestActivity : AppCompatActivity() {
         launch {
             client.room.getTimelineEventsFromNowOn().collect { event ->
                 if (event.event.roomId.toString() == roomInput.text.toString().trim()) {
-                    val encrypted = event.isEncrypted
+                    val encrypted = event.event.content::class.simpleName == "MegolmEncryptedMessageEventContent"
                     if (encrypted) {
                         report("ENCRYPTED_EVENT", "PASS")
                         if (event.event.sender == user) {
