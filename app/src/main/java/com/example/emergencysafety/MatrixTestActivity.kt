@@ -2,6 +2,10 @@
 package com.example.emergencysafety
 
 import android.os.Bundle
+import de.connect2x.trixnity.client.room
+import de.connect2x.trixnity.client.room.message.text
+import de.connect2x.trixnity.core.model.RoomId
+import de.connect2x.trixnity.core.model.events.m.room.Membership
 import de.connect2x.trixnity.client.verification
 import de.connect2x.trixnity.client.key
 import de.connect2x.trixnity.client.verification.*
@@ -109,6 +113,64 @@ class MatrixTestActivity : AppCompatActivity() {
                 catch (e: Exception) { sasText.text = "Güven kontrolü başarısız" }
             }
         }
+        val roomInput = android.widget.EditText(this@MatrixTestActivity).apply { hint = "Şifreli test oda kimliği"; setSingleLine(true) }
+        val messageInput = android.widget.EditText(this@MatrixTestActivity).apply { hint = "Test mesajı"; setText("ES E2EE TEST") }
+        val roomStatus = TextView(this@MatrixTestActivity)
+        val controls = mutableListOf<android.view.View>()
+        fun addControl(view: android.view.View) { controls.add(view); testLayout.addView(view) }
+        fun roomAction(label: String, block: suspend () -> Unit) {
+            addControl(Button(this@MatrixTestActivity).apply {
+                text = label
+                setOnClickListener {
+                    if (busy) return@setOnClickListener
+                    busy = true
+                    launch {
+                        try { withTimeout(30000L) { block() } }
+                        catch (e: CancellationException) { throw e }
+                        catch (e: Exception) { roomStatus.text = "Test hatası: " + e.javaClass.simpleName }
+                        finally { busy = false }
+                    }
+                }
+            })
+        }
+        addControl(roomInput)
+        addControl(messageInput)
+        addControl(roomStatus)
+        roomAction("ŞİFRELİ TEST ODALARINI BUL") {
+            val rooms = client.room.getAll().first()
+            val found = rooms.mapNotNull { (id, flow) ->
+                val room = flow.first()
+                if (room?.encrypted == true) id.toString() else null
+            }
+            roomStatus.text = found.joinToString("\n").ifBlank { "Şifreli oda bulunamadı" }
+            if (found.size == 1) roomInput.setText(found.first())
+        }
+        roomAction("ŞİFRELİ ODAYA KATIL") {
+            val id = RoomId(roomInput.text.toString().trim())
+            check(verified(client.key.getTrustLevel(user, device).first()))
+            check(client.room.getById(id).first()?.encrypted == true)
+            client.api.room.joinRoom(id).getOrThrow()
+            roomStatus.text = "Katılım tamamlandı"
+        }
+        roomAction("ŞİFRELİ TEST MESAJI GÖNDER") {
+            val id = RoomId(roomInput.text.toString().trim())
+            check(verified(client.key.getTrustLevel(user, device).first()))
+            val room = requireNotNull(client.room.getById(id).first())
+            check(room.encrypted && room.membership == Membership.JOIN)
+            val body = messageInput.text.toString().trim()
+            check(body.isNotEmpty())
+            val txn = client.room.sendMessage(id) { text(body) }
+            roomStatus.text = "Kuyruğa alındı (teslim onayı değil): " + txn
+        }
+        launch {
+            client.room.getTimelineEventsFromNowOn().collect { event ->
+                if (event.event.roomId.toString() == roomInput.text.toString().trim()) {
+                    roomStatus.text = "Oda olayı: " + event.event.content::class.simpleName +
+                        "\nÇözülmüş içerik: " + (event.content?.getOrNull()?.toString() ?: "Yok")
+                }
+            }
+        }
+        try {
         while (true) {
             val current = client.verification.activeDeviceVerification.value
             val v = current ?: last
@@ -183,6 +245,7 @@ class MatrixTestActivity : AppCompatActivity() {
             }
             delay(250)
         }
+        } finally { controls.forEach { testLayout.removeView(it) } }
     }
 
     override fun onStop() {
