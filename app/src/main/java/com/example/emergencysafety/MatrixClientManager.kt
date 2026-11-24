@@ -44,13 +44,36 @@ internal object MatrixClientManager {
                             "Matrix session unavailable"
                         }
                         check(SecureSessionStore.getSessionId(app) == sessionId)
-                        initializeNew(app, sessionId, credentials.accessToken,
+                        val initial = initializeNew(app, sessionId, credentials.accessToken,
                             credentials.refreshToken, credentials.expiresInMs).getOrThrow()
+                        try {
+                            check(initial.userId.toString() == credentials.userId)
+                            check(initial.deviceId.toString() == credentials.deviceId)
+                            val identity = initial.identityKey
+                            val signing = initial.signingKey
+                            initial.closeSuspending()
+                            val reopened = reopenExisting(app, sessionId).getOrThrow()
+                            try {
+                                check(reopened.userId == initial.userId)
+                                check(reopened.deviceId == initial.deviceId)
+                                check(reopened.identityKey == identity)
+                                check(reopened.signingKey == signing)
+                                reopened
+                            } catch (error: Throwable) {
+                                reopened.closeSuspending()
+                                throw error
+                            }
+                        } catch (error: Throwable) {
+                            runCatching { initial.closeSuspending() }
+                            throw error
+                        }
                     }
                     if (SecureSessionStore.getSessionId(app) != sessionId) {
                         client.closeSuspending()
                         error("EmergencySafety session changed")
                     }
+                    // Confirmation is deliberately deferred until the on-device
+                    // persistence test and server-side recovery policy are verified.
                     activeClient = client
                     activeSessionId = sessionId
                     client
