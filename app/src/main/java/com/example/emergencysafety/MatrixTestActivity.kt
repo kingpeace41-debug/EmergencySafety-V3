@@ -65,7 +65,31 @@ class MatrixTestActivity : AppCompatActivity() {
             setOnClickListener { runStorageTest() }
         })
 
+        layout.addView(Button(this).apply {
+            text = "MATRIX OTURUMUNU BAŞLAT"
+            setOnClickListener { runSessionTest(this) }
+        })
+
         setContentView(layout)
+    }
+
+    private fun runSessionTest(button: Button) {
+        button.isEnabled = false
+        statusText.text = "Matrix oturumu hazırlanıyor..."
+        resultText.text = ""
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val result = MatrixClientManager.openForCurrentSession(applicationContext)
+                val client = result.getOrThrow()
+                statusText.text = "MATRIX İSTEMCİSİ AÇILDI"
+                resultText.text = "Cihaz kimliği: ${client.deviceId}\nKalıcı istemci oluşturuldu. Şifreli mesaj testi henüz yapılmadı."
+            } catch (error: Exception) {
+                statusText.text = "MATRIX OTURUMU BAŞLATILAMADI"
+                resultText.text = error.javaClass.simpleName
+            } finally {
+                button.isEnabled = true
+            }
+        }
     }
 
     private fun runStorageTest() {
