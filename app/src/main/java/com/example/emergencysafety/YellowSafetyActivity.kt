@@ -85,6 +85,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     private var privateSendButton: TextView? = null
     private var isSendingMessage = false
     private var isMatrixChat = false
+    private var retryAfterVerification: String? = null
     private var matrixChatReady = false
     private var matrixChatJob: Job? = null
     private var matrixSendJob: Job? = null
@@ -541,7 +542,13 @@ class YellowSafetyActivity : AppCompatActivity() {
         if (isChatOpen) {
             activePrivateConnection?.let { connection ->
                 ActiveChatTracker.setVisibleChat(connection.id)
-                if (isMatrixChat) return@let
+                if (isMatrixChat) {
+                    if (retryAfterVerification == connection.id) {
+                        retryAfterVerification = null
+                        startMatrixChat(connection)
+                    }
+                    return@let
+                }
                 startPrivateSocket(connection)
 
                 loadPrivateMessages(
@@ -1726,8 +1733,20 @@ class YellowSafetyActivity : AppCompatActivity() {
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
+                if (error.message == "PEER_NOT_VERIFIED") {
+                    matrixChatReady = false
+                    setMatrixSendEnabled(false)
+                    privateStatusText?.apply {
+                        text = "Karşı cihaz doğrulanmalı. Doğrulamayı açmak için dokun."
+                        setOnClickListener {
+                            retryAfterVerification = connection.id
+                            startActivity(Intent(this@YellowSafetyActivity, MatrixTestActivity::class.java)
+                                .putExtra("matrix_verify_connection", connection.id))
+                        }
+                    }
+                    return@launch
+                }
                 val message = when (error.message) {
-                    "PEER_NOT_VERIFIED" -> "Karşı cihazı Matrix cihaz doğrulamasıyla doğrula."
                     "PEER_NOT_JOINED" -> "Karşı taraf da bu kişiyle şifreli sohbeti açmalı."
                     else -> "Şifreli sohbet şu anda açılamadı."
                 }
