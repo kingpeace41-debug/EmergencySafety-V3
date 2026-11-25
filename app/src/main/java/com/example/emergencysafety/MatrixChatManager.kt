@@ -106,6 +106,36 @@ internal object MatrixChatManager {
         }
     }
 
+    // Live events only; history and delivery receipts are separate concerns.
+    internal data class IncomingText(val eventId: String, val body: String, val outgoing: Boolean)
+
+    suspend fun observeText(context: Context, connectionId: String, onText: suspend (IncomingText) -> Unit) {
+        val app = context.applicationContext
+        val session = requireNotNull(SecureSessionStore.getSessionId(app))
+        val client = MatrixSyncManager.start(app)
+        val expected = peer(app, connectionId)
+        val id = RoomId(requireNotNull(ConnectionApi.getMatrixRoom(app, connectionId).data?.roomId))
+        checkSession(app, session)
+        checkTrust(client, expected)
+        checkRoom(client, id, expected, true)
+        client.room.getTimelineEventsFromNowOn().collect { event ->
+            checkSession(app, session)
+            if (event.event.roomId != id) return@collect
+            if (event.event.content::class.simpleName != "MegolmEncryptedMessageEventContent") return@collect
+            val sender = event.event.sender.toString()
+            if (sender != expected.userId && sender != client.userId.toString()) return@collect
+            val decoded = event.content?.getOrNull() as? de.connect2x.trixnity.core.model.events.m.room.RoomMessageEventContent.TextBased.Text
+                ?: return@collect
+            withContext(Dispatchers.IO) {
+                check(peer(app, connectionId) == expected) { "PEER_CHANGED" }
+                checkTrust(client, expected)
+                checkRoom(client, id, expected, true)
+                checkSession(app, session)
+            }
+            onText(IncomingText(event.event.id.toString(), decoded.body, sender == client.userId.toString()))
+        }
+    }
+
     // Returns an outbox transaction ID, not a delivery receipt.
     suspend fun enqueueText(context: Context, connectionId: String, body: String): String = withContext(Dispatchers.IO) {
         withTimeout(60000L) {
