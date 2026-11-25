@@ -851,11 +851,6 @@ class YellowSafetyActivity : AppCompatActivity() {
         val subtitle = createText("EMERGENCY SAFETY", 10f, softText, true)
         subtitle.gravity = Gravity.CENTER_VERTICAL
         header.addView(subtitle)
-        val encryptionButton = createText("Şifreleme", 12f, gold, true).apply {
-            setPadding(dp(8), dp(12), dp(8), dp(12))
-            setOnClickListener { showMatrixChatInfo(connection, encrypted) }
-        }
-        header.addView(encryptionButton)
         screen.addView(header)
 
         val divider = View(this).apply {
@@ -1361,6 +1356,11 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
+        val encryptionButton = createText("Şifreleme", 12f, gold, true).apply {
+            setPadding(dp(8), dp(12), dp(8), dp(12))
+            setOnClickListener { showMatrixChatInfo(connection, encrypted) }
+        }
+        header.addView(encryptionButton)
         screen.addView(header)
 
         val divider = View(this).apply {
