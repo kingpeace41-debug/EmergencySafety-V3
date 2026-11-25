@@ -14,12 +14,22 @@ import de.connect2x.trixnity.core.model.events.m.room.EncryptionEventContent
 import de.connect2x.trixnity.core.model.events.m.room.MemberEventContent
 import de.connect2x.trixnity.core.model.events.m.room.Membership
 import de.connect2x.trixnity.crypto.key.DeviceTrustLevel
+import de.connect2x.trixnity.client.store.TimelineEvent
+import de.connect2x.trixnity.core.model.events.m.room.RoomMessageEventContent
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 // Pilot only. Caller must maintain Matrix sync and present SAS verification UI.
 // Never falls back to the legacy plaintext transport.
@@ -108,8 +118,15 @@ internal object MatrixChatManager {
         }
     }
 
-    // Live events only; history and delivery receipts are separate concerns.
     internal data class IncomingText(val eventId: String, val body: String, val outgoing: Boolean)
+
+    private fun TimelineEvent.toChatText(roomId: RoomId, ownUserId: String, peerUserId: String): IncomingText? {
+        if (event.roomId != roomId || event.content !is MegolmEncryptedMessageEventContent) return null
+        val sender = event.sender.toString()
+        if (sender != peerUserId && sender != ownUserId) return null
+        val text = content?.getOrNull() as? RoomMessageEventContent.TextBased.Text ?: return null
+        return IncomingText(event.id.toString(), text.body, sender == ownUserId)
+    }
 
     suspend fun observeText(context: Context, connectionId: String, onText: suspend (IncomingText) -> Unit) {
         val app = context.applicationContext
@@ -121,21 +138,61 @@ internal object MatrixChatManager {
         checkSession(app, session)
         checkTrust(client, expected)
         checkRoom(client, id, expected, true)
-        client.room.getTimelineEventsFromNowOn().collect { event ->
+
+        suspend fun recheckAccess() = withContext(Dispatchers.IO) {
             checkSession(app, session)
-            if (event.event.roomId != id) return@collect
-            if (event.event.content::class.simpleName != "MegolmEncryptedMessageEventContent") return@collect
-            val sender = event.event.sender.toString()
-            if (sender != expected.userId && sender != client.userId.toString()) return@collect
-            val decoded = event.content?.getOrNull() as? de.connect2x.trixnity.core.model.events.m.room.RoomMessageEventContent.TextBased.Text
-                ?: return@collect
-            withContext(Dispatchers.IO) {
-                check(peer(app, connectionId) == expected) { "PEER_CHANGED" }
-                checkTrust(client, expected)
-                checkRoom(client, id, expected, true)
-                checkSession(app, session)
+            check(peer(app, connectionId) == expected) { "PEER_CHANGED" }
+            checkTrust(client, expected)
+            checkRoom(client, id, expected, true)
+            checkSession(app, session)
+        }
+
+        val ownUserId = client.userId.toString()
+        coroutineScope {
+            // Subscribe first so messages received during history loading are still delivered.
+            val live = Channel<IncomingText>(Channel.BUFFERED)
+            val liveJob = launch(start = CoroutineStart.UNDISPATCHED) {
+                try {
+                    client.room.getTimelineEventsFromNowOn().collect { event ->
+                        checkSession(app, session)
+                        event.toChatText(id, ownUserId, expected.userId)?.let { live.send(it) }
+                    }
+                } finally {
+                    live.close()
+                }
             }
-            onText(IncomingText(event.event.id.toString(), decoded.body, sender == client.userId.toString()))
+            try {
+                val history = mutableListOf<Flow<TimelineEvent>>()
+                withTimeoutOrNull(10_000L) {
+                    val lastId = client.room.getById(id).first()?.lastEventId
+                    if (lastId != null) {
+                        client.room.getTimelineEvents(id, lastId) { maxSize = 100 }
+                            .collect { history.add(it) }
+                    }
+                }
+                val messages = history.map { event ->
+                    async {
+                        withTimeoutOrNull(3_000L) {
+                            event.first { it.content != null }
+                                .toChatText(id, ownUserId, expected.userId)
+                        }
+                    }
+                }.awaitAll()
+                if (messages.any { it != null }) {
+                    recheckAccess()
+                    messages.asReversed().filterNotNull().forEach {
+                        checkSession(app, session)
+                        onText(it)
+                    }
+                }
+                for (message in live) {
+                    recheckAccess()
+                    onText(message)
+                }
+            } finally {
+                liveJob.cancel()
+                live.cancel()
+            }
         }
     }
 
