@@ -42,9 +42,14 @@ import java.text.SimpleDateFormat
 import java.util.Collections
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -78,6 +83,10 @@ class YellowSafetyActivity : AppCompatActivity() {
     private var privateInput: EditText? = null
     private var privateSendButton: TextView? = null
     private var isSendingMessage = false
+    private var isMatrixChat = false
+    private var matrixChatReady = false
+    private var matrixChatJob: Job? = null
+    private var matrixSendJob: Job? = null
 
     private val typingScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main
@@ -471,7 +480,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             if (changed && !isChatOpen) {
                 showConversationList()
             } else if (changed) {
-                activePrivateConnection?.let { showPrivateChat(it) }
+                activePrivateConnection?.let { showPrivateChat(it, encrypted = isMatrixChat) }
             }
 
             withContext(Dispatchers.IO) {
@@ -494,6 +503,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         if (isChatOpen) {
             activePrivateConnection?.let { connection ->
                 ActiveChatTracker.setVisibleChat(connection.id)
+                if (isMatrixChat) return@let
                 startPrivateSocket(connection)
 
                 loadPrivateMessages(
@@ -797,6 +807,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun showConversationList() {
+        stopMatrixChat()
         stopPrivateSocket()
         stopPrivateChatAutoRefresh()
 
@@ -840,6 +851,11 @@ class YellowSafetyActivity : AppCompatActivity() {
         val subtitle = createText("EMERGENCY SAFETY", 10f, softText, true)
         subtitle.gravity = Gravity.CENTER_VERTICAL
         header.addView(subtitle)
+        val encryptionButton = createText("Şifreleme", 12f, gold, true).apply {
+            setPadding(dp(8), dp(12), dp(8), dp(12))
+            setOnClickListener { showMatrixChatInfo(connection, encrypted) }
+        }
+        header.addView(encryptionButton)
         screen.addView(header)
 
         val divider = View(this).apply {
@@ -1266,7 +1282,9 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
-    private fun showPrivateChat(connection: ConnectionApiItem) {
+    private fun showPrivateChat(connection: ConnectionApiItem, encrypted: Boolean = false) {
+        stopMatrixChat()
+        isMatrixChat = encrypted
         val displayName = ContactNames.getDisplayName(this, connection.email)
         stopPrivateSocket()
         stopPrivateChatAutoRefresh()
@@ -1331,7 +1349,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
 
         nameArea.addView(
-            createText("EmergencySafety özel sohbeti", 10f, gold)
+            createText(if (encrypted) "Matrix şifreli sohbet" else "Standart sohbet", 10f, gold)
         )
 
         header.addView(
@@ -1366,7 +1384,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             setPadding(dp(4), dp(7), dp(4), dp(7))
         }
 
-        // Yukleme durumu sohbet ustunde gosterilmez.
+        if (encrypted) screen.addView(privateStatusText)
 
         typingIndicator = createText(
             "Yazıyor... ✍️",
@@ -1397,7 +1415,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             setPadding(dp(3), dp(8), dp(3), dp(8))
 
             setOnScrollChangeListener { _, _, _, _, _ ->
-                markVisiblePrivateMessagesRead(connection)
+                if (!encrypted) markVisiblePrivateMessagesRead(connection)
             }
         }
 
@@ -1528,9 +1546,124 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
-        loadPrivateMessages(connection, showLoading = true)
-        startPrivateChatAutoRefresh(connection)
-        startPrivateSocket(connection)
+        if (encrypted) {
+            startMatrixChat(connection)
+        } else {
+            loadPrivateMessages(connection, showLoading = true)
+            startPrivateChatAutoRefresh(connection)
+            startPrivateSocket(connection)
+        }
+    }
+
+    private fun showMatrixChatInfo(connection: ConnectionApiItem, encrypted: Boolean) {
+        showBrandedDialog(
+            title = "Uçtan uca şifreleme",
+            message = if (encrypted) {
+                "Bu sohbet Matrix kullanır. Gönderim için karşı cihaz doğrulanmış olmalı " +
+                    "ve iki taraf da şifreli odaya katılmalı. Bu ekranda yalnızca canlı mesajlar gösterilir."
+            } else {
+                "Standart sohbet uçtan uca şifreli değildir. Şifreli sohbet, Matrix erişimi " +
+                    "olan test hesaplarında ve doğrulanmış cihazlarda kullanılabilir."
+            },
+            positiveText = if (encrypted) "Standart sohbeti aç" else "Şifreli sohbeti aç",
+            negativeText = "Kapat",
+            onPositive = { showPrivateChat(connection, encrypted = !encrypted) },
+            onNegative = {}
+        )
+    }
+
+    private fun stopMatrixChat() {
+        matrixChatJob?.cancel()
+        matrixChatJob = null
+        matrixSendJob?.cancel()
+        matrixSendJob = null
+        matrixChatReady = false
+        isMatrixChat = false
+    }
+
+    private fun setMatrixSendEnabled(enabled: Boolean) {
+        privateSendButton?.isEnabled = enabled
+        privateSendButton?.alpha = if (enabled) 1f else 0.5f
+    }
+
+    private fun startMatrixChat(connection: ConnectionApiItem) {
+        matrixChatJob?.cancel()
+        matrixChatReady = false
+        setMatrixSendEnabled(false)
+        privateStatusText?.text = "Şifreli oda hazırlanıyor…"
+        val shownEvents = mutableSetOf<String>()
+        privateStatusText?.setOnClickListener(null)
+
+        matrixChatJob = typingScope.launch {
+            try {
+                MatrixSyncManager.start(applicationContext)
+                MatrixChatManager.prepare(applicationContext, connection.id)
+                withTimeout(30_000L) {
+                    while (true) {
+                        try {
+                            MatrixChatManager.join(applicationContext, connection.id)
+                            break
+                        } catch (error: IllegalArgumentException) {
+                            if (error.message != "ROOM_SYNC_PENDING") throw error
+                            delay(750L)
+                        }
+                    }
+                }
+                privateStatusText?.text = "Şifreli oda açık · Karşı cihazın katılması gerekebilir."
+                matrixChatReady = true
+                setMatrixSendEnabled(true)
+                while (true) {
+                    try {
+                        MatrixChatManager.observeText(applicationContext, connection.id) { event ->
+                            if (shownEvents.add(event.eventId)) addMatrixMessage(event)
+                        }
+                        break
+                    } catch (error: IllegalStateException) {
+                        if (error.message != "PEER_NOT_JOINED") throw error
+                        delay(2_000L)
+                    }
+                }
+            } catch (error: TimeoutCancellationException) {
+                showMatrixChatRetry(connection, "Şifreli oda zamanında hazırlanamadı.")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                val message = when (error.message) {
+                    "PEER_NOT_VERIFIED" -> "Karşı cihazı Matrix cihaz doğrulamasıyla doğrula."
+                    "PEER_NOT_JOINED" -> "Karşı taraf da bu kişiyle şifreli sohbeti açmalı."
+                    else -> "Şifreli sohbet şu anda açılamadı."
+                }
+                showMatrixChatRetry(connection, message)
+            }
+        }
+    }
+
+    private fun showMatrixChatRetry(connection: ConnectionApiItem, message: String) {
+        matrixChatReady = false
+        setMatrixSendEnabled(false)
+        privateStatusText?.apply {
+            text = "$message Tekrar denemek için dokun."
+            setOnClickListener {
+                setOnClickListener(null)
+                startMatrixChat(connection)
+            }
+        }
+    }
+
+    private fun addMatrixMessage(event: MatrixChatManager.IncomingText) {
+        val message = MessageApiItem(
+            id = event.eventId,
+            senderUsername = "",
+            recipientUsername = "",
+            body = event.body,
+            messageType = "text",
+            createdAt = "",
+            deliveredAt = null,
+            readAt = null,
+            isOutgoing = event.outgoing
+        )
+        addServerMessageBubble(message, matrixEvent = true)
+        privateMessagesScroll?.post { privateMessagesScroll?.fullScroll(View.FOCUS_DOWN) }
     }
 
     private fun startPrivateChatAutoRefresh(connection: ConnectionApiItem) {
@@ -1564,7 +1697,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         connection: ConnectionApiItem,
         showLoading: Boolean
     ) {
-        if (isLoadingPrivateMessages) return
+        if (isMatrixChat || isLoadingPrivateMessages) return
         if (!isChatOpen || activePrivateConnection?.id != connection.id) return
 
         isLoadingPrivateMessages = true
@@ -1581,7 +1714,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 
-                if (!isChatOpen || activePrivateConnection?.id != connection.id) {
+                if (isMatrixChat || !isChatOpen || activePrivateConnection?.id != connection.id) {
                     return@runOnUiThread
                 }
 
@@ -1658,12 +1791,12 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
-    private fun addServerMessageBubble(message: MessageApiItem) {
+    private fun addServerMessageBubble(message: MessageApiItem, matrixEvent: Boolean = false) {
 
         val isOutgoing = message.isOutgoing
 
         val bubble = LinearLayout(this).apply {
-            tag = message
+            if (!matrixEvent) tag = message
             orientation = LinearLayout.VERTICAL
 
             setPadding(
@@ -1734,9 +1867,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         // Mesajın saati korunur.
         val timeText = TextView(this).apply {
-            text = formatTime(
-                parseServerTime(message.createdAt)
-            )
+            text = if (matrixEvent) "" else formatTime(parseServerTime(message.createdAt))
 
             textSize = 10f
             setTextColor(Color.rgb(210, 210, 210))
@@ -1751,7 +1882,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
 
         // Durum simgeleri yalnızca gönderilen mesajlarda görünür.
-        if (isOutgoing) {
+        if (isOutgoing && !matrixEvent) {
 
             val deliveryState = when {
                 !message.readAt.isNullOrBlank() -> {
@@ -1818,6 +1949,10 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         if (cleanMessage.isEmpty()) return
         if (isSendingMessage) return
+        if (isMatrixChat) {
+            sendMatrixMessage(connection, cleanMessage)
+            return
+        }
 
         sendLocalTyping(false)
         isSendingMessage = true
@@ -1835,7 +1970,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
 
-                if (!isChatOpen || activePrivateConnection?.id != connection.id) {
+                if (isMatrixChat || !isChatOpen || activePrivateConnection?.id != connection.id) {
                     isSendingMessage = false
                     return@runOnUiThread
                 }
@@ -1858,6 +1993,30 @@ class YellowSafetyActivity : AppCompatActivity() {
                 }
             }
         }.start()
+    }
+
+    private fun sendMatrixMessage(connection: ConnectionApiItem, message: String) {
+        if (!matrixChatReady) return
+        isSendingMessage = true
+        setMatrixSendEnabled(false)
+        val input = privateInput
+        matrixSendJob = typingScope.launch {
+            try {
+                MatrixChatManager.enqueueText(applicationContext, connection.id, message)
+                if (input?.text?.toString()?.trim() == message) input?.text?.clear()
+            } catch (error: TimeoutCancellationException) {
+                Toast.makeText(this@YellowSafetyActivity, "Şifreli gönderim zaman aşımına uğradı.", Toast.LENGTH_LONG).show()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Toast.makeText(this@YellowSafetyActivity, "Mesaj şifreli gönderim kuyruğuna alınamadı.", Toast.LENGTH_LONG).show()
+            } finally {
+                if (isMatrixChat && privateInput === input) {
+                    isSendingMessage = false
+                    setMatrixSendEnabled(matrixChatReady)
+                }
+            }
+        }
     }
 
     private fun markVisiblePrivateMessagesRead(
@@ -1938,6 +2097,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun showBotChat() {
+        stopMatrixChat()
         stopPrivateSocket()
         stopPrivateChatAutoRefresh()
 
@@ -2624,6 +2784,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        stopMatrixChat()
         stopPrivateSocket()
         typingScope.cancel()
         stopPrivateChatAutoRefresh()
