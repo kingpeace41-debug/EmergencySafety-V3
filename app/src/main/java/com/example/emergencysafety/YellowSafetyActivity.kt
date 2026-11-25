@@ -87,6 +87,8 @@ class YellowSafetyActivity : AppCompatActivity() {
     private var matrixChatReady = false
     private var matrixChatJob: Job? = null
     private var matrixSendJob: Job? = null
+    private var matrixAuditJob: Job? = null
+    private var lastIncomingMatrixEventId: String? = null
 
     private val typingScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main
@@ -1556,11 +1558,46 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun showMatrixChatInfo(connection: ConnectionApiItem, encrypted: Boolean) {
+        if (!encrypted) {
+            showMatrixChatInfoDialog(connection, encrypted = false)
+            return
+        }
+
+        val eventId = lastIncomingMatrixEventId
+        if (eventId == null) {
+            showMatrixChatInfoDialog(connection, encrypted = true, audit = "Henüz gelen test mesajı yok.")
+            return
+        }
+        if (matrixAuditJob?.isActive == true) return
+        Toast.makeText(this, "Matrix olayı sunucudan kontrol ediliyor…", Toast.LENGTH_SHORT).show()
+        matrixAuditJob = typingScope.launch {
+            val result = try {
+                val event = MatrixChatManager.auditIncomingEvent(applicationContext, connection.id, eventId)
+                when {
+                    event.isMegolm && event.hasCiphertext ->
+                        "Olay türü: m.room.encrypted\nCiphertext: Var"
+                    event.isMegolm -> "Olay türü: m.room.encrypted\nCiphertext: Boş"
+                    else -> "Sunucudan dönen olay Megolm şifreli mesaj biçiminde değil."
+                }
+            } catch (error: TimeoutCancellationException) {
+                "Sunucu kontrolü zaman aşımına uğradı."
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                "Sunucudaki olay doğrulanamadı."
+            }
+            if (isMatrixChat && activePrivateConnection?.id == connection.id && !isFinishing) {
+                showMatrixChatInfoDialog(connection, encrypted = true, audit = "Olay kimliği: $eventId\n$result")
+            }
+        }
+    }
+
+    private fun showMatrixChatInfoDialog(connection: ConnectionApiItem, encrypted: Boolean, audit: String = "") {
         showBrandedDialog(
             title = "Uçtan uca şifreleme",
             message = if (encrypted) {
                 "Bu sohbet Matrix kullanır. Gönderim için karşı cihaz doğrulanmış olmalı " +
-                    "ve iki taraf da şifreli odaya katılmalı. Bu ekranda yalnızca canlı mesajlar gösterilir."
+                    "ve iki taraf da şifreli odaya katılmalı. Bu ekranda yalnızca canlı mesajlar gösterilir.\n\n" + audit
             } else {
                 "Standart sohbet uçtan uca şifreli değildir. Şifreli sohbet, Matrix erişimi " +
                     "olan test hesaplarında ve doğrulanmış cihazlarda kullanılabilir."
@@ -1577,6 +1614,9 @@ class YellowSafetyActivity : AppCompatActivity() {
         matrixChatJob = null
         matrixSendJob?.cancel()
         matrixSendJob = null
+        matrixAuditJob?.cancel()
+        matrixAuditJob = null
+        lastIncomingMatrixEventId = null
         matrixChatReady = false
         isMatrixChat = false
     }
@@ -1615,7 +1655,10 @@ class YellowSafetyActivity : AppCompatActivity() {
                 while (true) {
                     try {
                         MatrixChatManager.observeText(applicationContext, connection.id) { event ->
-                            if (shownEvents.add(event.eventId)) addMatrixMessage(event)
+                            if (shownEvents.add(event.eventId)) {
+                                if (!event.outgoing) lastIncomingMatrixEventId = event.eventId
+                                addMatrixMessage(event)
+                            }
                         }
                         break
                     } catch (error: IllegalStateException) {
