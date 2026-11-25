@@ -104,6 +104,37 @@ internal object ConnectionApi {
         return ConnectionApiResult(true, "Kişi eşleştirildi.", MatrixPeer(userId, deviceId))
     }
 
+    internal data class MatrixRoomMapping(val roomId: String?)
+
+    fun getMatrixRoom(context: Context, connectionId: String): ConnectionApiResult<MatrixRoomMapping> =
+        matrixRoomRequest(context, connectionId, null)
+
+    fun registerMatrixRoom(context: Context, connectionId: String, roomId: String): ConnectionApiResult<MatrixRoomMapping> =
+        matrixRoomRequest(context, connectionId, roomId)
+
+    private fun matrixRoomRequest(context: Context, connectionId: String, roomId: String?): ConnectionApiResult<MatrixRoomMapping> {
+        fun validRoom(id: String): Boolean = id.length in 2..255 && id.startsWith("!") && id.none { it.isWhitespace() || it.isISOControl() }
+        if (!Regex("^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$").matches(connectionId) ||
+            (roomId != null && !validRoom(roomId))) {
+            return ConnectionApiResult(false, "Geçersiz sohbet kimliği.")
+        }
+        val app = context.applicationContext
+        val session = SecureSessionStore.getSessionId(app)
+            ?: return ConnectionApiResult(false, "Oturum gerekli.")
+        val response = request(app, "/matrix/room/$connectionId",
+            if (roomId == null) "GET" else "POST",
+            roomId?.let { JSONObject().put("roomId", it) })
+        if (SecureSessionStore.getSessionId(app) != session || !response.optBoolean("success", false)) {
+            return ConnectionApiResult(false, "Güvenli sohbet kaydı alınamadı.")
+        }
+        if (!response.has("roomId")) return ConnectionApiResult(false, "Sohbet yanıtı eksik.")
+        val mapped = if (response.isNull("roomId")) null else response.optString("roomId")
+        if ((mapped != null && !validRoom(mapped)) || (roomId != null && mapped == null)) {
+            return ConnectionApiResult(false, "Geçersiz sohbet yanıtı.")
+        }
+        return ConnectionApiResult(true, "Sohbet kaydı alındı.", MatrixRoomMapping(mapped))
+    }
+
     fun sendMatrixTestReport(context: Context, body: JSONObject): Boolean =
         request(context, "/matrix/test-report", "POST", body).optBoolean("success", false)
 
