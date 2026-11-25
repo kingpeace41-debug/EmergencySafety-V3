@@ -89,6 +89,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     private var matrixSendJob: Job? = null
     private var matrixAuditJob: Job? = null
     private var lastIncomingMatrixEventId: String? = null
+    private val shownMatrixEventIds = mutableSetOf<String>()
 
     private val typingScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main
@@ -1597,7 +1598,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             title = "Uçtan uca şifreleme",
             message = if (encrypted) {
                 "Bu sohbet Matrix kullanır. Gönderim için karşı cihaz doğrulanmış olmalı " +
-                    "ve iki taraf da şifreli odaya katılmalı. Bu ekranda yalnızca canlı mesajlar gösterilir.\n\n" + audit
+                    "ve iki taraf da şifreli odaya katılmalı. Bu ekranda son şifreli mesajlar ve yeni mesajlar gösterilir.\n\n" + audit
             } else {
                 "Standart sohbet uçtan uca şifreli değildir. Şifreli sohbet, Matrix erişimi " +
                     "olan test hesaplarında ve doğrulanmış cihazlarda kullanılabilir."
@@ -1617,6 +1618,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         matrixAuditJob?.cancel()
         matrixAuditJob = null
         lastIncomingMatrixEventId = null
+        shownMatrixEventIds.clear()
         matrixChatReady = false
         isMatrixChat = false
     }
@@ -1631,7 +1633,6 @@ class YellowSafetyActivity : AppCompatActivity() {
         matrixChatReady = false
         setMatrixSendEnabled(false)
         privateStatusText?.text = "Şifreli oda hazırlanıyor…"
-        val shownEvents = mutableSetOf<String>()
         privateStatusText?.setOnClickListener(null)
 
         matrixChatJob = typingScope.launch {
@@ -1655,7 +1656,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                 while (true) {
                     try {
                         MatrixChatManager.observeText(applicationContext, connection.id) { event ->
-                            if (shownEvents.add(event.eventId)) {
+                            if (shownMatrixEventIds.add(event.eventId)) {
                                 if (!event.outgoing) lastIncomingMatrixEventId = event.eventId
                                 addMatrixMessage(event)
                             }
