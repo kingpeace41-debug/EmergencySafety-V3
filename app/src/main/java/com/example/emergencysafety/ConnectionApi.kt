@@ -78,6 +78,32 @@ internal object ConnectionApi {
         val expiresInMs: Long?
     )
 
+    internal data class MatrixPeer(val userId: String, val deviceId: String)
+
+    fun getMatrixPeer(context: Context, connectionId: String): ConnectionApiResult<MatrixPeer> {
+        if (!Regex("^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$").matches(connectionId)) {
+            return ConnectionApiResult(false, "Geçersiz bağlantı.")
+        }
+        val session = SecureSessionStore.getSessionId(context.applicationContext)
+            ?: return ConnectionApiResult(false, "Oturum gerekli.")
+        val response = request(context, "/matrix/peer/$connectionId", "GET")
+        if (SecureSessionStore.getSessionId(context.applicationContext) != session) {
+            return ConnectionApiResult(false, "Oturum değişti.")
+        }
+        if (!response.optBoolean("success", false)) {
+            return ConnectionApiResult(false, "Şifreli iletişim için kişi hazır değil.")
+        }
+        val peer = response.optJSONObject("peer")
+            ?: return ConnectionApiResult(false, "Kişi bilgisi eksik.")
+        val userId = peer.optString("userId")
+        val deviceId = peer.optString("deviceId")
+        if (!Regex("^@es[a-f0-9]{32}:emergency-safety[.]com$").matches(userId) ||
+            !Regex("^ES[a-f0-9]{24}$").matches(deviceId)) {
+            return ConnectionApiResult(false, "Geçersiz Matrix kimliği.")
+        }
+        return ConnectionApiResult(true, "Kişi eşleştirildi.", MatrixPeer(userId, deviceId))
+    }
+
     fun sendMatrixTestReport(context: Context, body: JSONObject): Boolean =
         request(context, "/matrix/test-report", "POST", body).optBoolean("success", false)
 
