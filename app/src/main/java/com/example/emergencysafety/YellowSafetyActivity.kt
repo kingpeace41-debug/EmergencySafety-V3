@@ -97,6 +97,8 @@ class YellowSafetyActivity : AppCompatActivity() {
     private val matrixOutgoingReceipts = mutableMapOf<String, MatrixChatManager.Receipt>()
     private val matrixIncomingReceipts = mutableMapOf<String, MatrixChatManager.Receipt>()
     private var matrixReceiptJob: Job? = null
+    private var receiptCheckPending = false
+    private val pendingMatrixDeliveries = mutableSetOf<String>()
     private var matrixTypingJob: Job? = null
     private var matrixTypingSince = 0L
 
@@ -1661,6 +1663,8 @@ class YellowSafetyActivity : AppCompatActivity() {
         matrixAuditJob = null
         lastIncomingMatrixEventId = null
         shownMatrixEventIds.clear()
+        pendingMatrixDeliveries.clear()
+        receiptCheckPending = false
         matrixIncomingBubbles.clear()
         matrixStatusViews.clear()
         matrixOutgoingReceipts.clear()
@@ -1789,38 +1793,44 @@ class YellowSafetyActivity : AppCompatActivity() {
 
     private fun scheduleMatrixReceipts() {
         val connection = activePrivateConnection ?: return
-        if (!isMatrixChat || !matrixChatReady || matrixReceiptJob?.isActive == true) return
+        if (!isMatrixChat || !matrixChatReady) return
+        receiptCheckPending = true
+        if (matrixReceiptJob?.isActive == true) return
         matrixReceiptJob = typingScope.launch {
-            delay(400L)
-            try {
-                val visible = Rect()
-                val read = if (hasWindowFocus()) {
-                    matrixIncomingBubbles.filter { (id, bubble) ->
-                        matrixIncomingReceipts[id] != MatrixChatManager.Receipt.READ &&
-                            bubble.getGlobalVisibleRect(visible) &&
-                            visible.height() >= minOf(bubble.height, dp(24))
-                    }.keys
-                } else emptySet()
-                val delivered = matrixIncomingBubbles.keys.filter { it !in read && it !in matrixIncomingReceipts }
-                for ((receipt, ids) in listOf(
-                    MatrixChatManager.Receipt.DELIVERED to delivered,
-                    MatrixChatManager.Receipt.READ to read.toList()
-                )) {
-                    for (batch in ids.chunked(50)) {
-                        MatrixChatManager.sendReceipt(applicationContext, connection.id, receipt, batch)
-                        batch.forEach { id ->
-                            if (matrixIncomingReceipts[id] != MatrixChatManager.Receipt.READ) {
-                                matrixIncomingReceipts[id] = receipt
-                            }
+            var retryDelay = 1_000L
+            while (receiptCheckPending) {
+                delay(200L)
+                receiptCheckPending = false
+                try {
+                    val delivered = pendingMatrixDeliveries.filter { it !in matrixIncomingReceipts }
+                    for (batch in delivered.chunked(50)) {
+                        MatrixChatManager.sendReceipt(applicationContext, connection.id, MatrixChatManager.Receipt.DELIVERED, batch)
+                        batch.forEach { matrixIncomingReceipts.putIfAbsent(it, MatrixChatManager.Receipt.DELIVERED) }
+                    }
+                    pendingMatrixDeliveries.removeAll(matrixIncomingReceipts.keys)
+                    val visible = Rect()
+                    if (hasWindowFocus() && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                        val read = matrixIncomingBubbles.filter { (id, bubble) ->
+                            matrixIncomingReceipts[id] != MatrixChatManager.Receipt.READ && bubble.height > 0 &&
+                                bubble.getGlobalVisibleRect(visible) && visible.height() >= minOf(bubble.height, dp(24))
+                        }.keys.toList()
+                        for (batch in read.chunked(50)) {
+                            MatrixChatManager.sendReceipt(applicationContext, connection.id, MatrixChatManager.Receipt.READ, batch)
+                            batch.forEach { matrixIncomingReceipts[it] = MatrixChatManager.Receipt.READ }
                         }
                     }
+                    retryDelay = 1_000L
+                } catch (_: TimeoutCancellationException) {
+                    receiptCheckPending = true
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    receiptCheckPending = true
                 }
-            } catch (_: TimeoutCancellationException) {
-                // Pending acknowledgements can be sent on the next visibility change.
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                // Keep unacknowledged messages available for a retry.
+                if (receiptCheckPending && (pendingMatrixDeliveries.isNotEmpty() || hasWindowFocus())) {
+                    delay(retryDelay)
+                    retryDelay = (retryDelay * 2).coerceAtMost(30_000L)
+                }
             }
         }
     }
@@ -1837,6 +1847,10 @@ class YellowSafetyActivity : AppCompatActivity() {
             readAt = null,
             isOutgoing = event.outgoing
         )
+        if (!event.outgoing) {
+            pendingMatrixDeliveries.add(event.eventId)
+            scheduleMatrixReceipts()
+        }
         addServerMessageBubble(message, matrixEvent = true)
         privateMessagesScroll?.post {
             privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
