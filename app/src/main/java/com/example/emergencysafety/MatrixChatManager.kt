@@ -5,9 +5,11 @@ import de.connect2x.trixnity.client.MatrixClient
 import de.connect2x.trixnity.client.key
 import de.connect2x.trixnity.client.room
 import de.connect2x.trixnity.client.room.message.text
+import de.connect2x.trixnity.core.model.EventId
 import de.connect2x.trixnity.core.model.RoomId
 import de.connect2x.trixnity.core.model.UserId
 import de.connect2x.trixnity.core.model.events.InitialStateEvent
+import de.connect2x.trixnity.core.model.events.m.room.EncryptedMessageEventContent.MegolmEncryptedMessageEventContent
 import de.connect2x.trixnity.core.model.events.m.room.EncryptionEventContent
 import de.connect2x.trixnity.core.model.events.m.room.MemberEventContent
 import de.connect2x.trixnity.core.model.events.m.room.Membership
@@ -136,6 +138,26 @@ internal object MatrixChatManager {
             onText(IncomingText(event.event.id.toString(), decoded.body, sender == client.userId.toString()))
         }
     }
+
+    internal data class EventAudit(val isMegolm: Boolean, val hasCiphertext: Boolean)
+
+    suspend fun auditIncomingEvent(context: Context, connectionId: String, eventId: String): EventAudit =
+        withContext(Dispatchers.IO) {
+            withTimeout(15_000L) {
+                val app = context.applicationContext
+                val session = requireNotNull(SecureSessionStore.getSessionId(app))
+                val client = MatrixClientManager.openForCurrentSession(app).getOrThrow()
+                val expected = peer(app, connectionId)
+                val roomId = RoomId(requireNotNull(ConnectionApi.getMatrixRoom(app, connectionId).data?.roomId))
+                checkSession(app, session)
+                val id = EventId(eventId)
+                val event = client.api.room.getEvent(roomId, id).getOrThrow()
+                checkSession(app, session)
+                check(event.roomId == roomId && event.id == id && event.sender.toString() == expected.userId)
+                val encrypted = event.content as? MegolmEncryptedMessageEventContent
+                EventAudit(encrypted != null, encrypted?.ciphertext?.value?.isNotBlank() == true)
+            }
+        }
 
     // Returns an outbox transaction ID, not a delivery receipt.
     suspend fun enqueueText(context: Context, connectionId: String, body: String): String = withContext(Dispatchers.IO) {
