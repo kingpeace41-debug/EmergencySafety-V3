@@ -25,6 +25,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -118,17 +120,46 @@ internal object MatrixChatManager {
         }
     }
 
-    internal data class IncomingText(val eventId: String, val body: String, val outgoing: Boolean)
+    private const val RECEIPT_PREFIX = "com.emergencysafety.receipt.v1"
+
+    internal enum class Receipt { DELIVERED, READ }
+
+    internal data class IncomingText(
+        val eventId: String,
+        val body: String,
+        val outgoing: Boolean,
+        val receipt: Receipt? = null,
+        val acknowledgedIds: List<String> = emptyList()
+    )
+
+    private fun validEventId(id: String): Boolean =
+        id.startsWith("$") && id.length in 2..255 && id.none { it.isWhitespace() }
 
     private fun TimelineEvent.toChatText(roomId: RoomId, ownUserId: String, peerUserId: String): IncomingText? {
         if (event.roomId != roomId || event.content !is MegolmEncryptedMessageEventContent) return null
         val sender = event.sender.toString()
         if (sender != peerUserId && sender != ownUserId) return null
-        val text = content?.getOrNull() as? RoomMessageEventContent.TextBased.Text ?: return null
-        return IncomingText(event.id.toString(), text.body, sender == ownUserId)
+        return when (val decoded = content?.getOrNull()) {
+            is RoomMessageEventContent.TextBased.Text ->
+                IncomingText(event.id.toString(), decoded.body, sender == ownUserId)
+            is RoomMessageEventContent.TextBased.Notice -> {
+                val lines = decoded.body.split('\n', limit = 53)
+                if (lines.size !in 3..52 || lines[0] != RECEIPT_PREFIX) return null
+                val receipt = Receipt.entries.firstOrNull { it.name == lines[1] } ?: return null
+                val ids = lines.drop(2)
+                if (!ids.all(::validEventId)) return null
+                IncomingText(event.id.toString(), "", sender == ownUserId, receipt, ids)
+            }
+            else -> null
+        }
     }
 
-    suspend fun observeText(context: Context, connectionId: String, onText: suspend (IncomingText) -> Unit) {
+    suspend fun observeText(
+        context: Context,
+        connectionId: String,
+        onTyping: (Boolean) -> Unit = {},
+        onText: suspend (IncomingText) -> Unit
+    ) {
         val app = context.applicationContext
         val session = requireNotNull(SecureSessionStore.getSessionId(app))
         val client = MatrixSyncManager.start(app)
@@ -149,6 +180,15 @@ internal object MatrixChatManager {
 
         val ownUserId = client.userId.toString()
         coroutineScope {
+            val typingJob = launch {
+                client.room.usersTyping
+                    .map { UserId(expected.userId) in it[id]?.users.orEmpty() }
+                    .distinctUntilChanged()
+                    .collect { active ->
+                        checkSession(app, session)
+                        onTyping(active)
+                    }
+            }
             // Subscribe first so messages received during history loading are still delivered.
             val live = Channel<IncomingText>(Channel.BUFFERED)
             val liveJob = launch(start = CoroutineStart.UNDISPATCHED) {
@@ -190,8 +230,10 @@ internal object MatrixChatManager {
                     onText(message)
                 }
             } finally {
+                typingJob.cancel()
                 liveJob.cancel()
                 live.cancel()
+                onTyping(false)
             }
         }
     }
@@ -215,6 +257,40 @@ internal object MatrixChatManager {
                 EventAudit(encrypted != null, encrypted?.ciphertext?.value?.isNotBlank() == true)
             }
         }
+
+    suspend fun sendReceipt(context: Context, connectionId: String, receipt: Receipt, ids: List<String>) {
+        require(ids.size in 1..50 && ids.all(::validEventId))
+        withVerifiedRoom(context, connectionId) { client, roomId ->
+            val payload = (listOf(RECEIPT_PREFIX, receipt.name) + ids).joinToString("\n")
+            client.room.sendMessage(roomId) {
+                content(RoomMessageEventContent.TextBased.Notice(payload))
+            }
+        }
+    }
+
+    suspend fun setTyping(context: Context, connectionId: String, active: Boolean) {
+        withVerifiedRoom(context, connectionId) { client, roomId ->
+            client.api.room.setTyping(roomId, client.userId, active, if (active) 5_000L else null).getOrThrow()
+        }
+    }
+
+    private suspend fun withVerifiedRoom(
+        context: Context,
+        connectionId: String,
+        action: suspend (MatrixClient, RoomId) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        withTimeout(12_000L) {
+            val app = context.applicationContext
+            val session = requireNotNull(SecureSessionStore.getSessionId(app))
+            val client = MatrixClientManager.openForCurrentSession(app).getOrThrow()
+            val peer = peer(app, connectionId)
+            val roomId = RoomId(requireNotNull(ConnectionApi.getMatrixRoom(app, connectionId).data?.roomId))
+            checkTrust(client, peer)
+            checkRoom(client, roomId, peer, true)
+            checkSession(app, session)
+            action(client, roomId)
+        }
+    }
 
     // Returns an outbox transaction ID, not a delivery receipt.
     suspend fun enqueueText(context: Context, connectionId: String, body: String): String = withContext(Dispatchers.IO) {
