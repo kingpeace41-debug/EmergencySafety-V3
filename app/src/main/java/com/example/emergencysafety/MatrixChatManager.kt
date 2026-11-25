@@ -113,8 +113,9 @@ internal object MatrixChatManager {
         val app = context.applicationContext
         val session = requireNotNull(SecureSessionStore.getSessionId(app))
         val client = MatrixSyncManager.start(app)
-        val expected = peer(app, connectionId)
-        val id = RoomId(requireNotNull(ConnectionApi.getMatrixRoom(app, connectionId).data?.roomId))
+        val (expected, id) = withContext(Dispatchers.IO) {
+            peer(app, connectionId) to RoomId(requireNotNull(ConnectionApi.getMatrixRoom(app, connectionId).data?.roomId))
+        }
         checkSession(app, session)
         checkTrust(client, expected)
         checkRoom(client, id, expected, true)
