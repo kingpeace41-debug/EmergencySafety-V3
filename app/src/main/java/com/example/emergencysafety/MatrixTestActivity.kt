@@ -110,7 +110,13 @@ class MatrixTestActivity : AppCompatActivity() {
         }
 
     private suspend fun watchSas(client: MatrixClient) = coroutineScope {
-        val choices = peers(client)
+        val connectionId = intent.getStringExtra("matrix_verify_connection")
+        val choices = if (connectionId == null) peers(client) else {
+            val peer = withContext(Dispatchers.IO) {
+                requireNotNull(ConnectionApi.getMatrixPeer(applicationContext, connectionId).data)
+            }
+            listOf(UserId(peer.userId) to peer.deviceId)
+        }
         val prefs = getSharedPreferences("matrix_test_" + client.deviceId, MODE_PRIVATE)
         var (user, device) = choices.firstOrNull { it.second == prefs.getString("peer", "") } ?: choices.first()
         val peerButton = Button(this@MatrixTestActivity).apply { text = "TEST CİHAZI: " + device }
@@ -183,6 +189,7 @@ class MatrixTestActivity : AppCompatActivity() {
             })
         }
         controls.add(peerButton)
+        peerButton.isEnabled = choices.size > 1
         peerButton.setOnClickListener {
             if (busy || client.verification.activeDeviceVerification.value != null) return@setOnClickListener
             val next = choices[(choices.indexOf(user to device) + 1) % choices.size]
@@ -435,7 +442,7 @@ class MatrixTestActivity : AppCompatActivity() {
             } finally {
                 val stopped = withContext(NonCancellable + Dispatchers.IO) {
                     runCatching { withTimeout(5000L) { activeVerification?.cancel() } }
-                    runCatching { syncClient?.cancelSync() }.isSuccess
+                    if (intent.hasExtra("matrix_verify_connection")) true else runCatching { syncClient?.cancelSync() }.isSuccess
                 }
                 activeVerification = null
                 sasButton.isEnabled = false
@@ -531,6 +538,7 @@ class MatrixTestActivity : AppCompatActivity() {
             isFillViewport = true
             addView(layout)
         })
+        if (intent.hasExtra("matrix_verify_connection")) runContinuousSync()
     }
 
     private fun runSessionTest(button: Button) {
