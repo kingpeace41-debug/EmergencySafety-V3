@@ -19,6 +19,7 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.Gravity
@@ -90,6 +91,13 @@ class YellowSafetyActivity : AppCompatActivity() {
     private var matrixAuditJob: Job? = null
     private var lastIncomingMatrixEventId: String? = null
     private val shownMatrixEventIds = mutableSetOf<String>()
+    private val matrixIncomingBubbles = mutableMapOf<String, View>()
+    private val matrixStatusViews = mutableMapOf<String, TextView>()
+    private val matrixOutgoingReceipts = mutableMapOf<String, MatrixChatManager.Receipt>()
+    private val matrixIncomingReceipts = mutableMapOf<String, MatrixChatManager.Receipt>()
+    private var matrixReceiptJob: Job? = null
+    private var matrixTypingJob: Job? = null
+    private var matrixTypingSince = 0L
 
     private val typingScope = CoroutineScope(
         SupervisorJob() + Dispatchers.Main
@@ -110,6 +118,27 @@ class YellowSafetyActivity : AppCompatActivity() {
 
     private fun sendLocalTyping(isTyping: Boolean) {
         if (!isChatOpen || activePrivateConnection == null) return
+        if (isMatrixChat) {
+            val connection = activePrivateConnection ?: return
+            if (!matrixChatReady) return
+            val now = SystemClock.elapsedRealtime()
+            if (localTyping == isTyping && (!isTyping || now - matrixTypingSince < 2_000L)) return
+            localTyping = isTyping
+            matrixTypingSince = now
+            matrixTypingJob?.cancel()
+            matrixTypingJob = typingScope.launch {
+                try {
+                    MatrixChatManager.setTyping(applicationContext, connection.id, isTyping)
+                } catch (_: TimeoutCancellationException) {
+                    // Matrix typing expires automatically.
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    // Failure to update typing must not interrupt the chat.
+                }
+            }
+            return
+        }
         if (localTyping == isTyping) return
 
         localTyping = isTyping
@@ -434,7 +463,13 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && isMatrixChat) scheduleMatrixReceipts()
+    }
+
     override fun onPause() {
+        if (isMatrixChat) sendLocalTyping(false)
         stopPrivateSocket()
         super.onPause()
 
@@ -1418,7 +1453,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             setPadding(dp(3), dp(8), dp(3), dp(8))
 
             setOnScrollChangeListener { _, _, _, _, _ ->
-                if (!encrypted) markVisiblePrivateMessagesRead(connection)
+                if (encrypted) scheduleMatrixReceipts() else markVisiblePrivateMessagesRead(connection)
             }
         }
 
@@ -1619,6 +1654,14 @@ class YellowSafetyActivity : AppCompatActivity() {
         matrixAuditJob = null
         lastIncomingMatrixEventId = null
         shownMatrixEventIds.clear()
+        matrixIncomingBubbles.clear()
+        matrixStatusViews.clear()
+        matrixOutgoingReceipts.clear()
+        matrixIncomingReceipts.clear()
+        matrixReceiptJob?.cancel()
+        matrixReceiptJob = null
+        matrixTypingJob?.cancel()
+        matrixTypingJob = null
         matrixChatReady = false
         isMatrixChat = false
     }
@@ -1655,10 +1698,21 @@ class YellowSafetyActivity : AppCompatActivity() {
                 setMatrixSendEnabled(true)
                 while (true) {
                     try {
-                        MatrixChatManager.observeText(applicationContext, connection.id) { event ->
+                        MatrixChatManager.observeText(
+                            applicationContext, connection.id,
+                            onTyping = { active ->
+                                if (isMatrixChat && activePrivateConnection?.id == connection.id) {
+                                    typingIndicator?.visibility = if (active) View.VISIBLE else View.INVISIBLE
+                                }
+                            }
+                        ) { event ->
                             if (shownMatrixEventIds.add(event.eventId)) {
-                                if (!event.outgoing) lastIncomingMatrixEventId = event.eventId
-                                addMatrixMessage(event)
+                                if (event.receipt != null) {
+                                    applyMatrixReceipt(event)
+                                } else {
+                                    if (!event.outgoing) lastIncomingMatrixEventId = event.eventId
+                                    addMatrixMessage(event)
+                                }
                             }
                         }
                         break
@@ -1694,6 +1748,64 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
     }
 
+    private fun applyMatrixReceipt(event: MatrixChatManager.IncomingText) {
+        val receipt = event.receipt ?: return
+        val receipts = if (event.outgoing) matrixIncomingReceipts else matrixOutgoingReceipts
+        for (id in event.acknowledgedIds) {
+            if (receipts[id] == MatrixChatManager.Receipt.READ) continue
+            receipts[id] = receipt
+            if (!event.outgoing) matrixStatusViews[id]?.let { updateMatrixStatus(it, receipt) }
+        }
+    }
+
+    private fun updateMatrixStatus(view: TextView, receipt: MatrixChatManager.Receipt?) {
+        val (symbol, label) = when (receipt) {
+            MatrixChatManager.Receipt.READ -> "👁" to "Görüldü"
+            MatrixChatManager.Receipt.DELIVERED -> "✓✓" to "Ulaştı"
+            null -> "✓" to "Gönderildi"
+        }
+        view.text = symbol
+        view.contentDescription = label
+    }
+
+    private fun scheduleMatrixReceipts() {
+        val connection = activePrivateConnection ?: return
+        if (!isMatrixChat || !matrixChatReady || matrixReceiptJob?.isActive == true) return
+        matrixReceiptJob = typingScope.launch {
+            delay(400L)
+            try {
+                val visible = Rect()
+                val read = if (hasWindowFocus()) {
+                    matrixIncomingBubbles.filter { (id, bubble) ->
+                        matrixIncomingReceipts[id] != MatrixChatManager.Receipt.READ &&
+                            bubble.getGlobalVisibleRect(visible) &&
+                            visible.height() >= minOf(bubble.height, dp(24))
+                    }.keys
+                } else emptySet()
+                val delivered = matrixIncomingBubbles.keys.filter { it !in read && it !in matrixIncomingReceipts }
+                for ((receipt, ids) in listOf(
+                    MatrixChatManager.Receipt.DELIVERED to delivered,
+                    MatrixChatManager.Receipt.READ to read.toList()
+                )) {
+                    for (batch in ids.chunked(50)) {
+                        MatrixChatManager.sendReceipt(applicationContext, connection.id, receipt, batch)
+                        batch.forEach { id ->
+                            if (matrixIncomingReceipts[id] != MatrixChatManager.Receipt.READ) {
+                                matrixIncomingReceipts[id] = receipt
+                            }
+                        }
+                    }
+                }
+            } catch (_: TimeoutCancellationException) {
+                // Pending acknowledgements can be sent on the next visibility change.
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Keep unacknowledged messages available for a retry.
+            }
+        }
+    }
+
     private fun addMatrixMessage(event: MatrixChatManager.IncomingText) {
         val message = MessageApiItem(
             id = event.eventId,
@@ -1707,7 +1819,10 @@ class YellowSafetyActivity : AppCompatActivity() {
             isOutgoing = event.outgoing
         )
         addServerMessageBubble(message, matrixEvent = true)
-        privateMessagesScroll?.post { privateMessagesScroll?.fullScroll(View.FOCUS_DOWN) }
+        privateMessagesScroll?.post {
+            privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
+            scheduleMatrixReceipts()
+        }
     }
 
     private fun startPrivateChatAutoRefresh(connection: ConnectionApiItem) {
@@ -1926,6 +2041,13 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
 
         // Durum simgeleri yalnızca gönderilen mesajlarda görünür.
+        if (isOutgoing && matrixEvent) {
+            val status = createText("", 14f, gold)
+            matrixStatusViews[message.id] = status
+            updateMatrixStatus(status, matrixOutgoingReceipts[message.id])
+            statusRow.addView(status)
+        }
+
         if (isOutgoing && !matrixEvent) {
 
             val deliveryState = when {
@@ -1983,6 +2105,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
 
         privateMessagesColumn?.addView(bubble, params)
+        if (matrixEvent && !isOutgoing) matrixIncomingBubbles[message.id] = bubble
     }
 
     private fun sendPrivateMessage(
