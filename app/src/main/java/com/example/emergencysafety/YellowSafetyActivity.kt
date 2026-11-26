@@ -1808,20 +1808,14 @@ class YellowSafetyActivity : AppCompatActivity() {
         privateStatusText?.setOnClickListener(null)
 
         matrixChatJob = typingScope.launch {
+            var stage = "sync"
             try {
                 MatrixSyncManager.start(applicationContext)
+                stage = "prepare"
                 MatrixChatManager.prepare(applicationContext, connection.id)
-                withTimeout(30_000L) {
-                    while (true) {
-                        try {
-                            MatrixChatManager.join(applicationContext, connection.id)
-                            break
-                        } catch (error: IllegalArgumentException) {
-                            if (error.message != "ROOM_SYNC_PENDING") throw error
-                            delay(750L)
-                        }
-                    }
-                }
+                stage = "join"
+                MatrixChatManager.join(applicationContext, connection.id)
+                stage = "observe"
                 privateStatusText?.text = "Şifreli oda açık · Karşı cihazın katılması gerekebilir."
                 matrixChatReady = true
                 setMatrixSendEnabled(true)
@@ -1842,11 +1836,12 @@ class YellowSafetyActivity : AppCompatActivity() {
                         delay(2_000L)
                     }
                 }
-            } catch (error: TimeoutCancellationException) {
-                showMatrixChatRetry(connection, "Şifreli oda zamanında hazırlanamadı.")
-            } catch (error: CancellationException) {
-                throw error
             } catch (error: Exception) {
+                val timedOut = error is TimeoutCancellationException
+                if (error is CancellationException && !timedOut) throw error
+                val reason = error.message?.takeIf { it.matches(Regex("[A-Z_]{1,64}")) }
+                    ?: error.javaClass.simpleName
+                android.util.Log.w("MatrixChat", "open stage=$stage retry=$retry reason=$reason")
                 if (error.message == "PEER_NOT_VERIFIED") {
                     matrixChatReady = false
                     setMatrixSendEnabled(false)
@@ -1860,9 +1855,11 @@ class YellowSafetyActivity : AppCompatActivity() {
                     }
                     return@launch
                 }
-                val lookupFailed = error.message in setOf("PEER_UNAVAILABLE", "ROOM_MAPPING_UNAVAILABLE", "ROOM_SYNC_PENDING")
+                val transientFailure = timedOut || error is java.io.IOException || error.message in setOf(
+                    "PEER_UNAVAILABLE", "ROOM_MAPPING_UNAVAILABLE", "ROOM_SYNC_PENDING", "ROOM_MEMBERS_PENDING"
+                )
                 val retryDelays = longArrayOf(5_000L, 15_000L, 45_000L)
-                if (lookupFailed && retry < retryDelays.size) {
+                if (transientFailure && retry < retryDelays.size) {
                     matrixChatReady = false
                     setMatrixSendEnabled(false)
                     privateStatusText?.text = "Oda bilgisi bekleniyor · Yeniden bağlanılıyor…"
@@ -1877,7 +1874,8 @@ class YellowSafetyActivity : AppCompatActivity() {
                     "PEER_UNAVAILABLE" -> "Karşı cihaz eşleştirmesi alınamadı."
                     "ROOM_MAPPING_UNAVAILABLE" -> "Sohbetin oda kaydı alınamadı."
                     "PEER_NOT_JOINED" -> "Karşı taraf da bu kişiyle şifreli sohbeti açmalı."
-                    else -> "Şifreli sohbet şu anda açılamadı."
+                    "PEER_CHANGED" -> "Karşı cihazın kimliği değişti. Gönderim durduruldu."
+                    else -> if (timedOut) "Şifreli oda zamanında hazırlanamadı." else "Şifreli sohbet şu anda açılamadı."
                 }
                 showMatrixChatRetry(connection, message)
             }
