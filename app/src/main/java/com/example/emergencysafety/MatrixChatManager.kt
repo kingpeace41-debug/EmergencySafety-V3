@@ -228,6 +228,12 @@ internal object MatrixChatManager {
                 for (message in live) {
                     recheckAccess()
                     onText(message)
+                    if (message.outgoing && message.receipt == null) {
+                        withContext(Dispatchers.IO) {
+                            checkSession(app, session)
+                            ConnectionApi.wakeMatrixPeer(app, connectionId, expected.deviceId, id.toString(), message.eventId)
+                        }
+                    }
                 }
             } finally {
                 typingJob.cancel()
@@ -237,6 +243,25 @@ internal object MatrixChatManager {
             }
         }
     }
+
+    suspend fun receiveWake(context: Context, session: String, connectionId: String, room: String, event: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val app = context.applicationContext
+            checkSession(app, session)
+            val client = MatrixSyncManager.start(app)
+            val expected = peer(app, connectionId)
+            val mapped = ConnectionApi.getMatrixRoom(app, connectionId).data ?: error("ROOM_SYNC_PENDING")
+            if (mapped.roomId != room) return@withContext false
+            val roomId = RoomId(room)
+            checkTrust(client, expected)
+            checkRoom(client, roomId, expected, true)
+            val timeline = client.room.getTimelineEvent(roomId, EventId(event)).first { it?.content != null }
+            val decoded = timeline?.toChatText(roomId, client.userId.toString(), expected.userId)
+            if (decoded == null || decoded.eventId != event || decoded.outgoing || decoded.receipt != null) return@withContext false
+            checkSession(app, session)
+            sendReceipt(app, connectionId, Receipt.DELIVERED, listOf(event))
+            true
+        }
 
     internal data class EventAudit(val isMegolm: Boolean, val hasCiphertext: Boolean)
 
