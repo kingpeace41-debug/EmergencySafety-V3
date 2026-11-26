@@ -466,6 +466,17 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
+    override fun onNewIntent(newIntent: Intent) {
+        super.onNewIntent(newIntent)
+        setIntent(newIntent)
+        val target = newIntent.getStringExtra("connectionId")?.trim().orEmpty()
+        if (target.isEmpty()) return
+        if (isMatrixChat && activePrivateConnection?.id == target &&
+            newIntent.getBooleanExtra("matrixNotification", false) && matrixChatReady) return
+        pendingNotificationConnectionId = target
+        showConversationList()
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus && isMatrixChat) scheduleMatrixReceipts()
@@ -1051,8 +1062,20 @@ class YellowSafetyActivity : AppCompatActivity() {
         container.removeAllViews()
         addListStatus(container, "Bağlantılar yükleniyor...")
 
+        val notificationTarget = pendingNotificationConnectionId
         Thread {
             val result = ConnectionApi.getConnections(this)
+            val direct = result.data?.firstOrNull { it.id == notificationTarget }
+            if (result.success && direct != null && notificationTarget.isNotBlank()) {
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed && !isChatOpen &&
+                        pendingNotificationConnectionId == notificationTarget) {
+                        pendingNotificationConnectionId = ""
+                        showPrivateChat(direct, encrypted = intent.getBooleanExtra("matrixNotification", false))
+                    }
+                }
+                return@Thread
+            }
             val summaryResult = ConnectionApi.getMessageSummary(this)
             // En son mesajlasilan baglantiyi listenin basina tasimak icin
             // mevcut mesaj API'sinden son mesajlari al.
