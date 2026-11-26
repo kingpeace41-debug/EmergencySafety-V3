@@ -78,7 +78,7 @@ internal object ConnectionApi {
         val expiresInMs: Long?
     )
 
-    internal data class MatrixPeer(val userId: String, val deviceId: String)
+    internal data class MatrixPeer(val userId: String, val deviceId: String, val publicKey: String? = null)
 
     fun getMatrixPeer(context: Context, connectionId: String): ConnectionApiResult<MatrixPeer> {
         if (!Regex("^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$").matches(connectionId)) {
@@ -101,7 +101,9 @@ internal object ConnectionApi {
             !Regex("^ES[a-f0-9]{24}$").matches(deviceId)) {
             return ConnectionApiResult(false, "Geçersiz Matrix kimliği.")
         }
-        return ConnectionApiResult(true, "Kişi eşleştirildi.", MatrixPeer(userId, deviceId))
+        val publicKey = (peer.opt("publicKey") as? String)
+            ?.takeIf { Regex("^[A-Za-z0-9+/]{43}$").matches(it) }
+        return ConnectionApiResult(true, "Kişi eşleştirildi.", MatrixPeer(userId, deviceId, publicKey))
     }
 
     internal data class MatrixRoomMapping(val roomId: String?)
