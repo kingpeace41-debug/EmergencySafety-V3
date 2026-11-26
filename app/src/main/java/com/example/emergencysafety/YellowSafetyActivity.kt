@@ -1109,7 +1109,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                     pendingNotificationConnectionId = ""
 
                     if (targetConnection != null) {
-                        showPrivateChat(targetConnection)
+                        showPrivateChat(targetConnection, encrypted = intent.getBooleanExtra("matrixNotification", false))
                         return@runOnUiThread
                     } else {
                         Toast.makeText(
