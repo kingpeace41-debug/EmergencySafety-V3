@@ -295,10 +295,8 @@ internal object MatrixChatManager {
             val app = context.applicationContext
             checkSession(app, session)
             val client = MatrixSyncManager.start(app)
-            val expected = peer(app, connectionId)
-            val mapped = ConnectionApi.getMatrixRoom(app, connectionId).data ?: error("ROOM_SYNC_PENDING")
-            if (mapped.roomId != room) return@withContext false
-            val roomId = RoomId(room)
+            val (roomId, expected) = signalRoom(app, session, connectionId)
+            if (roomId.toString() != room) return@withContext false
             checkTrust(client, expected)
             checkRoom(client, roomId, expected, true)
             val timeline = client.room.getTimelineEvent(roomId, EventId(event)).first { it?.content != null }
@@ -370,8 +368,7 @@ internal object MatrixChatManager {
                 val app = context.applicationContext
                 val session = requireNotNull(SecureSessionStore.getSessionId(app))
                 val client = MatrixClientManager.openForCurrentSession(app).getOrThrow()
-                val peer = peer(app, connectionId)
-                val id = RoomId(requireNotNull(ConnectionApi.getMatrixRoom(app, connectionId).data?.roomId))
+                val (id, peer) = signalRoom(app, session, connectionId)
                 checkTrust(client, peer)
                 checkRoom(client, id, peer, true)
                 check(peer(app, connectionId) == peer) { "PEER_CHANGED" }
