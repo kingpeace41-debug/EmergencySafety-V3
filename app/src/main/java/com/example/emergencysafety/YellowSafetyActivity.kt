@@ -1744,20 +1744,9 @@ class YellowSafetyActivity : AppCompatActivity() {
                                 if (isMatrixChat && activePrivateConnection?.id == connection.id) {
                                     typingIndicator?.visibility = if (active) View.VISIBLE else View.INVISIBLE
                                 }
-                            }
-                        ) { event ->
-                            if (shownMatrixEventIds.add(event.eventId)) {
-                                if (event.receipt != null) {
-                                    applyMatrixReceipt(event)
-                                } else {
-                                    if (!event.outgoing && event.timestamp >= lastIncomingTime) {
-                                        lastIncomingTime = event.timestamp
-                                        lastIncomingMatrixEventId = event.eventId
-                                    }
-                                    addMatrixMessage(event)
-                                }
-                            }
-                        }
+                            },
+                            onHistory = { events -> renderMatrixHistory(events) }
+                        ) { event -> renderMatrixEvent(event, scrollAfter = true) }
                         break
                     } catch (error: IllegalStateException) {
                         if (error.message != "PEER_NOT_JOINED") throw error
@@ -1867,7 +1856,44 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
     }
 
-    private fun addMatrixMessage(event: MatrixChatManager.IncomingText) {
+    private fun renderMatrixEvent(event: MatrixChatManager.IncomingText, scrollAfter: Boolean) {
+        if (!shownMatrixEventIds.add(event.eventId)) return
+        if (event.receipt != null) {
+            applyMatrixReceipt(event)
+            return
+        }
+        if (!event.outgoing && event.timestamp >= lastIncomingTime) {
+            lastIncomingTime = event.timestamp
+            lastIncomingMatrixEventId = event.eventId
+        }
+        addMatrixMessage(event, scrollAfter)
+    }
+
+    private fun renderMatrixHistory(events: List<MatrixChatManager.IncomingText>) {
+        val scroll = privateMessagesScroll ?: return
+        val column = privateMessagesColumn ?: return
+        val followBottom = !scroll.canScrollVertically(1)
+        val anchor = (0 until column.childCount).asSequence()
+            .map { column.getChildAt(it) }.firstOrNull { it.bottom > scroll.scrollY }
+        val offset = (anchor?.top ?: 0) - scroll.scrollY
+        val count = column.childCount
+        events.forEach { renderMatrixEvent(it, scrollAfter = false) }
+        if (column.childCount == count) return
+        val observer = scroll.viewTreeObserver
+        observer.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                if (observer.isAlive) observer.removeOnPreDrawListener(this)
+                if (privateMessagesColumn === column) {
+                    if (followBottom) scroll.scrollTo(0, column.height)
+                    else if (anchor?.parent === column && anchor != null) scroll.scrollTo(0, anchor.top - offset)
+                    scheduleMatrixReceipts()
+                }
+                return true
+            }
+        })
+    }
+
+    private fun addMatrixMessage(event: MatrixChatManager.IncomingText, scrollAfter: Boolean) {
         val message = MessageApiItem(
             id = event.eventId,
             senderUsername = "",
@@ -1888,6 +1914,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             pendingSendViews.remove(tx)?.let { privateMessagesColumn?.removeView(it) }
         }
         addServerMessageBubble(message, matrixEvent = true, matrixTime = event.timestamp)
+        if (!scrollAfter) return
         privateMessagesScroll?.post {
             privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
             scheduleMatrixReceipts()
