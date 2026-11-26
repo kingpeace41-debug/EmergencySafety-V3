@@ -128,7 +128,9 @@ internal object MatrixChatManager {
         val body: String,
         val outgoing: Boolean,
         val receipt: Receipt? = null,
-        val acknowledgedIds: List<String> = emptyList()
+        val acknowledgedIds: List<String> = emptyList(),
+        val timestamp: Long = 0L,
+        val transactionId: String? = null
     )
 
     private fun validEventId(id: String): Boolean =
@@ -140,7 +142,8 @@ internal object MatrixChatManager {
         if (sender != peerUserId && sender != ownUserId) return null
         return when (val decoded = content?.getOrNull()) {
             is RoomMessageEventContent.TextBased.Text ->
-                IncomingText(event.id.toString(), decoded.body, sender == ownUserId)
+                IncomingText(event.id.toString(), decoded.body, sender == ownUserId,
+                    timestamp = event.originTimestamp, transactionId = event.unsigned?.transactionId)
             is RoomMessageEventContent.TextBased.Notice -> {
                 val lines = decoded.body.split('\n', limit = 53)
                 if (lines.size !in 3..52 || lines[0] != RECEIPT_PREFIX) return null
@@ -211,31 +214,28 @@ internal object MatrixChatManager {
                 }
             }
             try {
-                val history = mutableListOf<Flow<TimelineEvent>>()
-                withTimeoutOrNull(10_000L) {
-                    val lastId = client.room.getById(id).first()?.lastEventId
-                    if (lastId != null) {
-                        client.room.getTimelineEvents(id, lastId) { maxSize = 100 }
-                            .collect { history.add(it) }
-                    }
-                }
-                val messages = history.asReversed().map { event ->
-                    async {
-                        withTimeoutOrNull(3_000L) {
-                            event.first { it.content != null }
-                                .toChatText(id, ownUserId, expected.userId)
+                launch {
+                    recheckAccess()
+                    val historyScope = this
+                    withTimeoutOrNull(10_000L) {
+                        val lastId = client.room.getById(id).first()?.lastEventId
+                        if (lastId != null) {
+                            client.room.getTimelineEvents(id, lastId) { maxSize = 100 }.collect { item ->
+                                historyScope.launch {
+                                    val message = withTimeoutOrNull(3_000L) {
+                                        item.first { it.content != null }.toChatText(id, ownUserId, expected.userId)
+                                    }
+                                    if (message != null) {
+                                        checkSession(app, session)
+                                        checkTrust(client, expected)
+                                        checkRoom(client, id, expected, true)
+                                        checkSession(app, session)
+                                        onText(message)
+                                    }
+                                }
+                            }
                         }
                     }
-                }
-                var historyAccessChecked = false
-                for (pending in messages) {
-                    val message = pending.await() ?: continue
-                    if (!historyAccessChecked) {
-                        recheckAccess()
-                        historyAccessChecked = true
-                    }
-                    checkSession(app, session)
-                    onText(message)
                 }
                 for (message in live) {
                     recheckAccess()
