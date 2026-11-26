@@ -1655,6 +1655,24 @@ class YellowSafetyActivity : AppCompatActivity() {
         Toast.makeText(this, "Matrix anahtarı kontrol ediliyor…", Toast.LENGTH_SHORT).show()
         matrixAuditJob = typingScope.launch {
             val keyResult = checkOwnMatrixSigningKey()
+            val peerKeyResult = try {
+                withTimeout(10000L) {
+                    withContext(Dispatchers.IO) {
+                        val peer = ConnectionApi.getMatrixPeer(applicationContext, connection.id).data
+                        when {
+                            peer == null -> "Karşı cihaz bilgisi alınamadı."
+                            peer.publicKey == null -> "Karşı cihazın kayıtlı açık anahtarı alınamadı."
+                            else -> "Karşı cihazın kayıtlı açık anahtarı alındı."
+                        }
+                    }
+                }
+            } catch (error: TimeoutCancellationException) {
+                "Karşı cihaz sorgusu zaman aşımına uğradı."
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                "Karşı cihaz sorgusu tamamlanamadı."
+            }
             val eventResult = if (eventId == null) {
                 "Henüz gelen test mesajı yok."
             } else {
@@ -1676,7 +1694,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                 "Olay kimliği: $eventId\n$result"
             }
             if (isMatrixChat && activePrivateConnection?.id == connection.id && !isFinishing) {
-                showMatrixChatInfoDialog(connection, encrypted = true, audit = "$keyResult\n\n$eventResult")
+                showMatrixChatInfoDialog(connection, encrypted = true, audit = "$keyResult\n$peerKeyResult\n\n$eventResult")
             }
         }
     }
