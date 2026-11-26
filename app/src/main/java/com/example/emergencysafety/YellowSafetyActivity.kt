@@ -1693,7 +1693,15 @@ class YellowSafetyActivity : AppCompatActivity() {
                     keys == null -> "Sunucuda cihaz anahtar kaydı bulunamadı."
                     keys.userId != client.userId || keys.deviceId != client.deviceId ->
                         "Sunucudan dönen cihaz kimliği eşleşmedi."
-                    client.signingKey in keys.keys -> "Eşleşti."
+                    client.signingKey in keys.keys -> {
+                        val saved = ConnectionApi.confirmMatrixSessionDelivery(
+                            applicationContext,
+                            client.deviceId.toString(),
+                            publicKey = client.signingKey.value.value
+                        )
+                        if (saved) "Eşleşti ve oturuma kaydedildi."
+                        else "Eşleşti. Oturuma kayıt onayı alınamadı."
+                    }
                     else -> "Eşleşmedi."
                 }
             }
