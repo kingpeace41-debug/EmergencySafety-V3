@@ -160,6 +160,7 @@ internal object MatrixChatManager {
         context: Context,
         connectionId: String,
         onTyping: (Boolean) -> Unit = {},
+        onHistory: (suspend (List<IncomingText>) -> Unit)? = null,
         onText: suspend (IncomingText) -> Unit
     ) {
         val app = context.applicationContext
@@ -216,25 +217,34 @@ internal object MatrixChatManager {
             try {
                 launch {
                     recheckAccess()
-                    val historyScope = this
-                    withTimeoutOrNull(10_000L) {
-                        val lastId = client.room.getById(id).first()?.lastEventId
-                        if (lastId != null) {
-                            client.room.getTimelineEvents(id, lastId) { maxSize = 100 }.collect { item ->
-                                historyScope.launch {
-                                    val message = withTimeoutOrNull(3_000L) {
-                                        item.first { it.content != null }.toChatText(id, ownUserId, expected.userId)
-                                    }
-                                    if (message != null) {
-                                        checkSession(app, session)
-                                        checkTrust(client, expected)
-                                        checkRoom(client, id, expected, true)
-                                        checkSession(app, session)
-                                        onText(message)
+                    val batch = mutableListOf<IncomingText>()
+                    var previewShown = false
+                    coroutineScope {
+                        val historyScope = this
+                        withTimeoutOrNull(10_000L) {
+                            val lastId = client.room.getById(id).first()?.lastEventId
+                            if (lastId != null) {
+                                client.room.getTimelineEvents(id, lastId) { maxSize = 100 }.collect { item ->
+                                    historyScope.launch {
+                                        val message = withTimeoutOrNull(3_000L) {
+                                            item.first { it.content != null }.toChatText(id, ownUserId, expected.userId)
+                                        } ?: return@launch
+                                        if (!previewShown && message.receipt == null) {
+                                            previewShown = true
+                                            recheckAccess()
+                                            onText(message)
+                                        } else {
+                                            batch.add(message)
+                                        }
                                     }
                                 }
                             }
                         }
+                    }
+                    if (batch.isNotEmpty()) {
+                        recheckAccess()
+                        val ordered = batch.sortedBy { it.timestamp }
+                        if (onHistory != null) onHistory(ordered) else ordered.forEach { onText(it) }
                     }
                 }
                 for (message in live) {
