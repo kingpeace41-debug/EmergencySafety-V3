@@ -1649,34 +1649,62 @@ class YellowSafetyActivity : AppCompatActivity() {
             showMatrixChatInfoDialog(connection, encrypted = false)
             return
         }
+        if (matrixAuditJob?.isActive == true) return
 
         val eventId = lastIncomingMatrixEventId
-        if (eventId == null) {
-            showMatrixChatInfoDialog(connection, encrypted = true, audit = "Henüz gelen test mesajı yok.")
-            return
-        }
-        if (matrixAuditJob?.isActive == true) return
-        Toast.makeText(this, "Matrix olayı sunucudan kontrol ediliyor…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Matrix anahtarı kontrol ediliyor…", Toast.LENGTH_SHORT).show()
         matrixAuditJob = typingScope.launch {
-            val result = try {
-                val event = MatrixChatManager.auditIncomingEvent(applicationContext, connection.id, eventId)
-                when {
-                    event.isMegolm && event.hasCiphertext ->
-                        "Olay türü: m.room.encrypted\nCiphertext: Var"
-                    event.isMegolm -> "Olay türü: m.room.encrypted\nCiphertext: Boş"
-                    else -> "Sunucudan dönen olay Megolm şifreli mesaj biçiminde değil."
+            val keyResult = checkOwnMatrixSigningKey()
+            val eventResult = if (eventId == null) {
+                "Henüz gelen test mesajı yok."
+            } else {
+                val result = try {
+                    val event = MatrixChatManager.auditIncomingEvent(applicationContext, connection.id, eventId)
+                    when {
+                        event.isMegolm && event.hasCiphertext ->
+                            "Olay türü: m.room.encrypted\nCiphertext: Var"
+                        event.isMegolm -> "Olay türü: m.room.encrypted\nCiphertext: Boş"
+                        else -> "Sunucudan dönen olay Megolm şifreli mesaj biçiminde değil."
+                    }
+                } catch (error: TimeoutCancellationException) {
+                    "Sunucu kontrolü zaman aşımına uğradı."
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    "Sunucudaki olay doğrulanamadı."
                 }
-            } catch (error: TimeoutCancellationException) {
-                "Sunucu kontrolü zaman aşımına uğradı."
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                "Sunucudaki olay doğrulanamadı."
+                "Olay kimliği: $eventId\n$result"
             }
             if (isMatrixChat && activePrivateConnection?.id == connection.id && !isFinishing) {
-                showMatrixChatInfoDialog(connection, encrypted = true, audit = "Olay kimliği: $eventId\n$result")
+                showMatrixChatInfoDialog(connection, encrypted = true, audit = "$keyResult\n\n$eventResult")
             }
         }
+    }
+
+    private suspend fun checkOwnMatrixSigningKey(): String = try {
+        val result = withTimeout(10000L) {
+            withContext(Dispatchers.IO) {
+                val client = MatrixClientManager.openForCurrentSession(applicationContext).getOrThrow()
+                val response = client.api.key.getKeys(
+                    deviceKeys = mapOf(client.userId to setOf(client.deviceId))
+                ).getOrThrow()
+                val keys = response.deviceKeys?.get(client.userId)?.get(client.deviceId)?.signed
+                when {
+                    keys == null -> "Sunucuda cihaz anahtar kaydı bulunamadı."
+                    keys.userId != client.userId || keys.deviceId != client.deviceId ->
+                        "Sunucudan dönen cihaz kimliği eşleşmedi."
+                    client.signingKey in keys.keys -> "Eşleşti."
+                    else -> "Eşleşmedi."
+                }
+            }
+        }
+        "Bu cihazın Ed25519 anahtarı: $result"
+    } catch (error: TimeoutCancellationException) {
+        "Cihaz anahtarı kontrolü zaman aşımına uğradı."
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        "Cihaz anahtarı kontrolü tamamlanamadı."
     }
 
     private fun showMatrixChatInfoDialog(connection: ConnectionApiItem, encrypted: Boolean, audit: String = "") {
