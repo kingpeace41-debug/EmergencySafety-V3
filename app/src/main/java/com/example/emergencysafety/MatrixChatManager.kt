@@ -3,6 +3,9 @@ package com.example.emergencysafety
 import android.content.Context
 import de.connect2x.trixnity.client.MatrixClient
 import de.connect2x.trixnity.client.key
+import de.connect2x.trixnity.client.key.KeyTrustService
+import de.connect2x.trixnity.client.store.KeyStore
+import de.connect2x.trixnity.core.model.keys.Key.Ed25519Key
 import de.connect2x.trixnity.client.room
 import de.connect2x.trixnity.client.room.message.text
 import de.connect2x.trixnity.core.model.EventId
@@ -32,7 +35,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 
-// Pilot only. Caller must maintain Matrix sync and present SAS verification UI.
+// Pilot only. The caller maintains Matrix sync.
 // Never falls back to the legacy plaintext transport.
 internal object MatrixChatManager {
     private val lock = Mutex()
@@ -74,12 +77,62 @@ internal object MatrixChatManager {
     private fun peer(app: Context, connectionId: String): ConnectionApi.MatrixPeer =
         requireNotNull(ConnectionApi.getMatrixPeer(app, connectionId).data) { "PEER_UNAVAILABLE" }
 
-    private suspend fun checkTrust(client: MatrixClient, peer: ConnectionApi.MatrixPeer) {
-        check(client.userId.toString() != peer.userId) { "INVALID_PEER" }
-        val level = client.key.getTrustLevel(UserId(peer.userId), peer.deviceId).first()
-        check(when (level) {
+    private var registeredSession: String? = null
+
+    // Called under lock after Matrix sync has started. Retry on the next open if
+    // the homeserver has not received this device's signing key yet.
+    private fun registerOwnKey(app: Context, session: String, client: MatrixClient) {
+        if (registeredSession == session) return
+        checkSession(app, session)
+        if (ConnectionApi.confirmMatrixSessionDelivery(
+                app, client.deviceId, publicKey = client.signingKey.value.value
+            )) {
+            checkSession(app, session)
+            registeredSession = session
+        }
+    }
+
+    private suspend fun checkTrust(
+        app: Context, client: MatrixClient, peer: ConnectionApi.MatrixPeer,
+        allowEnrollment: Boolean = false
+    ) {
+        val user = UserId(peer.userId)
+        check(client.userId != user) { "INVALID_PEER" }
+        val pins = app.getSharedPreferences("matrix_peer_signing_keys", Context.MODE_PRIVATE)
+        val pinId = "${client.userId}|${peer.userId}"
+        val previous = pins.getString(pinId, null)
+        val key = peer.publicKey
+        val binding = key?.let { "${peer.deviceId}|$it" }
+        check(previous == null || previous == binding) { "PEER_CHANGED" }
+
+        val level = client.key.getTrustLevel(user, peer.deviceId).first()
+        val verified = when (level) {
             is DeviceTrustLevel.Valid -> level.verified
             is DeviceTrustLevel.CrossSigned -> level.verified
+            else -> error("PEER_NOT_VERIFIED")
+        }
+        if (key == null || binding == null) {
+            check(verified) { "PEER_NOT_VERIFIED" }
+            return
+        }
+
+        val record = client.di.get<KeyStore>().getDeviceKeys(user).first()
+            ?.get(peer.deviceId)?.value?.signed
+        check(record != null && record.userId == user && record.deviceId == peer.deviceId) {
+            "PEER_NOT_VERIFIED"
+        }
+        val signingKey = record.keys.filterIsInstance<Ed25519Key>().singleOrNull { it.id == peer.deviceId }
+        check(signingKey != null && signingKey.value.value == key) { "PEER_CHANGED" }
+        if (previous == null && allowEnrollment) {
+            check(pins.edit().putString(pinId, binding).commit()) { "PEER_PIN_WRITE_FAILED" }
+        }
+        if (verified) return
+        check(allowEnrollment) { "PEER_NOT_VERIFIED" }
+        client.di.get<KeyTrustService>().trustAndSignKeys(setOf(signingKey), user)
+        val confirmed = client.key.getTrustLevel(user, peer.deviceId).first()
+        check(when (confirmed) {
+            is DeviceTrustLevel.Valid -> confirmed.verified
+            is DeviceTrustLevel.CrossSigned -> confirmed.verified
             else -> false
         }) { "PEER_NOT_VERIFIED" }
     }
@@ -105,9 +158,10 @@ internal object MatrixChatManager {
                 val app = context.applicationContext
                 val session = requireNotNull(SecureSessionStore.getSessionId(app))
                 val client = MatrixClientManager.openForCurrentSession(app).getOrThrow()
+                registerOwnKey(app, session, client)
                 val peer = peer(app, connectionId)
                 checkSession(app, session)
-                checkTrust(client, peer)
+                checkTrust(app, client, peer, allowEnrollment = true)
                 val mapping = requireNotNull(ConnectionApi.getMatrixRoom(app, connectionId).data) { "ROOM_MAPPING_UNAVAILABLE" }
                 checkSession(app, session)
                 val id = if (mapping.roomId != null) RoomId(mapping.roomId) else {
@@ -135,7 +189,7 @@ internal object MatrixChatManager {
                 val client = MatrixClientManager.openForCurrentSession(app).getOrThrow()
                 val peer = peer(app, connectionId)
                 val id = RoomId(requireNotNull(ConnectionApi.getMatrixRoom(app, connectionId).data?.roomId))
-                checkTrust(client, peer)
+                checkTrust(app, client, peer)
                 checkRoom(client, id, peer, false)
                 checkSession(app, session)
                 check(peer(app, connectionId) == peer) { "PEER_CHANGED" }
@@ -196,14 +250,14 @@ internal object MatrixChatManager {
         val client = MatrixSyncManager.start(app)
         val (id, expected) = withContext(Dispatchers.IO) { signalRoom(app, session, connectionId) }
         checkSession(app, session)
-        checkTrust(client, expected)
+        checkTrust(app, client, expected)
         checkRoom(client, id, expected, true)
 
         suspend fun recheckAccess() = withContext(Dispatchers.IO) {
             checkSession(app, session)
             val mapped = signalRoom(app, session, connectionId)
             check(mapped.peer == expected && mapped.roomId == id) { "PEER_CHANGED" }
-            checkTrust(client, expected)
+            checkTrust(app, client, expected)
             checkRoom(client, id, expected, true)
             checkSession(app, session)
         }
@@ -297,7 +351,7 @@ internal object MatrixChatManager {
             val client = MatrixSyncManager.start(app)
             val (roomId, expected) = signalRoom(app, session, connectionId)
             if (roomId.toString() != room) return@withContext false
-            checkTrust(client, expected)
+            checkTrust(app, client, expected)
             checkRoom(client, roomId, expected, true)
             val timeline = client.room.getTimelineEvent(roomId, EventId(event)).first { it?.content != null }
             val decoded = timeline?.toChatText(roomId, client.userId.toString(), expected.userId)
@@ -353,7 +407,7 @@ internal object MatrixChatManager {
             val session = requireNotNull(SecureSessionStore.getSessionId(app))
             val client = MatrixClientManager.openForCurrentSession(app).getOrThrow()
             val (roomId, peer) = signalRoom(app, session, connectionId)
-            checkTrust(client, peer)
+            checkTrust(app, client, peer)
             checkRoom(client, roomId, peer, true)
             checkSession(app, session)
             action(client, roomId)
@@ -369,7 +423,7 @@ internal object MatrixChatManager {
                 val session = requireNotNull(SecureSessionStore.getSessionId(app))
                 val client = MatrixClientManager.openForCurrentSession(app).getOrThrow()
                 val (id, peer) = signalRoom(app, session, connectionId)
-                checkTrust(client, peer)
+                checkTrust(app, client, peer)
                 checkRoom(client, id, peer, true)
                 check(peer(app, connectionId) == peer) { "PEER_CHANGED" }
                 checkSession(app, session)
