@@ -635,6 +635,7 @@ class MessagingTabBar @JvmOverloads constructor(
         item: ConnectionApiItem
     ) {
         val row = createRow()
+        row.setOnClickListener { openAcceptedChat(item) }
 
         // Kişi adı ve e-posta birlikte gösterilir.
         val identityColumn = LinearLayout(context).apply {
@@ -1112,6 +1113,13 @@ class MessagingTabBar @JvmOverloads constructor(
         )
     }
 
+    private fun openAcceptedChat(item: ConnectionApiItem) {
+        val activity = findActivity(context) as? YellowSafetyActivity ?: return
+        if (activity.isFinishing || activity.isDestroyed) return
+        showTab("chats")
+        activity.openAcceptedChat(item)
+    }
+
     private fun respondToRequest(
         item: ConnectionApiItem,
         action: String,
@@ -1130,7 +1138,9 @@ class MessagingTabBar @JvmOverloads constructor(
             post {
                 showToast(result.message)
 
-                if (result.success) {
+                if (result.success && action == "accept" && activeTab == "requests") {
+                    openAcceptedChat(item)
+                } else if (result.success) {
                     loadRequests(container)
                 } else {
                     buttons.forEach { it.isEnabled = true }
