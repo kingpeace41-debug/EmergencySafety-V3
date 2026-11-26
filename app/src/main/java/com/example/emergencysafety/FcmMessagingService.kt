@@ -1,6 +1,11 @@
 
 package com.example.emergencysafety
 
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
@@ -62,6 +67,22 @@ class FcmMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+        if (message.data["type"] == "matrix_wake") {
+            val session = SecureSessionStore.getSessionId(applicationContext) ?: return
+            val connection = message.data["connectionId"] ?: return
+            val room = message.data["roomId"] ?: return
+            val event = message.data["eventId"] ?: return
+            if (connection.length != 36 || room.length !in 2..255 || !room.startsWith("!") ||
+                event.length !in 2..255 || !event.startsWith("$")) return
+            val job = OneTimeWorkRequestBuilder<MatrixWakeWorker>()
+                .setInputData(workDataOf("session" to session, "connectionId" to connection,
+                    "roomId" to room, "eventId" to event))
+                .apply { if (Build.VERSION.SDK_INT >= 31) setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST) }
+                .build()
+            WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+                "matrix-wake:$session:$event", ExistingWorkPolicy.KEEP, job)
+            return
+        }
 
         val senderUsername =
             message.data["senderUsername"].orEmpty().trim()
