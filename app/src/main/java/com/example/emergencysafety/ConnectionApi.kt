@@ -135,6 +135,11 @@ internal object ConnectionApi {
         return ConnectionApiResult(true, "Sohbet kaydı alındı.", MatrixRoomMapping(mapped))
     }
 
+    fun wakeMatrixPeer(context: Context, connectionId: String, deviceId: String, roomId: String, eventId: String) {
+        request(context, "/matrix/wake/$connectionId", "POST",
+            JSONObject().put("deviceId", deviceId).put("roomId", roomId).put("eventId", eventId))
+    }
+
     fun sendMatrixTestReport(context: Context, body: JSONObject): Boolean =
         request(context, "/matrix/test-report", "POST", body).optBoolean("success", false)
 
