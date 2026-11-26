@@ -143,13 +143,19 @@ internal object ConnectionApi {
     fun sendMatrixTestReport(context: Context, body: JSONObject): Boolean =
         request(context, "/matrix/test-report", "POST", body).optBoolean("success", false)
 
-    fun confirmMatrixSessionDelivery(context: Context, deviceId: String): Boolean {
+    fun confirmMatrixSessionDelivery(
+        context: Context,
+        deviceId: String,
+        publicKey: String? = null
+    ): Boolean {
         if (!Regex("^ES[a-f0-9]{24}$").matches(deviceId)) return false
         val response = request(
             context = context,
             path = "/matrix/session/confirm",
             method = "POST",
-            body = JSONObject().put("deviceId", deviceId)
+            body = JSONObject().put("deviceId", deviceId).apply {
+                if (publicKey != null) put("publicKey", publicKey)
+            }
         )
         return response.optBoolean("success", false)
     }
