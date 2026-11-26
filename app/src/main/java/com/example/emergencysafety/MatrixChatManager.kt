@@ -146,7 +146,9 @@ internal object MatrixChatManager {
             val membership = flow.first()?.content?.membership
             if (membership == Membership.JOIN || membership == Membership.INVITE) key else null
         }.toSet()
-        check(active == setOf(client.userId.toString(), peer.userId)) { "ROOM_MEMBERS_MISMATCH" }
+        val expected = setOf(client.userId.toString(), peer.userId)
+        check(active.all { it in expected }) { "ROOM_MEMBERS_MISMATCH" }
+        check(active == expected) { "ROOM_MEMBERS_PENDING" }
         if (joined) {
             check(members[peer.userId]?.first()?.content?.membership == Membership.JOIN) { "PEER_NOT_JOINED" }
         }
@@ -190,12 +192,27 @@ internal object MatrixChatManager {
                 val peer = peer(app, connectionId)
                 val id = RoomId(requireNotNull(ConnectionApi.getMatrixRoom(app, connectionId).data?.roomId))
                 checkTrust(app, client, peer)
-                checkRoom(client, id, peer, false)
+                // Room summaries and member events can arrive in separate sync updates.
+                // Recheck only local state while waiting; do not repeat peer/room HTTP calls.
+                withTimeout(20_000L) {
+                    while (true) {
+                        try {
+                            checkRoom(client, id, peer, false)
+                            break
+                        } catch (error: RuntimeException) {
+                            if (error.message !in setOf("ROOM_SYNC_PENDING", "ROOM_NOT_ENCRYPTED", "ROOM_MEMBERS_PENDING")) throw error
+                            kotlinx.coroutines.delay(500L)
+                        }
+                    }
+                }
                 checkSession(app, session)
                 check(peer(app, connectionId) == peer) { "PEER_CHANGED" }
                 checkSession(app, session)
                 if (client.room.getById(id).first()?.membership == Membership.INVITE) {
                     client.api.room.joinRoom(id).getOrThrow()
+                    withTimeout(20_000L) {
+                        client.room.getById(id).first { it?.membership == Membership.JOIN }
+                    }
                 }
             }
         }
