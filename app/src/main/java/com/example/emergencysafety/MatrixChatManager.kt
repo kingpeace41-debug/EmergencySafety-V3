@@ -39,6 +39,34 @@ internal object MatrixChatManager {
 
     internal data class ChatRoom(val roomId: RoomId, val peer: ConnectionApi.MatrixPeer)
 
+    private data class RecentMapping(
+        val session: String,
+        val connection: String,
+        val room: ChatRoom,
+        val expiresAt: Long
+    )
+
+    private val mappingLock = Mutex()
+    private var recentMapping: RecentMapping? = null
+
+    // Used by receipts, typing and the event observer. Message sends resolve their recipient afresh.
+    private suspend fun signalRoom(app: Context, session: String, connectionId: String): ChatRoom =
+        mappingLock.withLock {
+            checkSession(app, session)
+            val cached = recentMapping
+            if (cached != null && cached.session == session && cached.connection == connectionId &&
+                android.os.SystemClock.elapsedRealtime() < cached.expiresAt) {
+                return@withLock cached.room
+            }
+            recentMapping = null
+            val currentPeer = peer(app, connectionId)
+            val id = requireNotNull(ConnectionApi.getMatrixRoom(app, connectionId).data?.roomId) { "ROOM_MAPPING_UNAVAILABLE" }
+            checkSession(app, session)
+            val room = ChatRoom(RoomId(id), currentPeer)
+            recentMapping = RecentMapping(session, connectionId, room, android.os.SystemClock.elapsedRealtime() + 8_000L)
+            room
+        }
+
     private fun checkSession(app: Context, session: String) {
         check(SecureSessionStore.getSessionId(app) == session) { "SESSION_CHANGED" }
     }
@@ -166,16 +194,15 @@ internal object MatrixChatManager {
         val app = context.applicationContext
         val session = requireNotNull(SecureSessionStore.getSessionId(app))
         val client = MatrixSyncManager.start(app)
-        val (expected, id) = withContext(Dispatchers.IO) {
-            peer(app, connectionId) to RoomId(requireNotNull(ConnectionApi.getMatrixRoom(app, connectionId).data?.roomId))
-        }
+        val (id, expected) = withContext(Dispatchers.IO) { signalRoom(app, session, connectionId) }
         checkSession(app, session)
         checkTrust(client, expected)
         checkRoom(client, id, expected, true)
 
         suspend fun recheckAccess() = withContext(Dispatchers.IO) {
             checkSession(app, session)
-            check(peer(app, connectionId) == expected) { "PEER_CHANGED" }
+            val mapped = signalRoom(app, session, connectionId)
+            check(mapped.peer == expected && mapped.roomId == id) { "PEER_CHANGED" }
             checkTrust(client, expected)
             checkRoom(client, id, expected, true)
             checkSession(app, session)
@@ -327,8 +354,7 @@ internal object MatrixChatManager {
             val app = context.applicationContext
             val session = requireNotNull(SecureSessionStore.getSessionId(app))
             val client = MatrixClientManager.openForCurrentSession(app).getOrThrow()
-            val peer = peer(app, connectionId)
-            val roomId = RoomId(requireNotNull(ConnectionApi.getMatrixRoom(app, connectionId).data?.roomId))
+            val (roomId, peer) = signalRoom(app, session, connectionId)
             checkTrust(client, peer)
             checkRoom(client, roomId, peer, true)
             checkSession(app, session)
