@@ -1662,7 +1662,25 @@ class YellowSafetyActivity : AppCompatActivity() {
                         when {
                             peer == null -> "Karşı cihaz bilgisi alınamadı."
                             peer.publicKey == null -> "Karşı cihazın kayıtlı açık anahtarı alınamadı."
-                            else -> "Karşı cihazın kayıtlı açık anahtarı alındı."
+                            else -> {
+                                val client = MatrixClientManager.openForCurrentSession(applicationContext).getOrThrow()
+                                val peerUserId = de.connect2x.trixnity.core.model.UserId(peer.userId)
+                                val response = client.api.key.getKeys(
+                                    deviceKeys = mapOf(peerUserId to setOf(peer.deviceId))
+                                ).getOrThrow()
+                                val keys = response.deviceKeys?.get(peerUserId)?.get(peer.deviceId)?.signed
+                                val signingKey = keys?.keys
+                                    ?.filterIsInstance<de.connect2x.trixnity.core.model.keys.Key.Ed25519Key>()
+                                    ?.singleOrNull { it.id == peer.deviceId }
+                                when {
+                                    keys == null -> "Tuwunel’de karşı cihazın anahtar kaydı bulunamadı."
+                                    keys.userId != peerUserId || keys.deviceId != peer.deviceId ->
+                                        "Tuwunel’den dönen karşı cihaz kimliği eşleşmedi."
+                                    signingKey?.value?.value == peer.publicKey ->
+                                        "Karşı cihazın Ed25519 açık anahtarı eşleşti."
+                                    else -> "Karşı cihazın Ed25519 açık anahtarı eşleşmedi."
+                                }
+                            }
                         }
                     }
                 }
