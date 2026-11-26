@@ -1362,7 +1362,11 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
-    private fun showPrivateChat(connection: ConnectionApiItem, encrypted: Boolean = false) {
+    internal fun openAcceptedChat(connection: ConnectionApiItem) {
+        showPrivateChat(connection, encrypted = true)
+    }
+
+    private fun showPrivateChat(connection: ConnectionApiItem, encrypted: Boolean = true) {
         stopMatrixChat()
         isMatrixChat = encrypted
         val displayName = ContactNames.getDisplayName(this, connection.email)
