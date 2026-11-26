@@ -454,6 +454,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
 
         showConversationList()
+        openRequestsFromNotification(intent)
 
         onBackPressedDispatcher.addCallback(
             this,
@@ -469,9 +470,20 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
+    private fun openRequestsFromNotification(source: Intent): Boolean {
+        if (!source.getBooleanExtra("messageRequestNotification", false) || !isRegisteredUser()) return false
+        source.removeExtra("messageRequestNotification")
+        pendingNotificationConnectionId = ""
+        if (isChatOpen) showConversationList()
+        val tabs = findViewById<MessagingTabBar>(R.id.messagingTabBar)
+        tabs.post { if (!isDestroyed && !isFinishing) tabs.openMessageRequests() }
+        return true
+    }
+
     override fun onNewIntent(newIntent: Intent) {
         super.onNewIntent(newIntent)
         setIntent(newIntent)
+        if (openRequestsFromNotification(newIntent)) return
         val target = newIntent.getStringExtra("connectionId")?.trim().orEmpty()
         if (target.isEmpty()) return
         if (isMatrixChat && activePrivateConnection?.id == target &&
