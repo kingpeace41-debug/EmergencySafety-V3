@@ -67,6 +67,24 @@ class FcmMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+        if (message.data["type"] == "message_request") {
+            if (!notificationsAllowed() || SecureSessionStore.getSessionId(applicationContext) == null) return
+            createMessageNotificationChannel()
+            val id = ("request:" + message.data["requestId"].orEmpty()).hashCode()
+            val target = Intent(this, YellowSafetyActivity::class.java)
+                .putExtra("messageRequestNotification", true)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            val pending = PendingIntent.getActivity(this, id, target, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val name = ContactNames.getSavedName(this, message.data["senderEmail"].orEmpty())
+                ?.takeIf { it.isNotBlank() && !it.contains('@') }
+            val label = name?.let { "$it sana mesaj isteği gönderdi." } ?: "Yeni bir mesaj isteğin var."
+            postNotification(id, NotificationCompat.Builder(this, MESSAGE_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification_wolf)
+                .setContentTitle("EmergencySafety").setContentText(label)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setContentIntent(pending).setAutoCancel(true).build())
+            return
+        }
         if (message.data["type"] == "matrix_wake") {
             val session = SecureSessionStore.getSessionId(applicationContext) ?: return
             val connection = message.data["connectionId"] ?: return
