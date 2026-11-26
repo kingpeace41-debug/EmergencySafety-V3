@@ -91,6 +91,9 @@ class YellowSafetyActivity : AppCompatActivity() {
     private var matrixSendJob: Job? = null
     private var matrixAuditJob: Job? = null
     private var lastIncomingMatrixEventId: String? = null
+    private var lastIncomingTime = Long.MIN_VALUE
+    private val pendingSendViews = mutableMapOf<String, View>()
+    private val echoedTransactions = mutableSetOf<String>()
     private val shownMatrixEventIds = mutableSetOf<String>()
     private val matrixIncomingBubbles = mutableMapOf<String, View>()
     private val matrixStatusViews = mutableMapOf<String, TextView>()
@@ -1685,6 +1688,9 @@ class YellowSafetyActivity : AppCompatActivity() {
         matrixAuditJob?.cancel()
         matrixAuditJob = null
         lastIncomingMatrixEventId = null
+        lastIncomingTime = Long.MIN_VALUE
+        pendingSendViews.clear()
+        echoedTransactions.clear()
         shownMatrixEventIds.clear()
         pendingMatrixDeliveries.clear()
         receiptCheckPending = false
@@ -1744,7 +1750,10 @@ class YellowSafetyActivity : AppCompatActivity() {
                                 if (event.receipt != null) {
                                     applyMatrixReceipt(event)
                                 } else {
-                                    if (!event.outgoing) lastIncomingMatrixEventId = event.eventId
+                                    if (!event.outgoing && event.timestamp >= lastIncomingTime) {
+                                        lastIncomingTime = event.timestamp
+                                        lastIncomingMatrixEventId = event.eventId
+                                    }
                                     addMatrixMessage(event)
                                 }
                             }
@@ -1874,7 +1883,11 @@ class YellowSafetyActivity : AppCompatActivity() {
             pendingMatrixDeliveries.add(event.eventId)
             scheduleMatrixReceipts()
         }
-        addServerMessageBubble(message, matrixEvent = true)
+        if (event.outgoing) event.transactionId?.let { tx ->
+            echoedTransactions.add(tx)
+            pendingSendViews.remove(tx)?.let { privateMessagesColumn?.removeView(it) }
+        }
+        addServerMessageBubble(message, matrixEvent = true, matrixTime = event.timestamp)
         privateMessagesScroll?.post {
             privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
             scheduleMatrixReceipts()
@@ -2006,7 +2019,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
-    private fun addServerMessageBubble(message: MessageApiItem, matrixEvent: Boolean = false) {
+    private fun addServerMessageBubble(message: MessageApiItem, matrixEvent: Boolean = false, matrixTime: Long = 0L) {
 
         val isOutgoing = message.isOutgoing
 
@@ -2160,7 +2173,17 @@ class YellowSafetyActivity : AppCompatActivity() {
             }
         }
 
-        privateMessagesColumn?.addView(bubble, params)
+        val column = privateMessagesColumn
+        if (matrixEvent && column != null) {
+            bubble.tag = matrixTime
+            val index = (0 until column.childCount).firstOrNull {
+                val time = column.getChildAt(it).tag as? Long
+                time != null && time > matrixTime
+            } ?: column.childCount
+            column.addView(bubble, index, params)
+        } else {
+            column?.addView(bubble, params)
+        }
         if (matrixEvent && !isOutgoing) matrixIncomingBubbles[message.id] = bubble
     }
 
@@ -2223,9 +2246,23 @@ class YellowSafetyActivity : AppCompatActivity() {
         isSendingMessage = true
         setMatrixSendEnabled(false)
         val input = privateInput
+        val column = privateMessagesColumn ?: return
+        val pending = createText(message + "\nGönderiliyor…", 15f, Color.WHITE).apply {
+            gravity = Gravity.END
+            tag = Long.MAX_VALUE
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+        }
+        column.addView(pending)
+        privateMessagesScroll?.post { privateMessagesScroll?.fullScroll(View.FOCUS_DOWN) }
+        var queued = false
         matrixSendJob = typingScope.launch {
             try {
-                MatrixChatManager.enqueueText(applicationContext, connection.id, message)
+                val tx = MatrixChatManager.enqueueText(applicationContext, connection.id, message)
+                if (tx !in echoedTransactions && privateInput === input) {
+                    pendingSendViews[tx] = pending
+                    queued = true
+                    pending.text = message + "\nGönderim kuyruğunda"
+                }
                 if (input?.text?.toString()?.trim() == message) input?.text?.clear()
             } catch (error: TimeoutCancellationException) {
                 Toast.makeText(this@YellowSafetyActivity, "Şifreli gönderim zaman aşımına uğradı.", Toast.LENGTH_LONG).show()
@@ -2234,6 +2271,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             } catch (error: Exception) {
                 Toast.makeText(this@YellowSafetyActivity, "Mesaj şifreli gönderim kuyruğuna alınamadı.", Toast.LENGTH_LONG).show()
             } finally {
+                if (!queued) column.removeView(pending)
                 if (isMatrixChat && privateInput === input) {
                     isSendingMessage = false
                     setMatrixSendEnabled(matrixChatReady)
