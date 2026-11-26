@@ -1711,7 +1711,8 @@ class YellowSafetyActivity : AppCompatActivity() {
         privateSendButton?.alpha = if (enabled) 1f else 0.5f
     }
 
-    private fun startMatrixChat(connection: ConnectionApiItem) {
+    private fun startMatrixChat(connection: ConnectionApiItem, retry: Int = 0) {
+        val openingSession = SecureSessionStore.getSessionId(applicationContext)
         matrixChatJob?.cancel()
         matrixChatReady = false
         setMatrixSendEnabled(false)
@@ -1771,7 +1772,22 @@ class YellowSafetyActivity : AppCompatActivity() {
                     }
                     return@launch
                 }
+                val lookupFailed = error.message in setOf("PEER_UNAVAILABLE", "ROOM_MAPPING_UNAVAILABLE", "ROOM_SYNC_PENDING")
+                val retryDelays = longArrayOf(5_000L, 15_000L, 45_000L)
+                if (lookupFailed && retry < retryDelays.size) {
+                    matrixChatReady = false
+                    setMatrixSendEnabled(false)
+                    privateStatusText?.text = "Oda bilgisi bekleniyor · Yeniden bağlanılıyor…"
+                    delay(retryDelays[retry])
+                    if (openingSession != null && SecureSessionStore.getSessionId(applicationContext) == openingSession &&
+                        isMatrixChat && activePrivateConnection?.id == connection.id) {
+                        startMatrixChat(connection, retry + 1)
+                    }
+                    return@launch
+                }
                 val message = when (error.message) {
+                    "PEER_UNAVAILABLE" -> "Karşı cihaz eşleştirmesi alınamadı."
+                    "ROOM_MAPPING_UNAVAILABLE" -> "Sohbetin oda kaydı alınamadı."
                     "PEER_NOT_JOINED" -> "Karşı taraf da bu kişiyle şifreli sohbeti açmalı."
                     else -> "Şifreli sohbet şu anda açılamadı."
                 }
