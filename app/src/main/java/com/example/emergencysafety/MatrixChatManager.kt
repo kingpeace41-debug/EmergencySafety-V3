@@ -19,7 +19,6 @@ import de.connect2x.trixnity.core.model.events.m.room.RoomMessageEventContent
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -191,11 +190,21 @@ internal object MatrixChatManager {
             }
             // Subscribe first so messages received during history loading are still delivered.
             val live = Channel<IncomingText>(Channel.BUFFERED)
+            val wakeRequests = Channel<String>(Channel.BUFFERED)
+            val wakeJob = launch(Dispatchers.IO) {
+                for (eventId in wakeRequests) {
+                    checkSession(app, session)
+                    ConnectionApi.wakeMatrixPeer(app, connectionId, expected.deviceId, id.toString(), eventId)
+                }
+            }
             val liveJob = launch(start = CoroutineStart.UNDISPATCHED) {
                 try {
                     client.room.getTimelineEventsFromNowOn().collect { event ->
                         checkSession(app, session)
-                        event.toChatText(id, ownUserId, expected.userId)?.let { live.send(it) }
+                        event.toChatText(id, ownUserId, expected.userId)?.let { message ->
+                            live.send(message)
+                            if (message.outgoing && message.receipt == null) wakeRequests.send(message.eventId)
+                        }
                     }
                 } finally {
                     live.close()
@@ -210,32 +219,32 @@ internal object MatrixChatManager {
                             .collect { history.add(it) }
                     }
                 }
-                val messages = history.map { event ->
+                val messages = history.asReversed().map { event ->
                     async {
                         withTimeoutOrNull(3_000L) {
                             event.first { it.content != null }
                                 .toChatText(id, ownUserId, expected.userId)
                         }
                     }
-                }.awaitAll()
-                if (messages.any { it != null }) {
-                    recheckAccess()
-                    messages.asReversed().filterNotNull().forEach {
-                        checkSession(app, session)
-                        onText(it)
+                }
+                var historyAccessChecked = false
+                for (pending in messages) {
+                    val message = pending.await() ?: continue
+                    if (!historyAccessChecked) {
+                        recheckAccess()
+                        historyAccessChecked = true
                     }
+                    checkSession(app, session)
+                    onText(message)
                 }
                 for (message in live) {
                     recheckAccess()
                     onText(message)
-                    if (message.outgoing && message.receipt == null) {
-                        withContext(Dispatchers.IO) {
-                            checkSession(app, session)
-                            ConnectionApi.wakeMatrixPeer(app, connectionId, expected.deviceId, id.toString(), message.eventId)
-                        }
-                    }
+
                 }
             } finally {
+                wakeJob.cancel()
+                wakeRequests.cancel()
                 typingJob.cancel()
                 liveJob.cancel()
                 live.cancel()
