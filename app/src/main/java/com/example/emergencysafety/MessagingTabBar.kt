@@ -226,6 +226,11 @@ class MessagingTabBar @JvmOverloads constructor(
         return true
     }
 
+    fun openMessageRequests() {
+        bindTabs()
+        if (activeTab == "requests") showRequestsPage() else showTab("requests")
+    }
+
     private fun showTab(tab: String) {
         val contentPanel = panel ?: return
 
