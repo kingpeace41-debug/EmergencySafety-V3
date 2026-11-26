@@ -57,9 +57,13 @@ class MatrixWakeWorker(context: Context, parameters: WorkerParameters) : Corouti
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val id = ("matrix:" + connection).hashCode()
         val pending = PendingIntent.getActivity(app, id, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val email = app.getSharedPreferences("EmergencySafetyConnectionEmails", Context.MODE_PRIVATE)
+            .getString(connection, null)
+        val senderName = email?.let { ContactNames.getSavedName(app, it) }
         val notification = NotificationCompat.Builder(app, channel)
             .setSmallIcon(R.drawable.ic_notification_wolf)
-            .setContentTitle("EmergencySafety").setContentText("Yeni şifreli mesaj")
+            .setContentTitle(senderName ?: "EmergencySafety")
+            .setContentText("Yeni şifreli mesaj")
             .setContentIntent(pending).setAutoCancel(true).setOnlyAlertOnce(true).build()
         try {
             notifications.notify(id, notification)
