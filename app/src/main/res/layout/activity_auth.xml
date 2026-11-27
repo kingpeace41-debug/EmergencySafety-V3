@@ -115,7 +115,7 @@
         android:layout_height="46dp"
         android:layout_marginTop="8dp"
         android:backgroundTint="#345F86"
-        android:text="G  GOOGLE İLE DEVAM ET"
+        android:text="GOOGLE İLE DEVAM ET"
         android:textAllCaps="false"
         android:textColor="#FFFFFF"
         android:textStyle="bold" />
