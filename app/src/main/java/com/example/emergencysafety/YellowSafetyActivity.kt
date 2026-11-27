@@ -118,6 +118,49 @@ class YellowSafetyActivity : AppCompatActivity() {
         return true
     }
 
+    private var locationPreview: View? = null
+
+    private fun featurePreview(label: String) {
+        Toast.makeText(this, "$label henüz kullanıma açılmadı.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun chatIcon(icon: String): android.graphics.drawable.Drawable {
+        val data = when (icon) {
+            "call" -> "M3 4 L7 3 L10 8 L7.5 10.5 Q10 15 14 16.5 L16 14 L21 17 L20 21 Q13 22 7 15 Q2 9 3 4 Z"
+            "video" -> "M3 5 H16 V19 H3 Z M16 10 L22 6 V18 L16 14"
+            "mic" -> "M9 6 A3 3 0 0 1 15 6 V12 A3 3 0 0 1 9 12 Z M5 11 V12 A7 7 0 0 0 19 12 V11 M12 19 V22 M9 22 H15"
+            "photo" -> "M3 4 H21 V20 H3 Z M3 16 L9 10 L13 14 L16 11 L21 16 M16 8 H17"
+            "file" -> "M5 2 H14 L19 7 V22 H5 Z M14 2 V8 H19 M8 13 H16 M8 17 H14"
+            else -> "M12 22 Q4 13 4 9 A8 8 0 1 1 20 9 Q20 13 12 22 Z M15 9 A3 3 0 1 1 9 9 A3 3 0 1 1 15 9 Z"
+        }
+        val path = requireNotNull(androidx.core.graphics.PathParser.createPathFromPathData(data))
+        return android.graphics.drawable.ShapeDrawable(android.graphics.drawable.shapes.PathShape(path, 24f, 24f)).apply {
+            paint.color = gold
+            paint.isAntiAlias = true
+            paint.style = android.graphics.Paint.Style.STROKE
+            paint.strokeWidth = 1.7f
+            paint.strokeJoin = android.graphics.Paint.Join.ROUND
+            paint.strokeCap = android.graphics.Paint.Cap.ROUND
+            setIntrinsicWidth(dp(24))
+            setIntrinsicHeight(dp(24))
+            setBounds(0, 0, dp(24), dp(24))
+        }
+    }
+
+    private fun refreshComposerAction() {
+        if (!isMatrixChat) return
+        val sending = locationDraft || !privateInput?.text.isNullOrBlank()
+        privateSendButton?.apply {
+            if (tag == sending) return@apply
+            tag = sending
+            background = roundedBackground(if (sending) gold else darkBackground, gold, 50)
+            text = if (sending) "➤" else android.text.SpannableString(" ").apply {
+                setSpan(android.text.style.ImageSpan(chatIcon("mic")), 0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            contentDescription = if (sending) "Gönder" else "Sesli mesaj"
+        }
+    }
+
     private fun toggleLocationDraft(connection: ConnectionApiItem) {
         val active = ChatLocationService.activeConnection
         if (active != null) {
@@ -129,7 +172,9 @@ class YellowSafetyActivity : AppCompatActivity() {
         val input = privateInput ?: return
         if (!locationDraft) locationDraftText = input.text.toString()
         locationDraft = !locationDraft
-        input.setText(if (locationDraft) "📍 Canlı konum paylaş" else locationDraftText)
+        locationPreview?.visibility = if (locationDraft) View.VISIBLE else View.GONE
+        input.setText(if (locationDraft) "" else locationDraftText)
+        refreshComposerAction()
         input.isFocusableInTouchMode = !locationDraft
         input.isFocusable = !locationDraft
     }
@@ -154,11 +199,12 @@ class YellowSafetyActivity : AppCompatActivity() {
             .putExtra("name", ContactNames.getDisplayName(this, connection.email))
         androidx.core.content.ContextCompat.startForegroundService(this, intent)
         locationDraft = false
+        locationPreview?.visibility = View.GONE
         privateInput?.apply {
             isFocusableInTouchMode = true
             setText(locationDraftText)
         }
-        Toast.makeText(this, "Canlı konum başlatılıyor. Durdurmak için 📍 düğmesine dokun.", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Canlı konum başlatılıyor. Durdurmak için ＋ menüsünü aç.", Toast.LENGTH_LONG).show()
     }
 
     private lateinit var panelContainer: FrameLayout
@@ -1525,11 +1571,11 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
 
         nameArea.addView(
-            createText(displayName, 14f, Color.WHITE, true)
+            createText(displayName, 14f, Color.WHITE, true).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
         )
 
         nameArea.addView(
-            createText(if (encrypted) "Matrix şifreli sohbet" else "Standart sohbet", 10f, gold)
+            createText(if (encrypted) "🔒 Şifreleme" else "Standart sohbet", 12f, gold)
         )
 
         header.addView(
@@ -1545,7 +1591,18 @@ class YellowSafetyActivity : AppCompatActivity() {
             setPadding(dp(8), dp(12), dp(8), dp(12))
             setOnClickListener { showMatrixChatInfo(connection, encrypted) }
         }
-        header.addView(encryptionButton)
+        if (encrypted) {
+            nameArea.setOnClickListener { showMatrixChatInfo(connection, true) }
+            for ((label, icon) in listOf("Sesli arama" to "call", "Görüntülü arama" to "video")) {
+                header.addView(android.widget.ImageButton(this).apply {
+                    setImageDrawable(chatIcon(icon))
+                    setBackgroundColor(Color.TRANSPARENT)
+                    scaleType = android.widget.ImageView.ScaleType.CENTER
+                    contentDescription = label
+                    setOnClickListener { featurePreview(label) }
+                }, LinearLayout.LayoutParams(dp(44), dp(48)))
+            }
+        } else header.addView(encryptionButton)
         screen.addView(header)
 
         val divider = View(this).apply {
@@ -1662,6 +1719,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                     before: Int,
                     count: Int
                 ) {
+                    refreshComposerAction()
                     privateChatHandler.removeCallbacks(
                         typingStopRunnable
                     )
@@ -1685,12 +1743,52 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
 
         if (encrypted) {
-            val location = createText("📍", 21f, gold, true).apply {
-                gravity = Gravity.CENTER
-                contentDescription = "Canlı konumu seç veya paylaşımı durdur"
-                setOnClickListener { toggleLocationDraft(connection) }
+            val tray = LinearLayout(this).apply {
+                background = roundedBackground(panelBackground, gold, 16)
+                visibility = View.GONE
             }
-            composer.addView(location, LinearLayout.LayoutParams(dp(46), dp(48)))
+            val pin = createText("Canlı konum", 12f, Color.WHITE)
+            for ((label, icon) in listOf("Fotoğraf" to "photo", "Dosya" to "file", "Canlı konum" to "pin")) {
+                val option = if (icon == "pin") pin else createText(label, 12f, Color.WHITE)
+                option.apply {
+                    gravity = Gravity.CENTER
+                    setPadding(0, dp(10), 0, dp(8))
+                    setCompoundDrawables(null, chatIcon(icon), null, null)
+                    compoundDrawablePadding = dp(4)
+                    setOnClickListener {
+                        tray.visibility = View.GONE
+                        if (icon == "pin") toggleLocationDraft(connection) else featurePreview(label)
+                    }
+                }
+                tray.addView(option, LinearLayout.LayoutParams(0, -2, 1f))
+            }
+            screen.addView(tray)
+            val card = LinearLayout(this).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(6), dp(4), dp(6))
+                background = roundedBackground(panelBackground, gold, 16)
+                visibility = View.GONE
+            }
+            card.addView(createText("Canlı konum\nSen durdurana kadar", 14f, Color.WHITE).apply {
+                setCompoundDrawables(chatIcon("pin"), null, null, null)
+                compoundDrawablePadding = dp(8)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            card.addView(createText("×", 24f, Color.WHITE).apply {
+                gravity = Gravity.CENTER
+                contentDescription = "Konum taslağını iptal et"
+                setOnClickListener { toggleLocationDraft(connection) }
+            }, LinearLayout.LayoutParams(dp(48), dp(48)))
+            locationPreview = card
+            screen.addView(card)
+            composer.addView(createText("+", 26f, gold).apply {
+                gravity = Gravity.CENTER
+                background = roundedBackground(darkBackground, gold, 50)
+                contentDescription = "Paylaşım seçenekleri"
+                setOnClickListener {
+                    pin.text = if (ChatLocationService.activeConnection == connection.id) "Paylaşımı durdur" else "Canlı konum"
+                    tray.visibility = if (tray.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                }
+            }, LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginEnd = dp(6) })
         }
         composer.addView(
             privateInput,
@@ -1716,8 +1814,10 @@ class YellowSafetyActivity : AppCompatActivity() {
             }
         )
 
+        refreshComposerAction()
         privateSendButton?.setOnClickListener {
-            sendComposer(connection)
+            if (encrypted && !locationDraft && privateInput?.text.isNullOrBlank()) featurePreview("Sesli mesaj")
+            else sendComposer(connection)
         }
 
         privateInput?.setOnEditorActionListener { _, actionId, _ ->
@@ -1875,6 +1975,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     private fun stopMatrixChat() {
         locationDraft = false
         locationDraftText = ""
+        locationPreview = null
         locationCards.clear()
         locationTimes.clear()
         matrixChatJob?.cancel()
