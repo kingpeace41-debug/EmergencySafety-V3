@@ -305,7 +305,9 @@ internal object MatrixChatManager {
                         checkSession(app, session)
                         event.toChatText(id, ownUserId, expected.userId)?.let { message ->
                             live.send(message)
-                            if (message.outgoing && message.receipt == null) wakeRequests.send(message.eventId)
+                            val locationUpdate = message.body.startsWith(ChatLocationService.PREFIX + "|") &&
+                                message.body.split('|').getOrNull(2) in setOf("update", "stop")
+                            if (message.outgoing && message.receipt == null && !locationUpdate) wakeRequests.send(message.eventId)
                         }
                     }
                 } finally {
@@ -432,12 +434,13 @@ internal object MatrixChatManager {
     }
 
     // Returns an outbox transaction ID, not a delivery receipt.
-    suspend fun enqueueText(context: Context, connectionId: String, body: String): String = withContext(Dispatchers.IO) {
+    suspend fun enqueueText(context: Context, connectionId: String, body: String, expectedSession: String? = null): String = withContext(Dispatchers.IO) {
         withTimeout(60000L) {
             lock.withLock {
                 require(body.isNotBlank() && body.codePointCount(0, body.length) <= 4000)
                 val app = context.applicationContext
                 val session = requireNotNull(SecureSessionStore.getSessionId(app))
+                check(expectedSession == null || expectedSession == session) { "SESSION_CHANGED" }
                 val client = MatrixClientManager.openForCurrentSession(app).getOrThrow()
                 val (id, peer) = signalRoom(app, session, connectionId)
                 checkTrust(app, client, peer)
