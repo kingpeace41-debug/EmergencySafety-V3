@@ -674,7 +674,11 @@ class YellowSafetyActivity : AppCompatActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus && isMatrixChat) scheduleMatrixReceipts()
+        if (!hasFocus || !isMatrixChat) return
+        scheduleMatrixReceipts()
+        if (matrixChatReady && locationRequested && locationDraft) {
+            activePrivateConnection?.let { sendComposer(it) }
+        }
     }
 
     override fun onPause() {
@@ -738,12 +742,6 @@ class YellowSafetyActivity : AppCompatActivity() {
                 }
             }
         }
-    }
-
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus && matrixChatReady && locationRequested && locationDraft)
-            activePrivateConnection?.let { sendComposer(it) }
     }
 
     override fun onResume() {
