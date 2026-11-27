@@ -65,6 +65,11 @@ internal data class ESBotMessage(
 
 class YellowSafetyActivity : AppCompatActivity() {
 
+    private val calls = ChatCall(this, { typingScope }) {
+        val chat = activePrivateConnection
+        val session = SecureSessionStore.getSessionId(this)
+        if (chat != null && session != null && isMatrixChat) chat.id to session else null
+    }
     private val voiceNote = ChatVoiceNote(this)
     private var microphoneTarget: Pair<String, String>? = null
     private val microphonePermission = registerForActivityResult(
@@ -708,6 +713,11 @@ class YellowSafetyActivity : AppCompatActivity() {
         if (matrixChatReady && locationRequested && locationDraft) {
             activePrivateConnection?.let { sendComposer(it) }
         }
+    }
+
+    override fun onStop() {
+        calls.onBackground()
+        super.onStop()
     }
 
     override fun onPause() {
@@ -1704,7 +1714,11 @@ class YellowSafetyActivity : AppCompatActivity() {
                     setBackgroundColor(Color.TRANSPARENT)
                     scaleType = android.widget.ImageView.ScaleType.CENTER
                     contentDescription = label
-                    setOnClickListener { featurePreview(label) }
+                    setOnClickListener {
+                        if (icon == "call") {
+                            if (matrixChatReady) calls.dial() else Toast.makeText(this@YellowSafetyActivity, "Şifreli oda hazırlanıyor.", Toast.LENGTH_SHORT).show()
+                        } else featurePreview(label)
+                    }
                 }, LinearLayout.LayoutParams(dp(44), dp(48)))
             }
         } else header.addView(encryptionButton)
@@ -2082,6 +2096,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun stopMatrixChat() {
+        calls.end()
         microphoneTarget = null
         voiceNote.close()
         locationRequested = false
@@ -2280,6 +2295,10 @@ class YellowSafetyActivity : AppCompatActivity() {
 
     private fun renderMatrixEvent(event: MatrixChatManager.IncomingText, scrollAfter: Boolean) {
         if (!shownMatrixEventIds.add(event.eventId)) return
+        event.call?.let {
+            if (!event.outgoing) calls.receive(it, event.timestamp)
+            return
+        }
         if (event.receipt != null) {
             applyMatrixReceipt(event)
             return

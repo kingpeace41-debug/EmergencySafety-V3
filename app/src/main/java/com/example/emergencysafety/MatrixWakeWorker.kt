@@ -26,8 +26,8 @@ class MatrixWakeWorker(context: Context, parameters: WorkerParameters) : Corouti
             val delivered = withTimeout(45_000L) {
                 MatrixChatManager.receiveWake(app, session, connection, room, event)
             }
-            if (delivered && SecureSessionStore.getSessionId(app) == session && !ActiveChatTracker.isChatVisible(connection)) {
-                notifyMessage(connection)
+            if (delivered != null && SecureSessionStore.getSessionId(app) == session && !ActiveChatTracker.isChatVisible(connection)) {
+                notifyMessage(connection, delivered == "call")
             }
             return Result.success()
         } catch (_: TimeoutCancellationException) {
@@ -41,14 +41,14 @@ class MatrixWakeWorker(context: Context, parameters: WorkerParameters) : Corouti
 
     private fun retryIfCurrent() = if (runAttemptCount < 5) Result.retry() else Result.failure()
 
-    private fun notifyMessage(connection: String) {
+    private fun notifyMessage(connection: String, call: Boolean) {
         val app = applicationContext
         val notifications = NotificationManagerCompat.from(app)
         if (!notifications.areNotificationsEnabled()) return
-        val channel = "emergency_safety_messages"
+        val channel = if (call) "es_voice_calls" else "emergency_safety_messages"
         if (Build.VERSION.SDK_INT >= 26) {
             app.getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(channel, "Emergency Safety Bildirimleri", NotificationManager.IMPORTANCE_HIGH)
+                NotificationChannel(channel, if (call) "Sesli aramalar" else "Emergency Safety Bildirimleri", NotificationManager.IMPORTANCE_HIGH)
             )
         }
         val intent = Intent(app, YellowSafetyActivity::class.java)
@@ -63,7 +63,8 @@ class MatrixWakeWorker(context: Context, parameters: WorkerParameters) : Corouti
         val notification = NotificationCompat.Builder(app, channel)
             .setSmallIcon(R.drawable.ic_notification_wolf)
             .setContentTitle(senderName ?: "EmergencySafety")
-            .setContentText("Yeni şifreli mesaj")
+            .setContentText(if (call) "Gelen sesli arama · Yanıtlamak için dokun" else "Yeni şifreli mesaj")
+            .apply { if (call) setCategory(NotificationCompat.CATEGORY_CALL).setTimeoutAfter(45000L) }
             .setContentIntent(pending).setAutoCancel(true).setOnlyAlertOnce(true).build()
         try {
             notifications.notify(id, notification)

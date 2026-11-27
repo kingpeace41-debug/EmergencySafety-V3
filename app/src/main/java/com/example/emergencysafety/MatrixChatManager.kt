@@ -237,7 +237,8 @@ internal object MatrixChatManager {
         val timestamp: Long = 0L,
         val transactionId: String? = null,
         val photo: EncryptedFile? = null,
-        val voice: EncryptedFile? = null
+        val voice: EncryptedFile? = null,
+        val call: CallSignal? = null
     )
 
     private fun validEventId(id: String): Boolean =
@@ -260,6 +261,10 @@ internal object MatrixChatManager {
                 IncomingText(event.id.toString(), decoded.body, sender == ownUserId,
                     timestamp = event.originTimestamp, transactionId = event.unsigned?.transactionId)
             is RoomMessageEventContent.TextBased.Notice -> {
+                CallSignal.parse(decoded.body)?.let { signal ->
+                    return IncomingText(event.id.toString(), "", sender == ownUserId,
+                        timestamp = event.originTimestamp, call = signal)
+                }
                 val lines = decoded.body.split('\n', limit = 53)
                 if (lines.size !in 3..52 || lines[0] != RECEIPT_PREFIX) return null
                 val receipt = Receipt.entries.firstOrNull { it.name == lines[1] } ?: return null
@@ -323,7 +328,7 @@ internal object MatrixChatManager {
                             live.send(message)
                             val locationUpdate = message.body.startsWith(ChatLocationService.PREFIX + "|") &&
                                 message.body.split('|').getOrNull(2) in setOf("update", "stop")
-                            if (message.outgoing && message.receipt == null && !locationUpdate) wakeRequests.send(message.eventId)
+                            if (message.outgoing && message.receipt == null && !locationUpdate && (message.call == null || message.call.kind == "invite")) wakeRequests.send(message.eventId)
                         }
                     }
                 } finally {
@@ -379,21 +384,24 @@ internal object MatrixChatManager {
         }
     }
 
-    suspend fun receiveWake(context: Context, session: String, connectionId: String, room: String, event: String): Boolean =
+    suspend fun receiveWake(context: Context, session: String, connectionId: String, room: String, event: String): String? =
         withContext(Dispatchers.IO) {
             val app = context.applicationContext
             checkSession(app, session)
             val client = MatrixSyncManager.start(app)
             val (roomId, expected) = signalRoom(app, session, connectionId)
-            if (roomId.toString() != room) return@withContext false
+            if (roomId.toString() != room) return@withContext null
             checkTrust(app, client, expected)
             checkRoom(client, roomId, expected, true)
             val timeline = client.room.getTimelineEvent(roomId, EventId(event)).first { it?.content != null }
             val decoded = timeline?.toChatText(roomId, client.userId.toString(), expected.userId)
-            if (decoded == null || decoded.eventId != event || decoded.outgoing || decoded.receipt != null) return@withContext false
+            if (decoded == null || decoded.eventId != event || decoded.outgoing || decoded.receipt != null) return@withContext null
             checkSession(app, session)
+            decoded.call?.let {
+                return@withContext if (it.kind == "invite" && System.currentTimeMillis() - decoded.timestamp in -5000L..45000L) "call" else null
+            }
             sendReceipt(app, connectionId, Receipt.DELIVERED, listOf(event))
-            true
+            "message"
         }
 
     internal data class EventAudit(val isMegolm: Boolean, val hasCiphertext: Boolean)
@@ -454,6 +462,11 @@ internal object MatrixChatManager {
         require(body.isNotBlank() && body.codePointCount(0, body.length) <= 4000)
         return enqueue(context, connectionId, expectedSession) { text(body) }
     }
+
+    suspend fun sendCall(context: Context, connection: String, session: String, signal: CallSignal) =
+        enqueue(context, connection, session) {
+            content(RoomMessageEventContent.TextBased.Notice(signal.encode()))
+        }
 
     suspend fun enqueuePhoto(context: Context, connectionId: String, bytes: ByteArray, session: String): String =
         enqueue(context, connectionId, session) {

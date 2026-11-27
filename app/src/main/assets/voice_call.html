@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; media-src blob:"></head><body><audio id="remote" autoplay></audio><script>
+let pc, local, stopped = false;
+async function start(servers, offer) {
+  try {
+    pc = new RTCPeerConnection({iceServers: servers});
+    pc.ontrack = e => { document.querySelector('audio').srcObject = new MediaStream([e.track]); };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'connected') CallBridge.state('connected');
+      if (pc.connectionState === 'failed') CallBridge.state('failed');
+    };
+    local = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+    if (stopped) { local.getTracks().forEach(t => t.stop()); return; }
+    local.getAudioTracks().forEach(t => pc.addTrack(t, local));
+    if (offer) await pc.setRemoteDescription({type:'offer', sdp:offer});
+    await pc.setLocalDescription(offer ? await pc.createAnswer() : await pc.createOffer());
+    if (pc.iceGatheringState !== 'complete') await new Promise(resolve => {
+      const timer = setTimeout(resolve, 7500);
+      pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') {clearTimeout(timer); resolve();} };
+    });
+    if (!stopped) CallBridge.description(pc.localDescription.type, pc.localDescription.sdp);
+  } catch(e) { if (!stopped) CallBridge.state('failed'); }
+}
+async function answer(sdp) {
+  try { await pc.setRemoteDescription({type:'answer',sdp}); } catch(e) { CallBridge.state('failed'); }
+}
+function stop() { stopped = true; if(local) local.getTracks().forEach(t=>t.stop()); if(pc) pc.close(); }
+</script></body></html>
