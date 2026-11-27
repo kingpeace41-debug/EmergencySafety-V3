@@ -3,7 +3,22 @@
         <item name="android:windowBackground">@drawable/yellow_photo_dialog_panel</item>
         <item name="android:colorBackground">#1F1E1A</item>
         <item name="android:colorAccent">#E8B837</item>
+        <item name="android:colorBackgroundFloating">#1F1E1A</item>
+        <item name="android:colorControlHighlight">#40E8B837</item>
+        <item name="android:textAppearanceLarge">@style/YellowDialogHeading</item>
+        <item name="android:buttonBarPositiveButtonStyle">@style/YellowDialogPrimaryAction</item>
+        <item name="android:buttonBarNegativeButtonStyle">@style/YellowDialogSecondaryAction</item>
         <item name="android:textColorPrimary">#FAF6EA</item>
         <item name="android:textColorSecondary">#D5CDB5</item>
+    </style>
+    <style name="YellowDialogHeading" parent="@android:style/TextAppearance.Material.Title">
+        <item name="android:textColor">#E8B837</item>
+    </style>
+    <style name="YellowDialogPrimaryAction" parent="@android:style/Widget.Material.Button.Borderless">
+        <item name="android:textColor">#FFD76C</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="YellowDialogSecondaryAction" parent="@android:style/Widget.Material.Button.Borderless">
+        <item name="android:textColor">#F3E6C3</item>
     </style>
 </resources>
