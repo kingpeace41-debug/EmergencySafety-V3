@@ -65,6 +65,30 @@ internal data class ESBotMessage(
 
 class YellowSafetyActivity : AppCompatActivity() {
 
+    private val photoPicker = ChatPhotoPicker(this, { typingScope }, {
+        val id = activePrivateConnection?.id
+        val session = SecureSessionStore.getSessionId(this)
+        if (isMatrixChat && id != null && session != null) id to session else null
+    }) { bytes, session ->
+        val connection = activePrivateConnection
+        if (connection != null && matrixChatReady && !isSendingMessage)
+            sendMatrixMessage(connection, "📷 Fotoğraf", bytes, session)
+        else Toast.makeText(this, "Şifreli oda henüz gönderime hazır değil.", Toast.LENGTH_LONG).show()
+    }
+    private var locationRequested = false
+    private var permissionChat: Pair<String, String>? = null
+    private val locationPermission = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        val target = permissionChat
+        permissionChat = null
+        val chat = activePrivateConnection
+        if (target != null && chat != null && isMatrixChat && locationDraft &&
+            chat.id == target.first && SecureSessionStore.getSessionId(this) == target.second) {
+            if (result.values.any { it }) sendComposer(chat)
+            else Toast.makeText(this, "Konumu paylaşmak için konum izni gerekli.", Toast.LENGTH_LONG).show()
+        }
+    }
     private var locationDraft = false
     private var locationDraftText = ""
     private val locationCards = mutableMapOf<String, TextView>()
@@ -151,6 +175,8 @@ class YellowSafetyActivity : AppCompatActivity() {
         if (!isMatrixChat) return
         val sending = locationDraft || !privateInput?.text.isNullOrBlank()
         privateSendButton?.apply {
+            isEnabled = !isSendingMessage && (matrixChatReady || locationDraft)
+            alpha = if (isEnabled) 1f else 0.5f
             if (tag == sending) return@apply
             tag = sending
             background = roundedBackground(if (sending) gold else darkBackground, gold, 50)
@@ -171,6 +197,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
         val input = privateInput ?: return
         if (!locationDraft) locationDraftText = input.text.toString()
+        locationRequested = false
         locationDraft = !locationDraft
         locationPreview?.visibility = if (locationDraft) View.VISIBLE else View.GONE
         input.setText(if (locationDraft) "" else locationDraftText)
@@ -184,13 +211,23 @@ class YellowSafetyActivity : AppCompatActivity() {
             sendPrivateMessage(connection, privateInput?.text?.toString().orEmpty())
             return
         }
-        if (!matrixChatReady || ChatLocationService.activeConnection != null) return
+        if (!matrixChatReady) {
+            locationRequested = true
+            Toast.makeText(this, "Konum, şifreli oda hazır olduğunda paylaşılacak.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        locationRequested = false
+        if (ChatLocationService.activeConnection != null) {
+            Toast.makeText(this, "Bir konum paylaşımı zaten açık.", Toast.LENGTH_SHORT).show()
+            return
+        }
         val fine = android.Manifest.permission.ACCESS_FINE_LOCATION
         val coarse = android.Manifest.permission.ACCESS_COARSE_LOCATION
         if (androidx.core.content.ContextCompat.checkSelfPermission(this, fine) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
             androidx.core.content.ContextCompat.checkSelfPermission(this, coarse) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(fine, coarse), 4811)
-            Toast.makeText(this, "Konum iznini verdikten sonra Gönder’e dokun.", Toast.LENGTH_LONG).show()
+            val session = SecureSessionStore.getSessionId(this) ?: return
+            permissionChat = connection.id to session
+            locationPermission.launch(arrayOf(fine, coarse))
             return
         }
         val session = SecureSessionStore.getSessionId(this) ?: return
@@ -204,6 +241,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             isFocusableInTouchMode = true
             setText(locationDraftText)
         }
+        refreshComposerAction()
         Toast.makeText(this, "Canlı konum başlatılıyor. Durdurmak için ＋ menüsünü aç.", Toast.LENGTH_LONG).show()
     }
 
@@ -700,6 +738,12 @@ class YellowSafetyActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && matrixChatReady && locationRequested && locationDraft)
+            activePrivateConnection?.let { sendComposer(it) }
     }
 
     override fun onResume() {
@@ -1757,7 +1801,11 @@ class YellowSafetyActivity : AppCompatActivity() {
                     compoundDrawablePadding = dp(4)
                     setOnClickListener {
                         tray.visibility = View.GONE
-                        if (icon == "pin") toggleLocationDraft(connection) else featurePreview(label)
+                        when (icon) {
+                            "pin" -> toggleLocationDraft(connection)
+                            "photo" -> photoPicker.open()
+                            else -> featurePreview(label)
+                        }
                     }
                 }
                 tray.addView(option, LinearLayout.LayoutParams(0, -2, 1f))
@@ -1973,6 +2021,8 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun stopMatrixChat() {
+        locationRequested = false
+        permissionChat = null
         locationDraft = false
         locationDraftText = ""
         locationPreview = null
@@ -2003,16 +2053,13 @@ class YellowSafetyActivity : AppCompatActivity() {
         isMatrixChat = false
     }
 
-    private fun setMatrixSendEnabled(enabled: Boolean) {
-        privateSendButton?.isEnabled = enabled
-        privateSendButton?.alpha = if (enabled) 1f else 0.5f
-    }
+
 
     private fun startMatrixChat(connection: ConnectionApiItem, retry: Int = 0) {
         val openingSession = SecureSessionStore.getSessionId(applicationContext)
         matrixChatJob?.cancel()
         matrixChatReady = false
-        setMatrixSendEnabled(false)
+        refreshComposerAction()
         privateStatusText?.text = "Şifreli oda hazırlanıyor…"
         privateStatusText?.setOnClickListener(null)
 
@@ -2027,7 +2074,8 @@ class YellowSafetyActivity : AppCompatActivity() {
                 stage = "observe"
                 privateStatusText?.text = "Şifreli oda açık · Karşı cihazın katılması gerekebilir."
                 matrixChatReady = true
-                setMatrixSendEnabled(true)
+                refreshComposerAction()
+                if (locationRequested && locationDraft && hasWindowFocus()) sendComposer(connection)
                 while (true) {
                     try {
                         MatrixChatManager.observeText(
@@ -2053,7 +2101,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                 android.util.Log.w("MatrixChat", "open stage=$stage retry=$retry reason=$reason")
                 if (error.message == "PEER_NOT_VERIFIED") {
                     matrixChatReady = false
-                    setMatrixSendEnabled(false)
+                    refreshComposerAction()
                     privateStatusText?.apply {
                         text = "Karşı cihaz doğrulanmalı. Doğrulamayı açmak için dokun."
                         setOnClickListener {
@@ -2070,7 +2118,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                 val retryDelays = longArrayOf(5_000L, 15_000L, 45_000L)
                 if (transientFailure && retry < retryDelays.size) {
                     matrixChatReady = false
-                    setMatrixSendEnabled(false)
+                    refreshComposerAction()
                     privateStatusText?.text = "Oda bilgisi bekleniyor · Yeniden bağlanılıyor…"
                     delay(retryDelays[retry])
                     if (openingSession != null && SecureSessionStore.getSessionId(applicationContext) == openingSession &&
@@ -2093,7 +2141,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
     private fun showMatrixChatRetry(connection: ConnectionApiItem, message: String) {
         matrixChatReady = false
-        setMatrixSendEnabled(false)
+        refreshComposerAction()
         privateStatusText?.apply {
             text = "$message Tekrar denemek için dokun."
             setOnClickListener {
@@ -2224,7 +2272,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             echoedTransactions.add(tx)
             pendingSendViews.remove(tx)?.let { privateMessagesColumn?.removeView(it) }
         }
-        if (!renderLiveLocation(event)) addServerMessageBubble(message, matrixEvent = true, matrixTime = event.timestamp)
+        if (!renderLiveLocation(event)) addServerMessageBubble(message, matrixEvent = true, matrixTime = event.timestamp, photo = event.photo)
         if (!scrollAfter) return
         privateMessagesScroll?.post {
             privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
@@ -2357,7 +2405,8 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
     }
 
-    private fun addServerMessageBubble(message: MessageApiItem, matrixEvent: Boolean = false, matrixTime: Long = 0L) {
+    private fun addServerMessageBubble(message: MessageApiItem, matrixEvent: Boolean = false, matrixTime: Long = 0L,
+        photo: de.connect2x.trixnity.core.model.events.m.room.EncryptedFile? = null) {
 
         val isOutgoing = message.isOutgoing
 
@@ -2398,6 +2447,35 @@ class YellowSafetyActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT
             )
         )
+
+        if (photo != null) bubble.setOnClickListener {
+            val chat = activePrivateConnection?.id
+            val session = SecureSessionStore.getSessionId(this)
+            typingScope.launch {
+                try {
+                    val bitmap = withContext(Dispatchers.IO) {
+                        val bytes = MatrixChatManager.readPhoto(applicationContext, photo)
+                        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+                        require(options.outWidth > 0 && options.outHeight > 0)
+                        options.inSampleSize = 1
+                        while (maxOf(options.outWidth, options.outHeight) / options.inSampleSize > 2048)
+                            options.inSampleSize *= 2
+                        options.inJustDecodeBounds = false
+                        requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options))
+                    }
+                    if (bubble.isAttachedToWindow && chat == activePrivateConnection?.id &&
+                        session == SecureSessionStore.getSessionId(this@YellowSafetyActivity)) {
+                        val view = ImageView(this@YellowSafetyActivity).apply { adjustViewBounds = true; setImageBitmap(bitmap) }
+                        android.app.AlertDialog.Builder(this@YellowSafetyActivity).setTitle("Fotoğraf")
+                            .setView(view).setPositiveButton("Kapat", null).show()
+                    }
+                } catch (error: CancellationException) { throw error }
+                catch (_: Exception) {
+                    Toast.makeText(this@YellowSafetyActivity, "Fotoğraf açılamadı.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
 
         // Konum oturumu yalnızca oturum açmış, yetkili alıcıya açılır.
         if (message.messageType == "location") {
@@ -2579,10 +2657,11 @@ class YellowSafetyActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun sendMatrixMessage(connection: ConnectionApiItem, message: String) {
+    private fun sendMatrixMessage(connection: ConnectionApiItem, message: String,
+        photo: ByteArray? = null, session: String? = null) {
         if (!matrixChatReady) return
         isSendingMessage = true
-        setMatrixSendEnabled(false)
+        refreshComposerAction()
         val input = privateInput
         val column = privateMessagesColumn ?: return
         val pending = createText(message + "\nGönderiliyor…", 15f, Color.WHITE).apply {
@@ -2595,13 +2674,14 @@ class YellowSafetyActivity : AppCompatActivity() {
         var queued = false
         matrixSendJob = typingScope.launch {
             try {
-                val tx = MatrixChatManager.enqueueText(applicationContext, connection.id, message)
+                val tx = if (photo != null) MatrixChatManager.enqueuePhoto(applicationContext, connection.id, photo, requireNotNull(session))
+                    else MatrixChatManager.enqueueText(applicationContext, connection.id, message)
                 if (tx !in echoedTransactions && privateInput === input) {
                     pendingSendViews[tx] = pending
                     queued = true
                     pending.text = message + "\nGönderim kuyruğunda"
                 }
-                if (input?.text?.toString()?.trim() == message) input?.text?.clear()
+                if (photo == null && input?.text?.toString()?.trim() == message) input?.text?.clear()
             } catch (error: TimeoutCancellationException) {
                 Toast.makeText(this@YellowSafetyActivity, "Şifreli gönderim zaman aşımına uğradı.", Toast.LENGTH_LONG).show()
             } catch (error: CancellationException) {
@@ -2612,7 +2692,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                 if (!queued) column.removeView(pending)
                 if (isMatrixChat && privateInput === input) {
                     isSendingMessage = false
-                    setMatrixSendEnabled(matrixChatReady)
+                    refreshComposerAction()
                 }
             }
         }

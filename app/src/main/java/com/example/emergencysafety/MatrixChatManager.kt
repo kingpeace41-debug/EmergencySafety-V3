@@ -1,6 +1,12 @@
 package com.example.emergencysafety
 
 import android.content.Context
+import de.connect2x.trixnity.client.media
+import de.connect2x.trixnity.client.room.message.MessageBuilder
+import de.connect2x.trixnity.core.model.events.m.room.EncryptedFile
+import de.connect2x.trixnity.core.model.events.m.room.ImageInfo
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.collect
 import de.connect2x.trixnity.client.MatrixClient
 import de.connect2x.trixnity.client.key
 import de.connect2x.trixnity.client.key.KeyTrustService
@@ -229,7 +235,8 @@ internal object MatrixChatManager {
         val receipt: Receipt? = null,
         val acknowledgedIds: List<String> = emptyList(),
         val timestamp: Long = 0L,
-        val transactionId: String? = null
+        val transactionId: String? = null,
+        val photo: EncryptedFile? = null
     )
 
     private fun validEventId(id: String): Boolean =
@@ -240,6 +247,10 @@ internal object MatrixChatManager {
         val sender = event.sender.toString()
         if (sender != peerUserId && sender != ownUserId) return null
         return when (val decoded = content?.getOrNull()) {
+            is RoomMessageEventContent.FileBased.Image -> decoded.file?.let { file ->
+                IncomingText(event.id.toString(), "📷 Fotoğrafı aç", sender == ownUserId,
+                    timestamp = event.originTimestamp, transactionId = event.unsigned?.transactionId, photo = file)
+            }
             is RoomMessageEventContent.TextBased.Text ->
                 IncomingText(event.id.toString(), decoded.body, sender == ownUserId,
                     timestamp = event.originTimestamp, transactionId = event.unsigned?.transactionId)
@@ -434,10 +445,36 @@ internal object MatrixChatManager {
     }
 
     // Returns an outbox transaction ID, not a delivery receipt.
-    suspend fun enqueueText(context: Context, connectionId: String, body: String, expectedSession: String? = null): String = withContext(Dispatchers.IO) {
+    suspend fun enqueueText(context: Context, connectionId: String, body: String, expectedSession: String? = null): String {
+        require(body.isNotBlank() && body.codePointCount(0, body.length) <= 4000)
+        return enqueue(context, connectionId, expectedSession) { text(body) }
+    }
+
+    suspend fun enqueuePhoto(context: Context, connectionId: String, bytes: ByteArray, session: String): String =
+        enqueue(context, connectionId, session) {
+            val file = mediaService.prepareUploadEncryptedMedia(flowOf(bytes))
+            content(RoomMessageEventContent.FileBased.Image(body = "Fotoğraf", fileName = "fotograf.jpg",
+                file = file, info = ImageInfo(mimeType = "image/jpeg", size = bytes.size.toLong())))
+        }
+
+    suspend fun readPhoto(context: Context, file: EncryptedFile): ByteArray = withContext(Dispatchers.IO) {
+        withTimeout(60000L) {
+            val client = MatrixClientManager.openForCurrentSession(context).getOrThrow()
+            val limit = 8 * 1024 * 1024
+            val media = client.media.getEncryptedMedia(file, maxSize = limit.toLong()).getOrThrow()
+            val output = java.io.ByteArrayOutputStream()
+            media.collect { part ->
+                require(part.size <= limit - output.size())
+                output.write(part)
+            }
+            output.toByteArray()
+        }
+    }
+
+    private suspend fun enqueue(context: Context, connectionId: String, expectedSession: String?,
+        build: suspend MessageBuilder.() -> Unit): String = withContext(Dispatchers.IO) {
         withTimeout(60000L) {
             lock.withLock {
-                require(body.isNotBlank() && body.codePointCount(0, body.length) <= 4000)
                 val app = context.applicationContext
                 val session = requireNotNull(SecureSessionStore.getSessionId(app))
                 check(expectedSession == null || expectedSession == session) { "SESSION_CHANGED" }
@@ -447,7 +484,7 @@ internal object MatrixChatManager {
                 checkRoom(client, id, peer, true)
                 check(peer(app, connectionId) == peer) { "PEER_CHANGED" }
                 checkSession(app, session)
-                client.room.sendMessage(id) { text(body) }
+                client.room.sendMessage(id) { build.invoke(this) }
             }
         }
     }

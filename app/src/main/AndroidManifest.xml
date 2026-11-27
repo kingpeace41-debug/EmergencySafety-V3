@@ -126,6 +126,11 @@
             </intent-filter>
         </service>
 
+        <provider android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.chatphotos" android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/chat_photo_paths" />
+        </provider>
     </application>
 
 </manifest>
