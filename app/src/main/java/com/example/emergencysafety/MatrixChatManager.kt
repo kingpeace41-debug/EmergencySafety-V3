@@ -236,6 +236,7 @@ internal object MatrixChatManager {
         val acknowledgedIds: List<String> = emptyList(),
         val timestamp: Long = 0L,
         val transactionId: String? = null,
+        val document: EncryptedFile? = null,
         val photo: EncryptedFile? = null,
         val voice: EncryptedFile? = null,
         val call: CallSignal? = null
@@ -249,6 +250,10 @@ internal object MatrixChatManager {
         val sender = event.sender.toString()
         if (sender != peerUserId && sender != ownUserId) return null
         return when (val decoded = content?.getOrNull()) {
+            is RoomMessageEventContent.FileBased.File -> decoded.file?.let { file ->
+                IncomingText(event.id.toString(), ChatDocument.safeName(decoded.fileName ?: decoded.body), sender == ownUserId,
+                    timestamp = event.originTimestamp, transactionId = event.unsigned?.transactionId, document = file)
+            }
             is RoomMessageEventContent.FileBased.Audio -> decoded.file?.let { file ->
                 IncomingText(event.id.toString(), "▶ Sesli mesajı dinle", sender == ownUserId,
                     timestamp = event.originTimestamp, transactionId = event.unsigned?.transactionId, voice = file)
@@ -475,6 +480,12 @@ internal object MatrixChatManager {
             val file = mediaService.prepareUploadEncryptedMedia(flowOf(bytes))
             content(RoomMessageEventContent.FileBased.Image(body = "Fotoğraf", fileName = "fotograf.jpg",
                 file = file, info = ImageInfo(mimeType = "image/jpeg", size = bytes.size.toLong())))
+        }
+
+    suspend fun enqueueDocument(context: Context, connectionId: String, document: ChatDocument, session: String): String =
+        enqueue(context, connectionId, session) {
+            val file = mediaService.prepareUploadEncryptedMedia(flowOf(document.bytes))
+            content(RoomMessageEventContent.FileBased.File(body = document.name, fileName = document.name, file = file))
         }
 
     suspend fun enqueueVoice(context: Context, connectionId: String, bytes: ByteArray, session: String): String =

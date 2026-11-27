@@ -98,6 +98,16 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
     }
 
+    private val documents = ChatDocuments(this, { typingScope }, {
+        val chat = activePrivateConnection
+        val session = SecureSessionStore.getSessionId(this)
+        if (isMatrixChat && chat != null && session != null) chat.id to session else null
+    }) { file, session ->
+        val chat = activePrivateConnection
+        if (chat != null && matrixChatReady && !isSendingMessage)
+            sendMatrixMessage(chat, file.name, session = session, document = file)
+        else Toast.makeText(this, "Şifreli oda gönderime hazır değil.", Toast.LENGTH_SHORT).show()
+    }
     private val photoPicker = ChatPhotoPicker(this, { typingScope }, {
         val id = activePrivateConnection?.id
         val session = SecureSessionStore.getSessionId(this)
@@ -127,9 +137,12 @@ class YellowSafetyActivity : AppCompatActivity() {
     private val locationCards = mutableMapOf<String, TextView>()
     private val locationTimes = mutableMapOf<String, Long>()
     private var locationMap: android.webkit.WebView? = null
+    private var locationDialog: android.app.AlertDialog? = null
+    private var locationCoordinates: TextView? = null
     private var locationMapKey: String? = null
 
     private fun showLocationPoint(map: android.webkit.WebView, lat: Double, lon: Double) {
+        locationCoordinates?.text = String.format(Locale.US, "%.5f, %.5f", lat, lon)
         val box = "${lon - 0.005},${lat - 0.005},${lon + 0.005},${lat + 0.005}"
         map.loadUrl("https://www.openstreetmap.org/export/embed.html?bbox=$box&layer=mapnik&marker=$lat,$lon")
     }
@@ -157,18 +170,45 @@ class YellowSafetyActivity : AppCompatActivity() {
         val time = formatTime(event.timestamp)
         card.text = if (stopped) "📍 Konum paylaşımı durduruldu" else "📍 Canlı konum · $time\nHaritada göster"
         card.setOnClickListener(null)
+        if (stopped && locationMapKey == key) locationDialog?.dismiss()
         if (!stopped && lat != null && lon != null) {
             if (locationMapKey == key) locationMap?.let { showLocationPoint(it, lat, lon) }
             card.setOnClickListener {
+                locationDialog?.dismiss()
+                val panel = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(12), dp(8), dp(12), 0)
+                    setBackgroundColor(panelBackground)
+                }
+                val point = createText("", 14f, gold)
+                locationCoordinates = point
+                panel.addView(point)
                 val map = android.webkit.WebView(this)
+                map.setBackgroundColor(panelBackground)
+                panel.addView(map, LinearLayout.LayoutParams(-1, minOf(dp(340), resources.displayMetrics.heightPixels / 2)))
+                map.webViewClient = android.webkit.WebViewClient()
                 map.settings.javaScriptEnabled = true
                 locationMap = map
                 locationMapKey = key
                 showLocationPoint(map, lat, lon)
-                android.app.AlertDialog.Builder(this).setTitle("Canlı konum").setView(map)
+                locationDialog = android.app.AlertDialog.Builder(this, R.style.YellowPhotoDialog).setTitle("Canlı konum").setView(panel)
+                    .setNeutralButton("Haritada aç") { _, _ ->
+                        val coords = point.text.toString().replace(" ", "")
+                        val query = android.net.Uri.encode(coords)
+                        val external = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("geo:$coords?q=$query"))
+                        try { startActivity(external) } catch (_: android.content.ActivityNotFoundException) {
+                            val pair = coords.split(',')
+                            val url = "https://www.openstreetmap.org/?mlat=" + pair[0] + "&mlon=" + pair[1] + "#map=16/" + pair.joinToString("/")
+                            try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                            catch (_: android.content.ActivityNotFoundException) { Toast.makeText(this, "Harita uygulaması bulunamadı.", Toast.LENGTH_SHORT).show() }
+                        }
+                    }
                     .setPositiveButton("Kapat", null).setOnDismissListener {
                         locationMap = null
                         locationMapKey = null
+                        locationCoordinates = null
+                        locationDialog = null
+                        panel.removeView(map)
                         map.destroy()
                     }.show()
             }
@@ -885,9 +925,9 @@ class YellowSafetyActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(22), dp(20), dp(22), dp(20))
             background = GradientDrawable().apply {
-                setColor(Color.rgb(16, 27, 48))
+                setColor(panelBackground)
                 cornerRadius = dp(18).toFloat()
-                setStroke(dp(1), Color.rgb(64, 81, 107))
+                setStroke(dp(1), gold)
             }
         }
 
@@ -912,7 +952,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         val subtitle = TextView(this).apply {
             text = "SİZİN GÜVENLİĞİNİZ, BİZİM ÖNCELİĞİMİZ"
             textSize = 10f
-            setTextColor(Color.rgb(158, 180, 208))
+            setTextColor(softText)
             gravity = Gravity.CENTER
             setPadding(0, dp(4), 0, dp(14))
         }
@@ -923,7 +963,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dp(1)
             )
-            setBackgroundColor(Color.rgb(64, 81, 107))
+            setBackgroundColor(gold)
         }
         panel.addView(divider)
 
@@ -940,7 +980,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         val messageView = TextView(this).apply {
             text = message
             textSize = 14f
-            setTextColor(Color.rgb(196, 208, 224))
+            setTextColor(softText)
             gravity = Gravity.CENTER
             setPadding(dp(4), dp(4), dp(4), dp(12))
             setLineSpacing(dp(3).toFloat(), 1f)
@@ -960,14 +1000,16 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         val positiveButton = createDialogButton(
             positiveText,
-            Color.rgb(198, 40, 61),
-            Color.rgb(224, 75, 91)
+            gold,
+            gold
         )
+
+        positiveButton.setTextColor(darkBackground)
 
         val negativeButton = createDialogButton(
             negativeText,
-            Color.rgb(38, 59, 80),
-            Color.rgb(82, 116, 159)
+            darkBackground,
+            gold
         )
 
         buttonRow.addView(
@@ -1877,6 +1919,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                         when (icon) {
                             "pin" -> toggleLocationDraft(connection)
                             "photo" -> photoPicker.open()
+                            "file" -> documents.select()
                             else -> featurePreview(label)
                         }
                     }
@@ -2094,6 +2137,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun stopMatrixChat() {
+        locationDialog?.dismiss()
         calls.end()
         microphoneTarget = null
         voiceNote.close()
@@ -2352,7 +2396,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             echoedTransactions.add(tx)
             pendingSendViews.remove(tx)?.let { privateMessagesColumn?.removeView(it) }
         }
-        if (!renderLiveLocation(event)) addServerMessageBubble(message, matrixEvent = true, matrixTime = event.timestamp, photo = event.photo, voice = event.voice)
+        if (!renderLiveLocation(event)) addServerMessageBubble(message, matrixEvent = true, matrixTime = event.timestamp, photo = event.photo, voice = event.voice, document = event.document)
         if (!scrollAfter) return
         privateMessagesScroll?.post {
             privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
@@ -2487,7 +2531,8 @@ class YellowSafetyActivity : AppCompatActivity() {
 
     private fun addServerMessageBubble(message: MessageApiItem, matrixEvent: Boolean = false, matrixTime: Long = 0L,
         photo: de.connect2x.trixnity.core.model.events.m.room.EncryptedFile? = null,
-        voice: de.connect2x.trixnity.core.model.events.m.room.EncryptedFile? = null) {
+        voice: de.connect2x.trixnity.core.model.events.m.room.EncryptedFile? = null,
+        document: de.connect2x.trixnity.core.model.events.m.room.EncryptedFile? = null) {
 
         val isOutgoing = message.isOutgoing
 
@@ -2529,6 +2574,10 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
+        if (document != null) {
+            messageText.text = "📎 " + message.body + "\nDosyayı kaydet"
+            bubble.setOnClickListener { documents.save(message.body, document) }
+        }
         if (voice != null) bubble.setOnClickListener {
             val session = SecureSessionStore.getSessionId(this)
             typingScope.launch {
@@ -2743,7 +2792,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun sendMatrixMessage(connection: ConnectionApiItem, message: String,
-        photo: ByteArray? = null, session: String? = null, voice: ByteArray? = null) {
+        photo: ByteArray? = null, session: String? = null, voice: ByteArray? = null, document: ChatDocument? = null) {
         if (!matrixChatReady) return
         isSendingMessage = true
         refreshComposerAction()
@@ -2759,7 +2808,8 @@ class YellowSafetyActivity : AppCompatActivity() {
         var queued = false
         matrixSendJob = typingScope.launch {
             try {
-                val tx = if (voice != null) MatrixChatManager.enqueueVoice(applicationContext, connection.id, voice, requireNotNull(session))
+                val tx = if (document != null) MatrixChatManager.enqueueDocument(applicationContext, connection.id, document, requireNotNull(session))
+                    else if (voice != null) MatrixChatManager.enqueueVoice(applicationContext, connection.id, voice, requireNotNull(session))
                     else if (photo != null) MatrixChatManager.enqueuePhoto(applicationContext, connection.id, photo, requireNotNull(session))
                     else MatrixChatManager.enqueueText(applicationContext, connection.id, message)
                 if (tx !in echoedTransactions && privateInput === input) {
@@ -2767,7 +2817,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                     queued = true
                     pending.text = message + "\nGönderim kuyruğunda"
                 }
-                if (voice == null && photo == null && input?.text?.toString()?.trim() == message) input?.text?.clear()
+                if (document == null && voice == null && photo == null && input?.text?.toString()?.trim() == message) input?.text?.clear()
             } catch (error: TimeoutCancellationException) {
                 Toast.makeText(this@YellowSafetyActivity, "Şifreli gönderim zaman aşımına uğradı.", Toast.LENGTH_LONG).show()
             } catch (error: CancellationException) {
