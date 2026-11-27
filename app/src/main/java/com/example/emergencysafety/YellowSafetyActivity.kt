@@ -65,6 +65,102 @@ internal data class ESBotMessage(
 
 class YellowSafetyActivity : AppCompatActivity() {
 
+    private var locationDraft = false
+    private var locationDraftText = ""
+    private val locationCards = mutableMapOf<String, TextView>()
+    private val locationTimes = mutableMapOf<String, Long>()
+    private var locationMap: android.webkit.WebView? = null
+    private var locationMapKey: String? = null
+
+    private fun showLocationPoint(map: android.webkit.WebView, lat: Double, lon: Double) {
+        val box = "${lon - 0.005},${lat - 0.005},${lon + 0.005},${lat + 0.005}"
+        map.loadUrl("https://www.openstreetmap.org/export/embed.html?bbox=$box&layer=mapnik&marker=$lat,$lon")
+    }
+
+    private fun renderLiveLocation(event: MatrixChatManager.IncomingText): Boolean {
+        val parts = event.body.split('|', limit = 6)
+        if (parts.first() != ChatLocationService.PREFIX || parts.size !in setOf(3, 5)) return false
+        val share = parts[1]
+        if (runCatching { java.util.UUID.fromString(share).toString() }.getOrNull() != share) return false
+        val stopped = parts[2] == "stop" && parts.size == 3
+        val lat = parts.getOrNull(3)?.toDoubleOrNull()
+        val lon = parts.getOrNull(4)?.toDoubleOrNull()
+        if (!stopped && (parts[2] !in setOf("start", "update") || lat == null || lon == null ||
+                lat !in -90.0..90.0 || lon !in -180.0..180.0)) return false
+        val key = "${event.outgoing}:$share"
+        if ((locationTimes[key] ?: Long.MIN_VALUE) > event.timestamp) return true
+        locationTimes[key] = event.timestamp
+        val card = locationCards.getOrPut(key) {
+            createText("", 16f, gold, true).apply {
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+                privateMessagesColumn?.addView(this)
+            }
+        }
+        val time = android.text.format.DateFormat.getTimeFormat(this).format(java.util.Date(event.timestamp))
+        card.text = if (stopped) "📍 Konum paylaşımı durduruldu" else "📍 Canlı konum · $time\nHaritada göster"
+        card.setOnClickListener(null)
+        if (!stopped && lat != null && lon != null) {
+            if (locationMapKey == key) locationMap?.let { showLocationPoint(it, lat, lon) }
+            card.setOnClickListener {
+                val map = android.webkit.WebView(this)
+                map.settings.javaScriptEnabled = true
+                locationMap = map
+                locationMapKey = key
+                showLocationPoint(map, lat, lon)
+                android.app.AlertDialog.Builder(this).setTitle("Canlı konum").setView(map)
+                    .setPositiveButton("Kapat", null).setOnDismissListener {
+                        locationMap = null
+                        locationMapKey = null
+                        map.destroy()
+                    }.show()
+            }
+        }
+        return true
+    }
+
+    private fun toggleLocationDraft(connection: ConnectionApiItem) {
+        val active = ChatLocationService.activeConnection
+        if (active != null) {
+            if (active == connection.id) {
+                startService(Intent(this, ChatLocationService::class.java).setAction(ChatLocationService.STOP))
+            } else Toast.makeText(this, "Başka bir sohbette konum paylaşımı açık.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val input = privateInput ?: return
+        if (!locationDraft) locationDraftText = input.text.toString()
+        locationDraft = !locationDraft
+        input.setText(if (locationDraft) "📍 Canlı konum paylaş" else locationDraftText)
+        input.isFocusableInTouchMode = !locationDraft
+        input.isFocusable = !locationDraft
+    }
+
+    private fun sendComposer(connection: ConnectionApiItem) {
+        if (!locationDraft) {
+            sendPrivateMessage(connection, privateInput?.text?.toString().orEmpty())
+            return
+        }
+        if (!matrixChatReady || ChatLocationService.activeConnection != null) return
+        val fine = android.Manifest.permission.ACCESS_FINE_LOCATION
+        val coarse = android.Manifest.permission.ACCESS_COARSE_LOCATION
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, fine) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            androidx.core.content.ContextCompat.checkSelfPermission(this, coarse) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            androidx.core.app.ActivityCompat.requestPermissions(this, arrayOf(fine, coarse), 4811)
+            Toast.makeText(this, "Konum iznini verdikten sonra Gönder’e dokun.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val session = SecureSessionStore.getSessionId(this) ?: return
+        val intent = Intent(this, ChatLocationService::class.java)
+            .putExtra("session", session).putExtra("connection", connection.id)
+            .putExtra("name", ContactNames.getDisplayName(this, connection.email))
+        androidx.core.content.ContextCompat.startForegroundService(this, intent)
+        locationDraft = false
+        privateInput?.apply {
+            isFocusableInTouchMode = true
+            setText(locationDraftText)
+        }
+        Toast.makeText(this, "Canlı konum başlatılıyor. Durdurmak için 📍 düğmesine dokun.", Toast.LENGTH_LONG).show()
+    }
+
     private lateinit var panelContainer: FrameLayout
     private lateinit var messagesColumn: LinearLayout
     private lateinit var messagesScroll: ScrollView
@@ -1588,6 +1684,14 @@ class YellowSafetyActivity : AppCompatActivity() {
             }
         )
 
+        if (encrypted) {
+            val location = createText("📍", 21f, gold, true).apply {
+                gravity = Gravity.CENTER
+                contentDescription = "Canlı konumu seç veya paylaşımı durdur"
+                setOnClickListener { toggleLocationDraft(connection) }
+            }
+            composer.addView(location, LinearLayout.LayoutParams(dp(46), dp(48)))
+        }
         composer.addView(
             privateInput,
             LinearLayout.LayoutParams(0, dp(48), 1f)
@@ -1613,12 +1717,12 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
 
         privateSendButton?.setOnClickListener {
-            sendPrivateMessage(connection, privateInput?.text?.toString().orEmpty())
+            sendComposer(connection)
         }
 
         privateInput?.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEND) {
-                sendPrivateMessage(connection, privateInput?.text?.toString().orEmpty())
+                sendComposer(connection)
                 true
             } else {
                 false
@@ -1769,6 +1873,10 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun stopMatrixChat() {
+        locationDraft = false
+        locationDraftText = ""
+        locationCards.clear()
+        locationTimes.clear()
         matrixChatJob?.cancel()
         matrixChatJob = null
         matrixSendJob?.cancel()
@@ -2015,7 +2123,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             echoedTransactions.add(tx)
             pendingSendViews.remove(tx)?.let { privateMessagesColumn?.removeView(it) }
         }
-        addServerMessageBubble(message, matrixEvent = true, matrixTime = event.timestamp)
+        if (!renderLiveLocation(event)) addServerMessageBubble(message, matrixEvent = true, matrixTime = event.timestamp)
         if (!scrollAfter) return
         privateMessagesScroll?.post {
             privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
