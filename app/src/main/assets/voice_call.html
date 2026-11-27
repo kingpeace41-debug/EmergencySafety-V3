@@ -8,6 +8,7 @@ html,body { margin:0; width:100%; height:100%; background:#11110e; }
 <video id="preview" muted autoplay playsinline hidden></video><script>
 let pc, local, stopped = false;
 async function start(servers, offer, video) {
+  let stage = "setup";
   try {
     pc = new RTCPeerConnection({iceServers: servers});
     const received = new MediaStream();
@@ -15,8 +16,9 @@ async function start(servers, offer, video) {
     pc.ontrack = e => { received.addTrack(e.track); };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'connected') CallBridge.state('connected');
-      if (pc.connectionState === 'failed') CallBridge.state('failed');
+      if (pc.connectionState === 'failed') CallBridge.state('networkFailed');
     };
+    stage = "capture";
     local = await navigator.mediaDevices.getUserMedia({audio:true, video:video ? {facingMode:{ideal:'user'},width:{ideal:640},height:{ideal:480}} : false});
     if (stopped) { local.getTracks().forEach(t => t.stop()); return; }
     if (video) {
@@ -25,17 +27,30 @@ async function start(servers, offer, video) {
       preview.srcObject = local;
     }
     local.getTracks().forEach(t => pc.addTrack(t, local));
+    stage = "negotiation";
     if (offer) await pc.setRemoteDescription({type:'offer', sdp:offer});
     await pc.setLocalDescription(offer ? await pc.createAnswer() : await pc.createOffer());
-    if (pc.iceGatheringState !== 'complete') await new Promise(resolve => {
-      const timer = setTimeout(resolve, 7500);
-      pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') {clearTimeout(timer); resolve();} };
+    stage = "network";
+    if (pc.iceGatheringState !== 'complete') await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pc.onicegatheringstatechange = null;
+        if (/^a=candidate:/m.test(pc.localDescription.sdp)) resolve();
+        else reject(new Error('no candidate'));
+      }, 15000);
+      pc.onicegatheringstatechange = () => {
+        if (pc.iceGatheringState === 'complete') {
+          clearTimeout(timer);
+          pc.onicegatheringstatechange = null;
+          resolve();
+        }
+      };
     });
+    if (!/^a=candidate:/m.test(pc.localDescription.sdp)) throw new Error('no candidate');
     if (!stopped) CallBridge.description(pc.localDescription.type, pc.localDescription.sdp);
-  } catch(e) { if (!stopped) CallBridge.state('failed'); }
+  } catch(e) { if (!stopped) CallBridge.state(stage + 'Failed'); }
 }
 async function answer(sdp) {
-  try { await pc.setRemoteDescription({type:'answer',sdp}); } catch(e) { CallBridge.state('failed'); }
+  try { await pc.setRemoteDescription({type:'answer',sdp}); } catch(e) { CallBridge.state('negotiationFailed'); }
 }
 function stop() { stopped = true; if(local) local.getTracks().forEach(t=>t.stop()); if(pc) pc.close(); }
 </script></body></html>

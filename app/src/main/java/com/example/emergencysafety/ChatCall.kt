@@ -174,6 +174,7 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
             if (call != id || target != current()) return@launch
             val page = WebView(activity)
             web = page
+            val callPage = origin + "/call/index.html"
             if (video) {
                 dialog?.dismiss()
                 val frame = android.widget.FrameLayout(activity)
@@ -198,7 +199,10 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
                 @JavascriptInterface fun state(value: String) = activity.runOnUiThread {
                     if (active()) when (value) {
                         "connected" -> { timer?.cancel(); if (video) dialog?.setTitle("Görüntülü arama") else show("Ses bağlantısı kuruldu") }
-                        "failed" -> fail("Arama bağlantısı kurulamadı.")
+                        "captureFailed" -> fail(if (video) "Kamera veya mikrofon açılamadı." else "Mikrofon açılamadı.")
+                        "networkFailed" -> fail(if (ice.length() == 0) "Telefonlar arasında ağ yolu bulunamadı. TURN bilgisi alınamadı." else "Telefonlar arasında ses bağlantısı kurulamadı (ICE).")
+                        "setupFailed" -> fail("Telefonda WebRTC başlatılamadı.")
+                        "negotiationFailed" -> fail("Karşı telefonun bağlantı bilgileri uygulanamadı.")
                         else -> Unit
                     }
                 }
@@ -214,13 +218,17 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
                 }
             }
             page.webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse {
+                    if (request.url.toString() == callPage && request.isForMainFrame)
+                        return WebResourceResponse("text/html", "utf-8", activity.assets.open("voice_call.html"))
+                    return WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(), null)
+                }
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true
                 override fun onPageFinished(view: WebView, url: String) {
-                    if (active()) view.evaluateJavascript("start(" + ice + "," + (offer?.let { JSONObject.quote(it) } ?: "null") + "," + video + ")", null)
+                    if (active() && url == callPage) view.evaluateJavascript("start(" + ice + "," + (offer?.let { JSONObject.quote(it) } ?: "null") + "," + video + ")", null)
                 }
             }
-            val html = activity.assets.open("voice_call.html").bufferedReader().use { it.readText() }
-            page.loadDataWithBaseURL(origin + "/", html, "text/html", "utf-8", null)
+            page.loadUrl(callPage)
         }
     }
 
