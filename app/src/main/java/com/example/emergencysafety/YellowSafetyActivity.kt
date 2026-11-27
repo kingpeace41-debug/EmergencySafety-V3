@@ -2465,7 +2465,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                     if (bubble.isAttachedToWindow && chat == activePrivateConnection?.id &&
                         session == SecureSessionStore.getSessionId(this@YellowSafetyActivity)) {
                         val view = ImageView(this@YellowSafetyActivity).apply { adjustViewBounds = true; setImageBitmap(bitmap) }
-                        android.app.AlertDialog.Builder(this@YellowSafetyActivity).setTitle("Fotoğraf")
+                        android.app.AlertDialog.Builder(this@YellowSafetyActivity, R.style.YellowPhotoDialog).setTitle("Fotoğraf")
                             .setView(view).setPositiveButton("Kapat", null).show()
                     }
                 } catch (error: CancellationException) { throw error }

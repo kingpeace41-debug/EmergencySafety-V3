@@ -1,0 +1,9 @@
+<resources>
+    <style name="YellowPhotoDialog" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/yellow_photo_dialog_panel</item>
+        <item name="android:colorBackground">#1F1E1A</item>
+        <item name="android:colorAccent">#E8B837</item>
+        <item name="android:textColorPrimary">#FAF6EA</item>
+        <item name="android:textColorSecondary">#D5CDB5</item>
+    </style>
+</resources>

@@ -49,7 +49,7 @@ internal class ChatPhotoPicker(
 
     fun open() {
         target = currentChat() ?: return
-        AlertDialog.Builder(activity).setTitle("Fotoğraf")
+        AlertDialog.Builder(activity, R.style.YellowPhotoDialog).setTitle("Fotoğraf")
             .setItems(arrayOf("Dosyadan seç", "Anlık fotoğraf çek")) { _, which ->
                 if (which == 0) {
                     try { gallery.launch("image/*") }
@@ -102,7 +102,7 @@ internal class ChatPhotoPicker(
                 }
                 if (currentChat() != destination || activity.isFinishing) return@launch
                 val view = ImageView(activity).apply { adjustViewBounds = true; setImageBitmap(bitmap) }
-                AlertDialog.Builder(activity).setTitle("Fotoğraf gönderilsin mi?").setView(view)
+                AlertDialog.Builder(activity, R.style.YellowPhotoDialog).setTitle("Fotoğraf gönderilsin mi?").setView(view)
                     .setNegativeButton("Vazgeç", null).setPositiveButton("Gönder") { _, _ ->
                         if (currentChat() == destination) send(jpeg, destination.second)
                     }.show()
