@@ -1715,9 +1715,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                     scaleType = android.widget.ImageView.ScaleType.CENTER
                     contentDescription = label
                     setOnClickListener {
-                        if (icon == "call") {
-                            if (matrixChatReady) calls.dial() else Toast.makeText(this@YellowSafetyActivity, "Şifreli oda hazırlanıyor.", Toast.LENGTH_SHORT).show()
-                        } else featurePreview(label)
+                        if (matrixChatReady) calls.dial(withVideo = icon == "video") else Toast.makeText(this@YellowSafetyActivity, "Şifreli oda hazırlanıyor.", Toast.LENGTH_SHORT).show()
                     }
                 }, LinearLayout.LayoutParams(dp(44), dp(48)))
             }

@@ -16,6 +16,7 @@ import org.json.JSONObject
 import java.util.UUID
 
 internal data class CallSignal(val id: String, val kind: String, val sdp: String = "") {
+    val invitation get() = kind == "invite" || kind == "videoInvite"
     fun encode() = "es.call.v1\n" + JSONObject().put("id", id).put("kind", kind).put("sdp", sdp)
     companion object {
         fun parse(body: String): CallSignal? {
@@ -25,7 +26,7 @@ internal data class CallSignal(val id: String, val kind: String, val sdp: String
                 val id = json.getString("id")
                 require(UUID.fromString(id).toString() == id)
                 val kind = json.getString("kind")
-                require(kind in setOf("invite", "accept", "offer", "answer", "end"))
+                require(kind in setOf("invite", "videoInvite", "accept", "offer", "answer", "end"))
                 val sdp = json.optString("sdp")
                 require(if (kind in setOf("offer", "answer")) sdp.startsWith("v=0") else sdp.isEmpty())
                 CallSignal(id, kind, sdp)
@@ -45,23 +46,28 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
     private var timer: Job? = null
     private var permissionId: String? = null
     private var offerer = false
+    private var video = false
     private val closed = LinkedHashSet<String>()
     private val origin = "https://appassets.androidplatform.net"
-    private val mic = activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    private val permissions = activity.registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ ->
         val pending = permissionId
         permissionId = null
         if (pending != null && pending == id && current() == target) {
-            if (granted) ready() else end()
+            if (missingPermissions().isEmpty()) ready() else {
+                toast(if (video) "Görüntülü arama için kamera ve mikrofon izni gerekli." else "Mikrofon izni gerekli.")
+                end()
+            }
         }
     }
 
-    fun dial() {
+    fun dial(withVideo: Boolean) {
         if (id != null || current() == null) return
-        begin(UUID.randomUUID().toString(), true)
+        begin(UUID.randomUUID().toString(), true, withVideo)
         permission()
     }
 
-    private fun begin(call: String, outgoing: Boolean) {
+    private fun begin(call: String, outgoing: Boolean, withVideo: Boolean) {
+        video = withVideo
         target = current()
         id = call
         offerer = outgoing
@@ -74,26 +80,33 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
         timer = scope().launch { delay(50000); fail("Arama zaman aşımına uğradı.") }
     }
 
+    private fun missingPermissions(): List<String> {
+        val required = if (video) listOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
+            else listOf(Manifest.permission.RECORD_AUDIO)
+        return required.filter { ContextCompat.checkSelfPermission(activity, it) != PackageManager.PERMISSION_GRANTED }
+    }
+
     private fun permission() {
         ringtone?.stop()
         ringtone = null
-        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) ready()
+        val missing = missingPermissions()
+        if (missing.isEmpty()) ready()
         else {
             permissionId = id
-            mic.launch(Manifest.permission.RECORD_AUDIO)
+            permissions.launch(missing.toTypedArray())
         }
     }
 
     private fun ready() {
         phase = if (offerer) "dialing" else "waitingOffer"
         show(if (offerer) "Aranıyor…" else "Bağlanıyor…")
-        signal(if (offerer) "invite" else "accept")
+        signal(if (!offerer) "accept" else if (video) "videoInvite" else "invite")
     }
 
     private fun show(status: String, incoming: Boolean = false) {
         dialog?.dismiss()
         val builder = AlertDialog.Builder(activity, R.style.YellowPhotoDialog)
-            .setTitle("Sesli arama").setMessage(status)
+            .setTitle(if (video) "Görüntülü arama" else "Sesli arama").setMessage(status)
             .setNegativeButton(if (incoming) "Reddet" else "Aramayı bitir") { _, _ -> end() }
             .setOnCancelListener { end() }
         if (incoming) builder.setPositiveButton("Yanıtla") { _, _ -> permission() }
@@ -108,13 +121,13 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
             return
         }
         if (signal.id in closed || System.currentTimeMillis() - timestamp !in -5000L..50000L) return
-        if (signal.kind == "invite" && id == null && current() != null) {
-            begin(signal.id, false)
+        if (signal.invitation && id == null && current() != null) {
+            begin(signal.id, false, signal.kind == "videoInvite")
             if (activity.hasWindowFocus()) runCatching {
                 ringtone = android.media.RingtoneManager.getRingtone(activity, android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE))
                 ringtone?.play()
             }
-            show("Gelen sesli arama", true)
+            show(if (video) "Gelen görüntülü arama" else "Gelen sesli arama", true)
             return
         }
         if (id != signal.id || target != current()) return
@@ -161,7 +174,17 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
             if (call != id || target != current()) return@launch
             val page = WebView(activity)
             web = page
-            activity.findViewById<android.view.ViewGroup>(android.R.id.content).addView(page, 0, android.view.ViewGroup.LayoutParams(1, 1))
+            if (video) {
+                dialog?.dismiss()
+                val frame = android.widget.FrameLayout(activity)
+                val height = (activity.resources.displayMetrics.heightPixels * 0.55f).toInt()
+                frame.addView(page, android.widget.FrameLayout.LayoutParams(-1, height))
+                dialog = AlertDialog.Builder(activity, R.style.YellowPhotoDialog)
+                    .setTitle("Görüntülü arama · Bağlanıyor…").setView(frame)
+                    .setNegativeButton("Aramayı bitir") { _, _ -> end() }
+                    .setOnCancelListener { end() }.show()
+                dialog?.setCanceledOnTouchOutside(false)
+            } else activity.findViewById<android.view.ViewGroup>(android.R.id.content).addView(page, 0, android.view.ViewGroup.LayoutParams(1, 1))
             page.importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
             page.settings.javaScriptEnabled = true
             page.settings.mediaPlaybackRequiresUserGesture = false
@@ -174,24 +197,26 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
                 }
                 @JavascriptInterface fun state(value: String) = activity.runOnUiThread {
                     if (active()) when (value) {
-                        "connected" -> { timer?.cancel(); show("Ses bağlantısı kuruldu") }
-                        "failed" -> fail("Ses bağlantısı kurulamadı.")
+                        "connected" -> { timer?.cancel(); if (video) dialog?.setTitle("Görüntülü arama") else show("Ses bağlantısı kuruldu") }
+                        "failed" -> fail("Arama bağlantısı kurulamadı.")
                         else -> Unit
                     }
                 }
             }, "CallBridge")
             page.webChromeClient = object : WebChromeClient() {
                 override fun onPermissionRequest(request: PermissionRequest) {
-                    if (active() && request.origin.host == "appassets.androidplatform.net" &&
-                        request.resources.contentEquals(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE)))
-                        request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+                    val permitted = if (video) setOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE, PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                        else setOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+                    if (active() && request.origin.scheme == "https" && request.origin.host == "appassets.androidplatform.net" &&
+                        missingPermissions().isEmpty() && request.resources.isNotEmpty() && request.resources.all { it in permitted })
+                        request.grant(request.resources)
                     else request.deny()
                 }
             }
             page.webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true
                 override fun onPageFinished(view: WebView, url: String) {
-                    if (active()) view.evaluateJavascript("start(" + ice + "," + (offer?.let { JSONObject.quote(it) } ?: "null") + ")", null)
+                    if (active()) view.evaluateJavascript("start(" + ice + "," + (offer?.let { JSONObject.quote(it) } ?: "null") + "," + video + ")", null)
                 }
             }
             val html = activity.assets.open("voice_call.html").bufferedReader().use { it.readText() }
