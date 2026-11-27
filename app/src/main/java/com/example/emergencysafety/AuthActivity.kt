@@ -616,7 +616,7 @@ class AuthActivity : AppCompatActivity() {
     private fun resetGoogleButton() {
         if (::googleButton.isInitialized) {
             googleButton.isEnabled = true
-            googleButton.text = "G  GOOGLE İLE DEVAM ET"
+            googleButton.text = "GOOGLE İLE DEVAM ET"
         }
     }
 
