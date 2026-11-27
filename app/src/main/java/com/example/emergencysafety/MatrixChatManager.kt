@@ -236,7 +236,8 @@ internal object MatrixChatManager {
         val acknowledgedIds: List<String> = emptyList(),
         val timestamp: Long = 0L,
         val transactionId: String? = null,
-        val photo: EncryptedFile? = null
+        val photo: EncryptedFile? = null,
+        val voice: EncryptedFile? = null
     )
 
     private fun validEventId(id: String): Boolean =
@@ -247,6 +248,10 @@ internal object MatrixChatManager {
         val sender = event.sender.toString()
         if (sender != peerUserId && sender != ownUserId) return null
         return when (val decoded = content?.getOrNull()) {
+            is RoomMessageEventContent.FileBased.Audio -> decoded.file?.let { file ->
+                IncomingText(event.id.toString(), "▶ Sesli mesajı dinle", sender == ownUserId,
+                    timestamp = event.originTimestamp, transactionId = event.unsigned?.transactionId, voice = file)
+            }
             is RoomMessageEventContent.FileBased.Image -> decoded.file?.let { file ->
                 IncomingText(event.id.toString(), "📷 Fotoğrafı aç", sender == ownUserId,
                     timestamp = event.originTimestamp, transactionId = event.unsigned?.transactionId, photo = file)
@@ -457,7 +462,15 @@ internal object MatrixChatManager {
                 file = file, info = ImageInfo(mimeType = "image/jpeg", size = bytes.size.toLong())))
         }
 
-    suspend fun readPhoto(context: Context, file: EncryptedFile): ByteArray = withContext(Dispatchers.IO) {
+    suspend fun enqueueVoice(context: Context, connectionId: String, bytes: ByteArray, session: String): String =
+        enqueue(context, connectionId, session) {
+            val file = mediaService.prepareUploadEncryptedMedia(flowOf(bytes))
+            content(RoomMessageEventContent.FileBased.Audio(body = "Sesli mesaj", fileName = "ses.m4a",
+                file = file, info = de.connect2x.trixnity.core.model.events.m.room.AudioInfo(
+                    mimeType = "audio/mp4", size = bytes.size.toLong())))
+        }
+
+    suspend fun readAttachment(context: Context, file: EncryptedFile): ByteArray = withContext(Dispatchers.IO) {
         withTimeout(60000L) {
             val client = MatrixClientManager.openForCurrentSession(context).getOrThrow()
             val limit = 8 * 1024 * 1024

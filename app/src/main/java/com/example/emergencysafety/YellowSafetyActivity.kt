@@ -65,6 +65,34 @@ internal data class ESBotMessage(
 
 class YellowSafetyActivity : AppCompatActivity() {
 
+    private val voiceNote = ChatVoiceNote(this)
+    private var microphoneTarget: Pair<String, String>? = null
+    private val microphonePermission = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { allowed ->
+        val target = microphoneTarget
+        microphoneTarget = null
+        if (allowed && target != null && activePrivateConnection?.id == target.first &&
+            SecureSessionStore.getSessionId(this) == target.second && isMatrixChat) openVoiceNote()
+    }
+
+    private fun openVoiceNote() {
+        val chat = activePrivateConnection ?: return
+        val session = SecureSessionStore.getSessionId(this) ?: return
+        if (!matrixChatReady || isSendingMessage) return
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            microphoneTarget = chat.id to session
+            microphonePermission.launch(android.Manifest.permission.RECORD_AUDIO)
+            return
+        }
+        voiceNote.record { bytes ->
+            if (matrixChatReady && !isSendingMessage && activePrivateConnection?.id == chat.id &&
+                SecureSessionStore.getSessionId(this) == session)
+                sendMatrixMessage(chat, "Sesli mesaj", session = session, voice = bytes)
+        }
+    }
+
     private val photoPicker = ChatPhotoPicker(this, { typingScope }, {
         val id = activePrivateConnection?.id
         val session = SecureSessionStore.getSessionId(this)
@@ -117,10 +145,11 @@ class YellowSafetyActivity : AppCompatActivity() {
         val card = locationCards.getOrPut(key) {
             createText("", 16f, gold, true).apply {
                 setPadding(dp(12), dp(12), dp(12), dp(12))
-                privateMessagesColumn?.addView(this)
+                tag = event.timestamp
+                privateMessagesColumn?.let { addDatedView(it, this, event.timestamp, LinearLayout.LayoutParams(-1, -2)) }
             }
         }
-        val time = android.text.format.DateFormat.getTimeFormat(this).format(java.util.Date(event.timestamp))
+        val time = formatTime(event.timestamp)
         card.text = if (stopped) "📍 Konum paylaşımı durduruldu" else "📍 Canlı konum · $time\nHaritada göster"
         card.setOnClickListener(null)
         if (!stopped && lat != null && lon != null) {
@@ -682,6 +711,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        voiceNote.close()
         if (isMatrixChat) sendLocalTyping(false)
         stopPrivateSocket()
         super.onPause()
@@ -1023,13 +1053,45 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
     }
 
+    private val turkishZone = java.util.TimeZone.getTimeZone("Europe/Istanbul")
+    private val dayLabel = SimpleDateFormat("d MMMM yyyy", Locale("tr", "TR")).apply { timeZone = turkishZone }
+    private data class DayHeading(val midnight: Long)
+
+    private fun addDatedView(column: LinearLayout, view: View, time: Long, params: LinearLayout.LayoutParams) {
+        val start = java.util.Calendar.getInstance(turkishZone).apply {
+            timeInMillis = time
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        fun insertIndex(at: Long) = (0 until column.childCount).firstOrNull { i ->
+            val other = when (val key = column.getChildAt(i).tag) {
+                is Long -> key
+                is DayHeading -> key.midnight
+                is MessageApiItem -> parseServerTime(key.createdAt)
+                else -> Long.MIN_VALUE
+            }
+            other > at
+        } ?: column.childCount
+        if ((0 until column.childCount).none { column.getChildAt(it).tag == DayHeading(start) }) {
+            val heading = createText(dayLabel.format(Date(time)), 13f, gold).apply {
+                tag = DayHeading(start)
+                gravity = Gravity.CENTER
+                setPadding(0, dp(12), 0, dp(4))
+            }
+            column.addView(heading, insertIndex(start), LinearLayout.LayoutParams(-1, -2))
+        }
+        column.addView(view, insertIndex(time), params)
+    }
+
     private fun formatTime(timestamp: Long): String {
-        return SimpleDateFormat("HH:mm", Locale("tr", "TR"))
+        return SimpleDateFormat("HH:mm", Locale("tr", "TR")).apply { timeZone = turkishZone }
             .format(Date(timestamp))
     }
 
     private fun formatListTime(timestamp: Long): String {
-        return SimpleDateFormat("dd.MM HH:mm", Locale("tr", "TR"))
+        return SimpleDateFormat("dd.MM HH:mm", Locale("tr", "TR")).apply { timeZone = turkishZone }
             .format(Date(timestamp))
     }
 
@@ -1052,6 +1114,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
             formats.firstNotNullOfOrNull { format ->
                 try {
+                    format.timeZone = java.util.TimeZone.getTimeZone("UTC")
                     format.isLenient = false
                     format.parse(normalized)?.time
                 } catch (_: Exception) {
@@ -1862,7 +1925,7 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         refreshComposerAction()
         privateSendButton?.setOnClickListener {
-            if (encrypted && !locationDraft && privateInput?.text.isNullOrBlank()) featurePreview("Sesli mesaj")
+            if (encrypted && !locationDraft && privateInput?.text.isNullOrBlank()) openVoiceNote()
             else sendComposer(connection)
         }
 
@@ -2019,6 +2082,8 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun stopMatrixChat() {
+        microphoneTarget = null
+        voiceNote.close()
         locationRequested = false
         permissionChat = null
         locationDraft = false
@@ -2270,7 +2335,7 @@ class YellowSafetyActivity : AppCompatActivity() {
             echoedTransactions.add(tx)
             pendingSendViews.remove(tx)?.let { privateMessagesColumn?.removeView(it) }
         }
-        if (!renderLiveLocation(event)) addServerMessageBubble(message, matrixEvent = true, matrixTime = event.timestamp, photo = event.photo)
+        if (!renderLiveLocation(event)) addServerMessageBubble(message, matrixEvent = true, matrixTime = event.timestamp, photo = event.photo, voice = event.voice)
         if (!scrollAfter) return
         privateMessagesScroll?.post {
             privateMessagesScroll?.fullScroll(View.FOCUS_DOWN)
@@ -2404,7 +2469,8 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun addServerMessageBubble(message: MessageApiItem, matrixEvent: Boolean = false, matrixTime: Long = 0L,
-        photo: de.connect2x.trixnity.core.model.events.m.room.EncryptedFile? = null) {
+        photo: de.connect2x.trixnity.core.model.events.m.room.EncryptedFile? = null,
+        voice: de.connect2x.trixnity.core.model.events.m.room.EncryptedFile? = null) {
 
         val isOutgoing = message.isOutgoing
 
@@ -2446,13 +2512,24 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
+        if (voice != null) bubble.setOnClickListener {
+            val session = SecureSessionStore.getSessionId(this)
+            typingScope.launch {
+                try {
+                    val audio = MatrixChatManager.readAttachment(applicationContext, voice)
+                    if (bubble.isAttachedToWindow && hasWindowFocus() && session == SecureSessionStore.getSessionId(this@YellowSafetyActivity))
+                        voiceNote.play(audio)
+                } catch (error: CancellationException) { throw error }
+                catch (_: Exception) { Toast.makeText(this@YellowSafetyActivity, "Sesli mesaj açılamadı.", Toast.LENGTH_LONG).show() }
+            }
+        }
         if (photo != null) bubble.setOnClickListener {
             val chat = activePrivateConnection?.id
             val session = SecureSessionStore.getSessionId(this)
             typingScope.launch {
                 try {
                     val bitmap = withContext(Dispatchers.IO) {
-                        val bytes = MatrixChatManager.readPhoto(applicationContext, photo)
+                        val bytes = MatrixChatManager.readAttachment(applicationContext, photo)
                         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
                         require(options.outWidth > 0 && options.outHeight > 0)
@@ -2509,7 +2586,8 @@ class YellowSafetyActivity : AppCompatActivity() {
 
         // Mesajın saati korunur.
         val timeText = TextView(this).apply {
-            text = if (matrixEvent) "" else formatTime(parseServerTime(message.createdAt))
+            text = formatTime(if (matrixEvent) matrixTime else parseServerTime(message.createdAt))
+            setPadding(0, 0, dp(4), 0)
 
             textSize = 10f
             setTextColor(Color.rgb(210, 210, 210))
@@ -2588,16 +2666,8 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
 
         val column = privateMessagesColumn
-        if (matrixEvent && column != null) {
-            bubble.tag = matrixTime
-            val index = (0 until column.childCount).firstOrNull {
-                val time = column.getChildAt(it).tag as? Long
-                time != null && time > matrixTime
-            } ?: column.childCount
-            column.addView(bubble, index, params)
-        } else {
-            column?.addView(bubble, params)
-        }
+        if (matrixEvent) bubble.tag = matrixTime
+        if (column != null) addDatedView(column, bubble, if (matrixEvent) matrixTime else parseServerTime(message.createdAt), params)
         if (matrixEvent && !isOutgoing) matrixIncomingBubbles[message.id] = bubble
     }
 
@@ -2656,7 +2726,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     }
 
     private fun sendMatrixMessage(connection: ConnectionApiItem, message: String,
-        photo: ByteArray? = null, session: String? = null) {
+        photo: ByteArray? = null, session: String? = null, voice: ByteArray? = null) {
         if (!matrixChatReady) return
         isSendingMessage = true
         refreshComposerAction()
@@ -2672,14 +2742,15 @@ class YellowSafetyActivity : AppCompatActivity() {
         var queued = false
         matrixSendJob = typingScope.launch {
             try {
-                val tx = if (photo != null) MatrixChatManager.enqueuePhoto(applicationContext, connection.id, photo, requireNotNull(session))
+                val tx = if (voice != null) MatrixChatManager.enqueueVoice(applicationContext, connection.id, voice, requireNotNull(session))
+                    else if (photo != null) MatrixChatManager.enqueuePhoto(applicationContext, connection.id, photo, requireNotNull(session))
                     else MatrixChatManager.enqueueText(applicationContext, connection.id, message)
                 if (tx !in echoedTransactions && privateInput === input) {
                     pendingSendViews[tx] = pending
                     queued = true
                     pending.text = message + "\nGönderim kuyruğunda"
                 }
-                if (photo == null && input?.text?.toString()?.trim() == message) input?.text?.clear()
+                if (voice == null && photo == null && input?.text?.toString()?.trim() == message) input?.text?.clear()
             } catch (error: TimeoutCancellationException) {
                 Toast.makeText(this@YellowSafetyActivity, "Şifreli gönderim zaman aşımına uğradı.", Toast.LENGTH_LONG).show()
             } catch (error: CancellationException) {
