@@ -2338,7 +2338,34 @@ class YellowSafetyActivity : AppCompatActivity() {
     private fun renderMatrixEvent(event: MatrixChatManager.IncomingText, scrollAfter: Boolean) {
         if (!shownMatrixEventIds.add(event.eventId)) return
         event.call?.let {
-            if (!event.outgoing) calls.receive(it, event.timestamp)
+            if (it.outcome) {
+                val video = it.kind.startsWith("video")
+                val type = if (video) "Görüntülü arama" else "Sesli arama"
+                val status = when {
+                    it.successful -> "Bağlantı kuruldu"
+                    it.kind.endsWith("Missed") -> "Cevapsız"
+                    else -> "Bağlantı kurulamadı"
+                }
+                val box = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(14), dp(8), dp(14), dp(8))
+                    background = roundedBackground(if (it.successful) Color.rgb(32, 97, 61) else Color.rgb(121, 45, 50), darkBackground, 16)
+                    tag = event.timestamp
+                }
+                box.addView(createText(type + " · " + status + " · " + formatTime(event.timestamp), 15f, Color.WHITE))
+                if (!it.successful) box.addView(android.widget.Button(this).apply {
+                    text = "Geri ara"
+                    setTextColor(gold)
+                    background = roundedBackground(panelBackground, gold, 16)
+                    setOnClickListener { if (matrixChatReady) calls.dial(video) }
+                })
+                privateMessagesColumn?.let { column ->
+                    addDatedView(column, box, event.timestamp, LinearLayout.LayoutParams(-2, -2).apply {
+                        gravity = if (event.outgoing) Gravity.END else Gravity.START
+                        topMargin = dp(5)
+                    })
+                }
+            } else if (!event.outgoing) calls.receive(it, event.timestamp)
             return
         }
         if (event.receipt != null) {
@@ -2575,8 +2602,12 @@ class YellowSafetyActivity : AppCompatActivity() {
         )
 
         if (document != null) {
-            messageText.text = "📎 " + message.body + "\nDosyayı kaydet"
-            bubble.setOnClickListener { documents.save(message.body, document) }
+            fun refreshDocument() {
+                val action = if (documents.downloaded(message.id)) "İndirildi · Dosyayı aç" else "Dosyayı kaydet"
+                messageText.text = "📎 " + message.body + "\n" + action
+            }
+            refreshDocument()
+            bubble.setOnClickListener { documents.selectAction(message.id, message.body, document, ::refreshDocument) }
         }
         if (voice != null) bubble.setOnClickListener {
             val session = SecureSessionStore.getSessionId(this)

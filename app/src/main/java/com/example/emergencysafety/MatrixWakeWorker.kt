@@ -26,6 +26,14 @@ class MatrixWakeWorker(context: Context, parameters: WorkerParameters) : Corouti
             val delivered = withTimeout(45_000L) {
                 MatrixChatManager.receiveWake(app, session, connection, room, event)
             }
+            if (delivered?.startsWith("call|") == true && SecureSessionStore.getSessionId(app) == session) {
+                val parts = delivered.split('|')
+                val kind = parts[2]
+                val remaining = 45000L - (System.currentTimeMillis() - parts[3].toLong())
+                if (kind != "invite" && kind != "videoInvite" || !ActiveChatTracker.isChatVisible(connection))
+                    CallAlerts.show(app, connection, parts[1], kind, remaining.coerceAtMost(45000L))
+                return Result.success()
+            }
             if (delivered != null && SecureSessionStore.getSessionId(app) == session && !ActiveChatTracker.isChatVisible(connection)) {
                 notifyMessage(connection, delivered)
             }

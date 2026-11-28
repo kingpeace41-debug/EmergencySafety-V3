@@ -333,7 +333,7 @@ internal object MatrixChatManager {
                             live.send(message)
                             val locationUpdate = message.body.startsWith(ChatLocationService.PREFIX + "|") &&
                                 message.body.split('|').getOrNull(2) in setOf("update", "stop")
-                            if (message.outgoing && message.receipt == null && !locationUpdate && (message.call == null || message.call.invitation)) wakeRequests.send(message.eventId)
+                            if (message.outgoing && message.receipt == null && !locationUpdate && (message.call == null || message.call.invitation || message.call.outcome)) wakeRequests.send(message.eventId)
                         }
                     }
                 } finally {
@@ -403,9 +403,8 @@ internal object MatrixChatManager {
             if (decoded == null || decoded.eventId != event || decoded.outgoing || decoded.receipt != null) return@withContext null
             checkSession(app, session)
             decoded.call?.let {
-                return@withContext if (it.invitation && System.currentTimeMillis() - decoded.timestamp in -5000L..45000L) {
-                    if (it.kind == "videoInvite") "videoCall" else "call"
-                } else null
+                return@withContext if (it.invitation || it.outcome)
+                    "call|${it.id}|${it.kind}|${decoded.timestamp}" else null
             }
             sendReceipt(app, connectionId, Receipt.DELIVERED, listOf(event))
             "message"

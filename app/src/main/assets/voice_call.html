@@ -4,8 +4,9 @@ html,body { margin:0; width:100%; height:100%; background:#11110e; }
 #remote { width:100%; height:100%; object-fit:contain; }
 #preview { position:absolute; right:12px; bottom:12px; width:28%; height:28%; object-fit:cover;
   border:1px solid #e8b837; border-radius:12px; transform:scaleX(-1); background:#201f1a; }
+nav {position:absolute; left:8px;bottom:8px;display:flex;gap:4px} button {border:1px solid #e8b837;border-radius:12px;background:#1f1e1a;color:#ffe4a0;padding:8px} [hidden]{display:none!important}
 </style></head><body><video id="remote" autoplay playsinline></video>
-<video id="preview" muted autoplay playsinline hidden></video><script>
+<video id="preview" muted autoplay playsinline hidden></video><nav hidden id="controls"><button id="swap">Kamerayı çevir</button><button hidden id="torch">Feneri aç</button></nav><script>
 let pc, local, stopped = false;
 async function start(servers, offer, video) {
   let stage = "setup";
@@ -25,6 +26,8 @@ async function start(servers, offer, video) {
       const preview = document.getElementById('preview');
       preview.hidden = false;
       preview.srcObject = local;
+      document.getElementById("controls").hidden = false;
+      cameraControls();
     }
     local.getTracks().forEach(t => pc.addTrack(t, local));
     stage = "negotiation";
@@ -48,6 +51,43 @@ async function start(servers, offer, video) {
     if (!/^a=candidate:/m.test(pc.localDescription.sdp)) throw new Error('no candidate');
     if (!stopped) CallBridge.description(pc.localDescription.type, pc.localDescription.sdp);
   } catch(e) { if (!stopped) CallBridge.state(stage + 'Failed'); }
+}
+function cameraControls() {
+  const swap = document.getElementById('swap'), torch = document.getElementById('torch');
+  let rear = local.getVideoTracks()[0].getSettings().facingMode === 'environment';
+  function render() {
+    const track = local.getVideoTracks()[0];
+    torch.hidden = !rear || !track.getCapabilities?.().torch;
+    torch.textContent = track.getSettings().torch ? 'Feneri kapat' : 'Feneri aç';
+    document.getElementById('preview').style.transform = rear ? 'none' : 'scaleX(-1)';
+  }
+  torch.onclick = async () => {
+    try {
+      const t = local.getVideoTracks()[0];
+      await t.applyConstraints({advanced:[{torch:!t.getSettings().torch}]});
+      render();
+    } catch { CallBridge.mediaNotice('torch'); }
+  };
+  swap.onclick = async () => {
+    const old = local.getVideoTracks()[0], sender = pc.getSenders().find(s => s.track === old);
+    swap.disabled = true;
+    let next;
+    try {
+      const facing = rear ? 'user' : 'environment';
+      try {
+        await old.applyConstraints({facingMode:{exact:facing}});
+        if (old.getSettings().facingMode === facing) { rear = !rear; render(); return; }
+      } catch { /* Some devices require a replacement track. */ }
+      const stream = await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{exact:facing}}});
+      next = stream.getVideoTracks()[0];
+      await sender.replaceTrack(next);
+      local.removeTrack(old); old.stop(); local.addTrack(next);
+      document.getElementById('preview').srcObject = local;
+      rear = !rear; render();
+    } catch { if (next && !local.getTracks().includes(next)) next.stop(); CallBridge.mediaNotice('camera'); }
+    finally { swap.disabled = false; }
+  };
+  render();
 }
 async function answer(sdp) {
   try { await pc.setRemoteDescription({type:'answer',sdp}); } catch(e) { CallBridge.state('negotiationFailed'); }

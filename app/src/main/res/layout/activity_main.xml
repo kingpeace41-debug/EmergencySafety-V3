@@ -74,7 +74,7 @@
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="223dp"
+                android:layout_height="225dp"
                 android:orientation="horizontal"
                 android:gravity="center"
                 android:weightSum="3">
@@ -84,7 +84,7 @@
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="1"
-                    android:layout_marginEnd="4.75dp"
+                    android:layout_marginEnd="3.25dp"
                     android:clickable="true"
                     android:focusable="true"
                     android:contentDescription="Acil durum">
@@ -104,8 +104,8 @@
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="1"
-                    android:layout_marginStart="4.75dp"
-                    android:layout_marginEnd="4.75dp"
+                    android:layout_marginStart="3.25dp"
+                    android:layout_marginEnd="3.25dp"
                     android:clickable="true"
                     android:focusable="true"
                     android:contentDescription="Uyarı">
@@ -125,7 +125,7 @@
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_weight="1"
-                    android:layout_marginStart="4.75dp"
+                    android:layout_marginStart="3.25dp"
                     android:clickable="true"
                     android:focusable="true"
                     android:contentDescription="Bilgi">

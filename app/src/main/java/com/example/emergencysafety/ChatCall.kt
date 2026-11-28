@@ -17,6 +17,8 @@ import java.util.UUID
 
 internal data class CallSignal(val id: String, val kind: String, val sdp: String = "") {
     val invitation get() = kind == "invite" || kind == "videoInvite"
+    val outcome get() = kind in setOf("audioConnected", "videoConnected", "audioMissed", "videoMissed", "audioFailed", "videoFailed")
+    val successful get() = kind.endsWith("Connected")
     fun encode() = "es.call.v1\n" + JSONObject().put("id", id).put("kind", kind).put("sdp", sdp)
     companion object {
         fun parse(body: String): CallSignal? {
@@ -26,7 +28,7 @@ internal data class CallSignal(val id: String, val kind: String, val sdp: String
                 val id = json.getString("id")
                 require(UUID.fromString(id).toString() == id)
                 val kind = json.getString("kind")
-                require(kind in setOf("invite", "videoInvite", "accept", "offer", "answer", "end"))
+                require(kind in setOf("invite", "videoInvite", "accept", "offer", "answer", "end", "audioConnected", "videoConnected", "audioMissed", "videoMissed", "audioFailed", "videoFailed"))
                 val sdp = json.optString("sdp")
                 require(if (kind in setOf("offer", "answer")) sdp.startsWith("v=0") else sdp.isEmpty())
                 CallSignal(id, kind, sdp)
@@ -45,6 +47,10 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
     private var ringtone: android.media.Ringtone? = null
     private var timer: Job? = null
     private var permissionId: String? = null
+    private val audio = CallAudio(activity)
+    private var reported = false
+    private var answered = false
+    private var invited = false
     private var offerer = false
     private var video = false
     private val closed = LinkedHashSet<String>()
@@ -67,6 +73,9 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
     }
 
     private fun begin(call: String, outgoing: Boolean, withVideo: Boolean) {
+        reported = false
+        answered = false
+        invited = false
         video = withVideo
         target = current()
         id = call
@@ -89,6 +98,7 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
     private fun permission() {
         ringtone?.stop()
         ringtone = null
+        id?.let { CallAlerts.silence(activity, it) }
         val missing = missingPermissions()
         if (missing.isEmpty()) ready()
         else {
@@ -100,6 +110,7 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
     private fun ready() {
         phase = if (offerer) "dialing" else "waitingOffer"
         show(if (offerer) "Aranıyor…" else "Bağlanıyor…")
+        invited = true
         signal(if (!offerer) "accept" else if (video) "videoInvite" else "invite")
     }
 
@@ -109,30 +120,33 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
             .setTitle(if (video) "Görüntülü arama" else "Sesli arama").setMessage(status)
             .setNegativeButton(if (incoming) "Reddet" else "Aramayı bitir") { _, _ -> end() }
             .setOnCancelListener { end() }
+        if (!incoming && web != null) builder.setNeutralButton("Ses çıkışı", null)
         if (incoming) builder.setPositiveButton("Yanıtla") { _, _ -> permission() }
         dialog = builder.show()
+        if (!incoming && web != null) dialog?.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener { audio.choose() }
         dialog?.setCanceledOnTouchOutside(false)
     }
 
     fun receive(signal: CallSignal, timestamp: Long) {
         if (signal.kind == "end") {
             remember(signal.id)
-            if (signal.id == id) clear()
+            if (signal.id == id) { report(false); clear() }
             return
         }
         if (signal.id in closed || System.currentTimeMillis() - timestamp !in -5000L..50000L) return
         if (signal.invitation && id == null && current() != null) {
             begin(signal.id, false, signal.kind == "videoInvite")
-            if (activity.hasWindowFocus()) runCatching {
+            if (activity.hasWindowFocus() && activity.getSystemService(android.media.AudioManager::class.java).ringerMode == android.media.AudioManager.RINGER_MODE_NORMAL) runCatching {
                 ringtone = android.media.RingtoneManager.getRingtone(activity, android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE))
                 ringtone?.play()
             }
-            show(if (video) "Gelen görüntülü arama" else "Gelen sesli arama", true)
+            val name = current()?.first?.let { CallAlerts.name(activity, it) }.orEmpty()
+            show(name + if (video) " · Gelen görüntülü arama" else " · Gelen sesli arama", true)
             return
         }
         if (id != signal.id || target != current()) return
         when {
-            signal.kind == "accept" && phase == "dialing" -> engine(null)
+            signal.kind == "accept" && phase == "dialing" -> { answered = true; engine(null) }
             signal.kind == "offer" && phase == "waitingOffer" -> engine(signal.sdp)
             signal.kind == "answer" && phase == "waitingAnswer" ->
                 web?.evaluateJavascript("answer(" + JSONObject.quote(signal.sdp) + ")", null)
@@ -172,6 +186,7 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
                 try { iceServers() } catch (e: CancellationException) { throw e } catch (_: Exception) { JSONArray() }
             }
             if (call != id || target != current()) return@launch
+            audio.start()
             val page = WebView(activity)
             web = page
             val callPage = origin + "/call/index.html"
@@ -182,8 +197,10 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
                 frame.addView(page, android.widget.FrameLayout.LayoutParams(-1, height))
                 dialog = AlertDialog.Builder(activity, R.style.YellowPhotoDialog)
                     .setTitle("Görüntülü arama · Bağlanıyor…").setView(frame)
+                    .setNeutralButton("Ses çıkışı", null)
                     .setNegativeButton("Aramayı bitir") { _, _ -> end() }
                     .setOnCancelListener { end() }.show()
+                dialog?.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener { audio.choose() }
                 dialog?.setCanceledOnTouchOutside(false)
             } else activity.findViewById<android.view.ViewGroup>(android.R.id.content).addView(page, 0, android.view.ViewGroup.LayoutParams(1, 1))
             page.importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -193,12 +210,15 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
             page.settings.allowContentAccess = false
             fun active() = web === page && id == call && current() == target
             page.addJavascriptInterface(object {
+                @JavascriptInterface fun mediaNotice(kind: String) = activity.runOnUiThread {
+                    if (active()) toast(if (kind == "torch") "Fener kullanılamadı." else "Kamera değiştirilemedi.")
+                }
                 @JavascriptInterface fun description(type: String, sdp: String) = activity.runOnUiThread {
                     if (active() && type == (if (offer == null) "offer" else "answer") && sdp.length <= 50000) signal(type, sdp)
                 }
                 @JavascriptInterface fun state(value: String) = activity.runOnUiThread {
                     if (active()) when (value) {
-                        "connected" -> { timer?.cancel(); if (video) dialog?.setTitle("Görüntülü arama") else show("Ses bağlantısı kuruldu") }
+                        "connected" -> { report(true); phase = "connected"; timer?.cancel(); if (video) dialog?.setTitle("Görüntülü arama") else show("Ses bağlantısı kuruldu") }
                         "captureFailed" -> fail(if (video) "Kamera veya mikrofon açılamadı." else "Mikrofon açılamadı.")
                         "networkFailed" -> fail(if (ice.length() == 0) "Telefonlar arasında ağ yolu bulunamadı. TURN bilgisi alınamadı." else "Telefonlar arasında ses bağlantısı kurulamadı (ICE).")
                         "setupFailed" -> fail("Telefonda WebRTC başlatılamadı.")
@@ -236,9 +256,17 @@ internal class ChatCall(private val activity: AppCompatActivity, private val sco
         closed.add(call)
         if (closed.size > 256) closed.remove(closed.first())
     }
-    fun end() { if (id != null) signal("end"); clear() }
+    private fun report(connected: Boolean) {
+        if (!offerer || !invited || reported) return
+        reported = true
+        val result = if (connected) "Connected" else if (!answered) "Missed" else "Failed"
+        signal((if (video) "video" else "audio") + result)
+    }
+    fun end() { if (id != null) { report(false); signal("end") }; clear() }
     fun onBackground() { if (web != null || offerer && id != null && permissionId == null) end() }
     private fun clear() {
+        audio.close()
+        id?.let { CallAlerts.silence(activity, it) }
         ringtone?.stop()
         ringtone = null
         id?.let { remember(it) }

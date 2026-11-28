@@ -20,7 +20,11 @@ internal data class ChatDocument(val name: String, val bytes: ByteArray) {
 internal class ChatDocuments(private val activity: AppCompatActivity, private val scope: () -> CoroutineScope,
     private val current: () -> Pair<String, String>?, private val send: (ChatDocument, String) -> Unit) {
     private var target: Pair<String, String>? = null
-    private var saving: Pair<Pair<String, String>, EncryptedFile>? = null
+    private data class Save(val chat: Pair<String, String>, val file: EncryptedFile, val key: String, val updated: () -> Unit)
+    private var saving: Save? = null
+    private val saved = activity.getSharedPreferences("saved_chat_documents", 0)
+    private fun key(event: String) = current()?.let { it.second + ":" + it.first + ":" + event }
+    fun downloaded(event: String) = key(event)?.let { saved.contains(it) } == true
 
     private val picker = activity.registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val dest = target
@@ -30,13 +34,16 @@ internal class ChatDocuments(private val activity: AppCompatActivity, private va
     private val saver = activity.registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val request = saving
         saving = null
-        if (uri != null && request != null && current() == request.first) scope().launch {
+        if (uri != null && request != null && current() == request.chat) scope().launch {
             try {
-                val bytes = MatrixChatManager.readAttachment(activity.applicationContext, request.second)
-                if (current() != request.first) return@launch
+                val bytes = MatrixChatManager.readAttachment(activity.applicationContext, request.file)
+                if (current() != request.chat) return@launch
                 withContext(Dispatchers.IO) {
                     requireNotNull(activity.contentResolver.openOutputStream(uri, "wt")).use { it.write(bytes) }
                 }
+                activity.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                saved.edit().putString(request.key, uri.toString()).apply()
+                request.updated()
                 notice("Dosya kaydedildi.")
             } catch (e: TimeoutCancellationException) { notice("Dosya indirme zaman aşımına uğradı.") }
             catch (e: CancellationException) { throw e }
@@ -48,8 +55,22 @@ internal class ChatDocuments(private val activity: AppCompatActivity, private va
         target = current() ?: return
         picker.launch(arrayOf("*/*"))
     }
-    fun save(name: String, file: EncryptedFile) {
-        saving = (current() ?: return) to file
+    fun selectAction(event: String, name: String, file: EncryptedFile, updated: () -> Unit) {
+        val id = key(event) ?: return
+        val existing = saved.getString(id, null)
+        if (existing != null) {
+            val uri = Uri.parse(existing)
+            val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.').lowercase())
+            try {
+                activity.contentResolver.openFileDescriptor(uri, "r")?.close()
+                activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW)
+                    .setDataAndType(uri, mime ?: activity.contentResolver.getType(uri) ?: "*/*")
+                    .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                return
+            } catch (_: android.content.ActivityNotFoundException) { notice("Bu dosya türünü açabilen uygulama bulunamadı."); return }
+            catch (_: Exception) { saved.edit().remove(id).apply(); updated() }
+        }
+        saving = Save(current() ?: return, file, id, updated)
         saver.launch(ChatDocument.safeName(name))
     }
     private fun confirm(uri: Uri, dest: Pair<String, String>) = scope().launch {
