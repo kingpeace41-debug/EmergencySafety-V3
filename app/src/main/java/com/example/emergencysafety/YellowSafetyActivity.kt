@@ -1618,8 +1618,9 @@ class YellowSafetyActivity : AppCompatActivity() {
             )
         )
 
+        val initialCount = UnseenActivity.rowCount(this, connection.id, unreadCount)
         val unreadBadge = TextView(this).apply {
-            text = if (unreadCount > 99) "99+" else unreadCount.toString()
+            text = if (initialCount > 99) "99+" else initialCount.toString()
             textSize = 10f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.WHITE)
@@ -1629,9 +1630,25 @@ class YellowSafetyActivity : AppCompatActivity() {
                 Color.TRANSPARENT,
                 50
             )
-            visibility = if (unreadCount > 0) View.VISIBLE else View.GONE
+            visibility = if (initialCount > 0) View.VISIBLE else View.GONE
         }
 
+        val badgeListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key?.startsWith("unread:") == true || key?.startsWith("owner:") == true) {
+                val n = UnseenActivity.rowCount(this, connection.id, unreadCount)
+                unreadBadge.text = if (n > 99) "99+" else n.toString()
+                unreadBadge.visibility = if (n > 0) View.VISIBLE else View.GONE
+            }
+        }
+        row.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                UnseenActivity.prefs(this@YellowSafetyActivity).registerOnSharedPreferenceChangeListener(badgeListener)
+                badgeListener.onSharedPreferenceChanged(UnseenActivity.prefs(this@YellowSafetyActivity), "unread:")
+            }
+            override fun onViewDetachedFromWindow(v: View) {
+                UnseenActivity.prefs(this@YellowSafetyActivity).unregisterOnSharedPreferenceChangeListener(badgeListener)
+            }
+        })
         row.addView(
             unreadBadge,
             LinearLayout.LayoutParams(dp(25), dp(25)).apply {

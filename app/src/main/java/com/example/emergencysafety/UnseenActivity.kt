@@ -16,7 +16,17 @@ internal object UnseenActivity {
         return prefs(ctx).getStringSet("unread:$session", emptySet()).orEmpty().size
     }
 
-    @Synchronized fun update(ctx: Context, ids: Collection<String>, seen: Boolean, session: String? = SecureSessionStore.getSessionId(ctx)) {
+    fun rowCount(ctx: Context, connection: String, legacyCount: Int): Int {
+        val session = SecureSessionStore.getSessionId(ctx) ?: return 0
+        val prefs = prefs(ctx)
+        val keys = prefs.getStringSet("unread:$session", emptySet()).orEmpty().filter {
+            prefs.getString("owner:$session:$it", null) == connection
+        }
+        val legacy = keys.count { it.startsWith("legacy:") }
+        return maxOf(legacy, legacyCount) + keys.size - legacy
+    }
+
+    @Synchronized fun update(ctx: Context, ids: Collection<String>, seen: Boolean, session: String? = SecureSessionStore.getSessionId(ctx), connection: String? = null) {
         if (session == null || ids.isEmpty() || session != SecureSessionStore.getSessionId(ctx)) return
         val prefs = prefs(ctx)
         val key = "unread:$session"
@@ -25,7 +35,9 @@ internal object UnseenActivity {
         var changed = false
         for (id in ids.distinct()) {
             val marker = "seen:$session:$id"
+            if (!seen && !connection.isNullOrBlank() && !prefs.contains(marker)) edit.putString("owner:$session:$id", connection)
             if (seen) {
+                edit.remove("owner:$session:$id")
                 if (!prefs.contains(marker)) edit.putBoolean(marker, true)
                 if (unread.remove(id)) changed = true
             } else if (!prefs.contains(marker) && unread.add(id)) changed = true
@@ -48,7 +60,8 @@ internal object UnseenActivity {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val note = NotificationCompat.Builder(ctx, channel).setSmallIcon(R.drawable.ic_notification_wolf)
             .setContentTitle("EmergencySafety").setContentText("$total görülmemiş etkinlik")
-            .setNumber(total).setOnlyAlertOnce(true).setSilent(true).setContentIntent(intent).build()
+            .setBadgeIconType(NotificationCompat.BADGE_ICON_SMALL)
+            .setNumber(total).setOnlyAlertOnce(true).setSound(null).setContentIntent(intent).build()
         try { nm.notify(SUMMARY, note) } catch (_: SecurityException) {}
     }
 }

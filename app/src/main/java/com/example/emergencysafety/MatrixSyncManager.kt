@@ -19,6 +19,12 @@ internal object MatrixSyncManager {
             val app = context.applicationContext
             val session = requireNotNull(SecureSessionStore.getSessionId(app))
             check(ownerSession == null || ownerSession == session) { "SYNC_SESSION_CHANGED" }
+            val existing = client
+            if (existing != null && ownerSession == session && existing.syncState.value in setOf(
+                    de.connect2x.trixnity.clientserverapi.client.SyncState.RUNNING,
+                    de.connect2x.trixnity.clientserverapi.client.SyncState.STARTED,
+                    de.connect2x.trixnity.clientserverapi.client.SyncState.INITIAL_SYNC
+                )) return@withLock existing
             val current = MatrixClientManager.openForCurrentSession(app).getOrThrow()
             check(SecureSessionStore.getSessionId(app) == session)
             withTimeout(60000L) { current.startSync(presence = null) }

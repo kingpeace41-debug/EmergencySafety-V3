@@ -76,7 +76,7 @@ class FcmMessagingService : FirebaseMessagingService() {
             if (accepted && !Regex("^[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$").matches(connection)) return
             val activityId = if (accepted) "accepted:$connection" else
                 "invite:" + message.data["requestId"].orEmpty().ifBlank { connection }
-            if (!activityId.endsWith(":")) UnseenActivity.update(this, listOf(activityId), false)
+            if (!activityId.endsWith(":")) UnseenActivity.update(this, listOf(activityId), false, connection = connection)
             if (!notificationsAllowed()) return
             val id = if (accepted) ("accepted:" + connection).hashCode()
                 else ("request:" + message.data["requestId"].orEmpty()).hashCode()
@@ -111,6 +111,7 @@ class FcmMessagingService : FirebaseMessagingService() {
             if (connection.length != 36 || room.length !in 2..255 || !room.startsWith("!") ||
                 event.length !in 2..255 || !event.startsWith("$")) return
             val job = OneTimeWorkRequestBuilder<MatrixWakeWorker>()
+                .setBackoffCriteria(androidx.work.BackoffPolicy.LINEAR, 10, java.util.concurrent.TimeUnit.SECONDS)
                 .setInputData(workDataOf("session" to session, "connectionId" to connection,
                     "roomId" to room, "eventId" to event))
                 .apply { if (Build.VERSION.SDK_INT >= 31) setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST) }
@@ -200,7 +201,7 @@ class FcmMessagingService : FirebaseMessagingService() {
             return
         }
 
-        if (messageId.isNotBlank()) UnseenActivity.update(this, listOf("legacy:$messageId"), false)
+        if (messageId.isNotBlank()) UnseenActivity.update(this, listOf("legacy:$messageId"), false, connection = connectionId)
         if (
             ActiveChatTracker.isChatVisible(connectionId)
         ) {

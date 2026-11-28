@@ -23,19 +23,30 @@ class MatrixWakeWorker(context: Context, parameters: WorkerParameters) : Corouti
         val event = inputData.getString("eventId") ?: return Result.failure()
         if (SecureSessionStore.getSessionId(app) != session) return Result.success()
         try {
+            if (inputData.getBoolean("receiptOnly", false)) {
+                MatrixChatManager.sendReceipt(app, connection, MatrixChatManager.Receipt.DELIVERED, listOf(event))
+                return Result.success()
+            }
             val delivered = withTimeout(45_000L) {
                 MatrixChatManager.receiveWake(app, session, connection, room, event)
             }
             if (delivered?.startsWith("call|") == true && SecureSessionStore.getSessionId(app) == session) {
                 val parts = delivered.split('|')
                 val kind = parts[2]
-                if (kind.endsWith("Missed")) UnseenActivity.update(app, listOf("missed:" + parts[1]), false, session)
+                if (kind.endsWith("Missed")) UnseenActivity.update(app, listOf("missed:" + parts[1]), false, session, connection)
                 val remaining = 45000L - (System.currentTimeMillis() - parts[3].toLong())
                 if (kind != "invite" && kind != "videoInvite" || !ActiveChatTracker.isChatVisible(connection))
                     CallAlerts.show(app, connection, parts[1], kind, remaining.coerceAtMost(45000L))
                 return Result.success()
             }
-            if (delivered == "message") UnseenActivity.update(app, listOf("matrix:$event"), false, session)
+            if (delivered == "message" && SecureSessionStore.getSessionId(app) == session) {
+                UnseenActivity.update(app, listOf("matrix:$event"), false, session, connection)
+                val receipt = androidx.work.OneTimeWorkRequestBuilder<MatrixWakeWorker>()
+                    .setInputData(androidx.work.Data.Builder().putAll(inputData).putBoolean("receiptOnly", true).build())
+                    .setBackoffCriteria(androidx.work.BackoffPolicy.LINEAR, 10, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+                androidx.work.WorkManager.getInstance(app).enqueueUniqueWork("receipt:$session:$event", androidx.work.ExistingWorkPolicy.KEEP, receipt)
+            }
             if (delivered != null && SecureSessionStore.getSessionId(app) == session && !ActiveChatTracker.isChatVisible(connection)) {
                 notifyMessage(connection, delivered)
             }

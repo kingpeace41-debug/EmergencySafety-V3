@@ -406,7 +406,6 @@ internal object MatrixChatManager {
                 return@withContext if (it.invitation || it.outcome)
                     "call|${it.id}|${it.kind}|${decoded.timestamp}" else null
             }
-            sendReceipt(app, connectionId, Receipt.DELIVERED, listOf(event))
             "message"
         }
 

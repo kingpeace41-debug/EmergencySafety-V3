@@ -994,7 +994,17 @@ class MainActivity : AppCompatActivity() {
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(0xffbd253a.toInt()); cornerRadius = size.toFloat()
             }
-            shield.addView(this, android.widget.FrameLayout.LayoutParams(-2, size, android.view.Gravity.TOP or android.view.Gravity.END))
+            shield.addView(this, android.widget.FrameLayout.LayoutParams(-2, size, android.view.Gravity.CENTER))
+            fun align() {
+                val image = shield.getChildAt(0) as? android.widget.ImageView ?: return
+                val drawable = image.drawable ?: return
+                val rect = android.graphics.RectF(drawable.bounds)
+                image.imageMatrix.mapRect(rect)
+                translationX = image.left + image.paddingLeft + rect.left + rect.width() * 0.81f - shield.width / 2f
+                translationY = image.top + image.paddingTop + rect.top + rect.height() * 0.82f - shield.height / 2f
+            }
+            shield.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> align() }
+            shield.post { align() }
         }
         val count = UnseenActivity.count(this)
         badge.text = if (count > 99) "99+" else count.toString()

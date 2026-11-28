@@ -24,11 +24,15 @@ internal class CallAudio(private val activity: AppCompatActivity) {
     fun start() {
         if (previousMode != null) return
         previousMode = audio.mode
-        previousSpeaker = audio.isSpeakerphoneOn
-        previousSco = audio.isBluetoothScoOn
-        if (Build.VERSION.SDK_INT >= 31) previousDevice = audio.communicationDevice
-        audio.mode = AudioManager.MODE_IN_COMMUNICATION
-        route(0)
+        runCatching {
+            if (Build.VERSION.SDK_INT >= 31) previousDevice = audio.communicationDevice
+            else {
+                previousSpeaker = audio.isSpeakerphoneOn
+                previousSco = audio.isBluetoothScoOn
+            }
+            audio.mode = AudioManager.MODE_IN_COMMUNICATION
+            route(0)
+        }.onFailure { Toast.makeText(activity, "Sistem ses çıkışı kullanılıyor.", Toast.LENGTH_SHORT).show() }
     }
     fun choose() {
         AlertDialog.Builder(activity, R.style.YellowPhotoDialog).setTitle("Ses çıkışı")
@@ -80,6 +84,7 @@ internal class CallAudio(private val activity: AppCompatActivity) {
                 audio.isBluetoothScoOn = previousSco
                 audio.isSpeakerphoneOn = previousSpeaker
             }
-        } finally { audio.mode = mode }
+        } catch (_: SecurityException) { /* Route permission can change during a call. */ }
+        finally { runCatching { audio.mode = mode } }
     }
 }
