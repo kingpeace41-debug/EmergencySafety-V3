@@ -69,11 +69,15 @@ class FcmMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(message)
         val type = message.data["type"]
         if (type == "message_request" || type == "message_request_accepted") {
-            if (!notificationsAllowed() || SecureSessionStore.getSessionId(applicationContext) == null) return
+            if (SecureSessionStore.getSessionId(applicationContext) == null) return
             createMessageNotificationChannel()
             val accepted = type == "message_request_accepted"
             val connection = message.data["connectionId"].orEmpty()
             if (accepted && !Regex("^[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$").matches(connection)) return
+            val activityId = if (accepted) "accepted:$connection" else
+                "invite:" + message.data["requestId"].orEmpty().ifBlank { connection }
+            if (!activityId.endsWith(":")) UnseenActivity.update(this, listOf(activityId), false)
+            if (!notificationsAllowed()) return
             val id = if (accepted) ("accepted:" + connection).hashCode()
                 else ("request:" + message.data["requestId"].orEmpty()).hashCode()
             val target = Intent(this, YellowSafetyActivity::class.java)
@@ -196,6 +200,7 @@ class FcmMessagingService : FirebaseMessagingService() {
             return
         }
 
+        if (messageId.isNotBlank()) UnseenActivity.update(this, listOf("legacy:$messageId"), false)
         if (
             ActiveChatTracker.isChatVisible(connectionId)
         ) {

@@ -613,6 +613,7 @@ class MessagingTabBar @JvmOverloads constructor(
                 }
 
                 val items = result.data.orEmpty()
+                if (container.isShown && hasWindowFocus()) UnseenActivity.update(context, items.map { "invite:" + it.id }, true)
                 refreshBadges()
 
                 if (items.isEmpty()) {

@@ -167,6 +167,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                 privateMessagesColumn?.let { addDatedView(it, this, event.timestamp, LinearLayout.LayoutParams(-1, -2)) }
             }
         }
+        if (!event.outgoing) matrixIncomingBubbles[event.eventId] = card
         val time = formatTime(event.timestamp)
         card.text = if (stopped) "📍 Konum paylaşımı durduruldu" else "📍 Canlı konum · $time\nHaritada göster"
         card.setOnClickListener(null)
@@ -1668,6 +1669,7 @@ class YellowSafetyActivity : AppCompatActivity() {
     private fun showPrivateChat(connection: ConnectionApiItem, encrypted: Boolean = true) {
         stopMatrixChat()
         isMatrixChat = encrypted
+        UnseenActivity.update(this, listOf("accepted:" + connection.id), true)
         val displayName = ContactNames.getDisplayName(this, connection.email)
         stopPrivateSocket()
         stopPrivateChatAutoRefresh()
@@ -2146,6 +2148,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         locationDraft = false
         locationDraftText = ""
         locationPreview = null
+        missedCards.clear()
         locationCards.clear()
         locationTimes.clear()
         matrixChatJob?.cancel()
@@ -2291,6 +2294,8 @@ class YellowSafetyActivity : AppCompatActivity() {
         view.contentDescription = label
     }
 
+    private val missedCards = mutableMapOf<String, View>()
+
     private fun scheduleMatrixReceipts() {
         val connection = activePrivateConnection ?: return
         if (!isMatrixChat || !matrixChatReady) return
@@ -2310,12 +2315,16 @@ class YellowSafetyActivity : AppCompatActivity() {
                     pendingMatrixDeliveries.removeAll(matrixIncomingReceipts.keys)
                     val visible = Rect()
                     if (hasWindowFocus() && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) {
+                        val seenCalls = missedCards.filterValues { it.getGlobalVisibleRect(visible) && visible.height() >= minOf(it.height, dp(24)) }.keys
+                        UnseenActivity.update(applicationContext, seenCalls.map { "missed:$it" }, true)
+                        seenCalls.forEach { missedCards.remove(it) }
                         val read = matrixIncomingBubbles.filter { (id, bubble) ->
                             matrixIncomingReceipts[id] != MatrixChatManager.Receipt.READ && bubble.height > 0 &&
                                 bubble.getGlobalVisibleRect(visible) && visible.height() >= minOf(bubble.height, dp(24))
                         }.keys.toList()
                         for (batch in read.chunked(50)) {
                             MatrixChatManager.sendReceipt(applicationContext, connection.id, MatrixChatManager.Receipt.READ, batch)
+                            UnseenActivity.update(applicationContext, batch.map { "matrix:$it" }, true)
                             batch.forEach { matrixIncomingReceipts[it] = MatrixChatManager.Receipt.READ }
                         }
                     }
@@ -2351,6 +2360,10 @@ class YellowSafetyActivity : AppCompatActivity() {
                     setPadding(dp(14), dp(8), dp(14), dp(8))
                     background = roundedBackground(if (it.successful) Color.rgb(32, 97, 61) else Color.rgb(121, 45, 50), darkBackground, 16)
                     tag = event.timestamp
+                }
+                if (!event.outgoing && it.kind.endsWith("Missed")) {
+                    missedCards[it.id] = box
+                    box.post { scheduleMatrixReceipts() }
                 }
                 box.addView(createText(type + " · " + status + " · " + formatTime(event.timestamp), 15f, Color.WHITE))
                 if (!it.successful) box.addView(android.widget.Button(this).apply {
@@ -2919,6 +2932,7 @@ class YellowSafetyActivity : AppCompatActivity() {
                 }
 
                 if (result?.success == true) {
+                    UnseenActivity.update(applicationContext, listOf("legacy:$messageId"), true)
                     anyMessageMarkedRead = true
                 } else {
                     attemptedReadMessageIds.remove(messageId)

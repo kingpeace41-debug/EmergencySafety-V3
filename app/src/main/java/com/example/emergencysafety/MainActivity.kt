@@ -975,8 +975,44 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
+    private val badgeListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key?.startsWith("unread:") == true) refreshShieldCount()
+    }
+
+    private fun refreshShieldCount() {
+        val shield = findViewById<android.widget.FrameLayout>(R.id.btnYellowAlert) ?: return
+        val badge = shield.findViewWithTag<android.widget.TextView>("yellow_activity_badge") ?: android.widget.TextView(this).apply {
+            tag = "yellow_activity_badge"
+            gravity = android.view.Gravity.CENTER
+            setTextColor(android.graphics.Color.WHITE)
+            textSize = 12f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            val density = resources.displayMetrics.density
+            val size = (24 * density).toInt()
+            minWidth = size
+            setPadding((4*density).toInt(), 0, (4*density).toInt(), 0)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xffbd253a.toInt()); cornerRadius = size.toFloat()
+            }
+            shield.addView(this, android.widget.FrameLayout.LayoutParams(-2, size, android.view.Gravity.TOP or android.view.Gravity.END))
+        }
+        val count = UnseenActivity.count(this)
+        badge.text = if (count > 99) "99+" else count.toString()
+        badge.visibility = if (count == 0) android.view.View.GONE else android.view.View.VISIBLE
+        shield.contentDescription = if (count == 0) "Mesajlar" else "Mesajlar, $count görülmemiş etkinlik"
+    }
+
     override fun onResume() {
         super.onResume()
+        UnseenActivity.prefs(this).registerOnSharedPreferenceChangeListener(badgeListener)
+        refreshShieldCount()
+        UnseenActivity.publish(this)
+        val badgeSession = SecureSessionStore.getSessionId(this)
+        if (badgeSession != null) Thread {
+            val app = applicationContext
+            ConnectionApi.getRequests(app).data?.let { items -> UnseenActivity.update(app, items.map { "invite:" + it.id }, false, badgeSession) }
+            ConnectionApi.getInbox(app, 50).data?.let { items -> UnseenActivity.update(app, items.filter { !it.isOutgoing && it.readAt.isNullOrBlank() && it.messageType !in setOf("emergency", "location") }.map { "legacy:" + it.id }, false, badgeSession) }
+        }.start()
 
         refreshReadinessPanel()
         showInitialLocationSetupIfNeeded()
@@ -1000,6 +1036,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        UnseenActivity.prefs(this).unregisterOnSharedPreferenceChangeListener(badgeListener)
         sirenStripHandler.removeCallbacks(sirenStripRunnable)
         incomingEmergencyAlert.pause()
         super.onPause()

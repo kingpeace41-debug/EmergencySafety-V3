@@ -29,11 +29,13 @@ class MatrixWakeWorker(context: Context, parameters: WorkerParameters) : Corouti
             if (delivered?.startsWith("call|") == true && SecureSessionStore.getSessionId(app) == session) {
                 val parts = delivered.split('|')
                 val kind = parts[2]
+                if (kind.endsWith("Missed")) UnseenActivity.update(app, listOf("missed:" + parts[1]), false, session)
                 val remaining = 45000L - (System.currentTimeMillis() - parts[3].toLong())
                 if (kind != "invite" && kind != "videoInvite" || !ActiveChatTracker.isChatVisible(connection))
                     CallAlerts.show(app, connection, parts[1], kind, remaining.coerceAtMost(45000L))
                 return Result.success()
             }
+            if (delivered == "message") UnseenActivity.update(app, listOf("matrix:$event"), false, session)
             if (delivered != null && SecureSessionStore.getSessionId(app) == session && !ActiveChatTracker.isChatVisible(connection)) {
                 notifyMessage(connection, delivered)
             }
