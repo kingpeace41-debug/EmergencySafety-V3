@@ -13,7 +13,7 @@ import android.content.pm.PackageManager
 
 @Suppress("DEPRECATION")
 internal class CallAudio(private val activity: AppCompatActivity) {
-    private val audio = activity.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val audio by lazy { activity.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     private var previousMode: Int? = null
     private var previousSpeaker = false
     private var previousSco = false

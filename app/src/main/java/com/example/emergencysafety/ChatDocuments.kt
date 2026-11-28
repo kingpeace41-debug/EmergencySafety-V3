@@ -22,7 +22,7 @@ internal class ChatDocuments(private val activity: AppCompatActivity, private va
     private var target: Pair<String, String>? = null
     private data class Save(val chat: Pair<String, String>, val file: EncryptedFile, val key: String, val updated: () -> Unit)
     private var saving: Save? = null
-    private val saved = activity.getSharedPreferences("saved_chat_documents", 0)
+    private val saved by lazy { activity.getSharedPreferences("saved_chat_documents", 0) }
     private fun key(event: String) = current()?.let { it.second + ":" + it.first + ":" + event }
     fun downloaded(event: String) = key(event)?.let { saved.contains(it) } == true
 
