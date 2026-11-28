@@ -50,6 +50,8 @@ internal object CallAlerts {
         if (incoming) notification.setSound(tone).setTimeoutAfter(remaining)
         val built = notification.build()
         if (incoming) built.flags = built.flags or Notification.FLAG_INSISTENT
-        try { manager(context).notify(id, if (incoming) 1 else 2, built) } catch (_: SecurityException) {}
+        if (incoming) {
+            try { manager(context).notify(id, 1, built) } catch (_: SecurityException) {}
+        } else UnseenActivity.post(context, "missed:$id", built)
     }
 }

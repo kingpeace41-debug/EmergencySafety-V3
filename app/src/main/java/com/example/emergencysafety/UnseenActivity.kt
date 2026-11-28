@@ -26,6 +26,17 @@ internal object UnseenActivity {
         return maxOf(legacy, legacyCount) + keys.size - legacy
     }
 
+    private fun notificationTag(session: String, id: String) = "activity:$session:$id"
+
+    @Synchronized fun post(ctx: Context, id: String, notification: android.app.Notification,
+        session: String? = SecureSessionStore.getSessionId(ctx)) {
+        if (session == null || session != SecureSessionStore.getSessionId(ctx) ||
+            prefs(ctx).contains("seen:$session:$id")) return
+        try {
+            ctx.getSystemService(NotificationManager::class.java).notify(notificationTag(session, id), 1, notification)
+        } catch (_: SecurityException) {}
+    }
+
     @Synchronized fun update(ctx: Context, ids: Collection<String>, seen: Boolean, session: String? = SecureSessionStore.getSessionId(ctx), connection: String? = null) {
         if (session == null || ids.isEmpty() || session != SecureSessionStore.getSessionId(ctx)) return
         val prefs = prefs(ctx)
@@ -37,6 +48,9 @@ internal object UnseenActivity {
             val marker = "seen:$session:$id"
             if (!seen && !connection.isNullOrBlank() && !prefs.contains(marker)) edit.putString("owner:$session:$id", connection)
             if (seen) {
+                if (id in unread || !prefs.contains(marker)) {
+                    ctx.getSystemService(NotificationManager::class.java).cancel(notificationTag(session, id), 1)
+                }
                 edit.remove("owner:$session:$id")
                 if (!prefs.contains(marker)) edit.putBoolean(marker, true)
                 if (unread.remove(id)) changed = true

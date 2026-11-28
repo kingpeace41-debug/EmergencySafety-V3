@@ -48,7 +48,7 @@ class MatrixWakeWorker(context: Context, parameters: WorkerParameters) : Corouti
                 androidx.work.WorkManager.getInstance(app).enqueueUniqueWork("receipt:$session:$event", androidx.work.ExistingWorkPolicy.KEEP, receipt)
             }
             if (delivered != null && SecureSessionStore.getSessionId(app) == session && !ActiveChatTracker.isChatVisible(connection)) {
-                notifyMessage(connection, delivered)
+                notifyMessage(connection, delivered, event, session)
             }
             return Result.success()
         } catch (_: TimeoutCancellationException) {
@@ -62,7 +62,7 @@ class MatrixWakeWorker(context: Context, parameters: WorkerParameters) : Corouti
 
     private fun retryIfCurrent() = if (runAttemptCount < 5) Result.retry() else Result.failure()
 
-    private fun notifyMessage(connection: String, kind: String) {
+    private fun notifyMessage(connection: String, kind: String, event: String, session: String) {
         val call = kind == "call" || kind == "videoCall"
         val app = applicationContext
         val notifications = NotificationManagerCompat.from(app)
@@ -89,7 +89,7 @@ class MatrixWakeWorker(context: Context, parameters: WorkerParameters) : Corouti
             .apply { if (call) setCategory(NotificationCompat.CATEGORY_CALL).setTimeoutAfter(45000L) }
             .setContentIntent(pending).setAutoCancel(true).setOnlyAlertOnce(true).build()
         try {
-            notifications.notify(id, notification)
+            UnseenActivity.post(app, "matrix:$event", notification, session)
         } catch (_: SecurityException) {
             // Delivery remains valid when notification permission is revoked.
         }

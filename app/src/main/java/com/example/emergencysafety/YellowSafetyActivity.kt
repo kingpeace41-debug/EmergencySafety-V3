@@ -2340,8 +2340,8 @@ class YellowSafetyActivity : AppCompatActivity() {
                                 bubble.getGlobalVisibleRect(visible) && visible.height() >= minOf(bubble.height, dp(24))
                         }.keys.toList()
                         for (batch in read.chunked(50)) {
-                            MatrixChatManager.sendReceipt(applicationContext, connection.id, MatrixChatManager.Receipt.READ, batch)
                             UnseenActivity.update(applicationContext, batch.map { "matrix:$it" }, true)
+                            MatrixChatManager.sendReceipt(applicationContext, connection.id, MatrixChatManager.Receipt.READ, batch)
                             batch.forEach { matrixIncomingReceipts[it] = MatrixChatManager.Receipt.READ }
                         }
                     }
@@ -2930,6 +2930,7 @@ class YellowSafetyActivity : AppCompatActivity() {
         }
 
         if (visibleUnreadIds.isNotEmpty()) {
+            UnseenActivity.update(applicationContext, visibleUnreadIds.map { "legacy:$it" }, true)
             markPrivateMessagesRead(connection, visibleUnreadIds)
         }
     }

@@ -241,6 +241,15 @@ class MainActivity : AppCompatActivity() {
             resources.getIdentifier("btnYellowAlert", "id", packageName)
 
         if (btnYellowAlertId != 0) {
+            findViewById<View>(btnYellowAlertId)?.setOnLongClickListener {
+                val settings = if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                } else Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.parse("package:$packageName"))
+                startActivity(settings)
+                true
+            }
             findViewById<View>(btnYellowAlertId)?.setOnClickListener {
                 vibrateOnClick()
 

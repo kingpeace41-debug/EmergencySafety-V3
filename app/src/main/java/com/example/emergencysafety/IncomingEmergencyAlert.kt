@@ -126,6 +126,8 @@ internal class IncomingEmergencyAlert(
         // Kullanici acil durum mesajini acmayi secti:
         // sireni ve ekrandaki yanip sonen uyariyi durdur.
         EmergencySirenPlayer.stop()
+        activity.getSystemService(android.app.NotificationManager::class.java)
+            .cancel("emergency_$connectionId".hashCode())
 
         hide()
 

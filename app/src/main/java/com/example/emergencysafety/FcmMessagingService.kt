@@ -96,7 +96,7 @@ class FcmMessagingService : FirebaseMessagingService() {
             } else {
                 name?.let { "$it sana mesaj isteği gönderdi." } ?: "Yeni bir mesaj isteğin var."
             }
-            postNotification(id, NotificationCompat.Builder(this, MESSAGE_CHANNEL_ID)
+            UnseenActivity.post(this, activityId, NotificationCompat.Builder(this, MESSAGE_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification_wolf)
                 .setContentTitle("EmergencySafety").setContentText(label)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -210,6 +210,7 @@ class FcmMessagingService : FirebaseMessagingService() {
         }
 
         showPrivateNotification(
+            messageId = messageId,
             senderUsername = senderUsername,
             senderEmail = senderEmail,
             messagePreview = messagePreview,
@@ -371,6 +372,7 @@ class FcmMessagingService : FirebaseMessagingService() {
     }
 
     private fun showPrivateNotification(
+        messageId: String,
         senderUsername: String,
         senderEmail: String,
         messagePreview: String,
@@ -432,10 +434,8 @@ class FcmMessagingService : FirebaseMessagingService() {
                 )
                 .build()
 
-        postNotification(
-            notificationId,
-            notification
-        )
+        if (messageId.isNotBlank()) UnseenActivity.post(this, "legacy:$messageId", notification)
+        else postNotification(notificationId, notification)
     }
 
     private fun showEmergencyNotification(
